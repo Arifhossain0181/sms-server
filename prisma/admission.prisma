@@ -1,0 +1,27 @@
+// ─── ADMISSION ─────────────────────────────────────────────
+
+model AdmissionApplication {
+  id              String          @id @default(uuid())
+  applicantName   String
+  dob             DateTime        @db.Date
+  gender          Gender
+  religion        String?
+  bloodGroup      BloodGroup?
+  address         String
+  guardianName    String
+  guardianPhone   String
+  guardianEmail   String
+  targetClassId   String
+  targetClass     Class           @relation(fields: [targetClassId], references: [id])
+  photoUrl        String?
+  birthCertUrl    String?
+  status          AdmissionStatus @default(PENDING)
+  rejectionReason String?
+  reviewedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  studentId String?  @unique
+  student   Student? @relation(fields: [studentId], references: [id])
+}
+

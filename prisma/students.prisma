@@ -1,0 +1,39 @@
+// ─── STUDENT ───────────────────────────────────────────────
+
+model Student {
+  id         String     @id @default(uuid())
+  userId     String     @unique
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentId  String     @unique
+  name       String
+  dob        DateTime   @db.Date
+  gender     Gender
+  bloodGroup BloodGroup?
+  religion   String?
+  address    String?
+  photo      String?
+  rollNumber Int
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  sectionId String
+  section   Section @relation(fields: [sectionId], references: [id])
+
+  parentId String?
+  parent   Parent? @relation(fields: [parentId], references: [id])
+
+  attendances     StudentAttendance[]
+  marks           Mark[]
+  invoices        Invoice[]
+  payments        Payment[]
+  homeworkViews   HomeworkView[]
+  reportCards     ReportCard[]
+  admitCards      AdmitCard[]
+  notices         NoticeRecipient[]
+  issuedBooks     BookIssue[]
+  tcRecord        TransferCertificate?
+  admissionRecord AdmissionApplication?
+
+  @@unique([sectionId, rollNumber])
+}

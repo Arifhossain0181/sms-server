@@ -1,0 +1,30 @@
+// ─── HOMEWORK ──────────────────────────────────────────────
+
+model Homework {
+  id          String   @id @default(uuid())
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id])
+  sectionId   String
+  section     Section  @relation(fields: [sectionId], references: [id])
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  title       String
+  description String
+  dueDate     DateTime
+  isReviewed  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  views HomeworkView[]
+}
+
+model HomeworkView {
+  id         String   @id @default(uuid())
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id])
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id])
+  viewedAt   DateTime @default(now())
+
+  @@unique([homeworkId, studentId])
+}

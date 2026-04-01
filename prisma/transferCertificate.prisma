@@ -1,0 +1,9 @@
+model TransferCertificate {
+  id        String   @id @default(uuid())
+  studentId String   @unique
+  student   Student  @relation(fields: [studentId], references: [id])
+  issueDate DateTime @default(now())
+  reason    String?
+  pdfUrl    String?
+  createdAt DateTime @default(now())
+}

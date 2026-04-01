@@ -1,0 +1,19 @@
+model Payment {
+  id                    String        @id @default(uuid())
+  invoiceId             String        @unique
+  invoice               Invoice       @relation(fields: [invoiceId], references: [id])
+  studentId             String
+  student               Student       @relation(fields: [studentId], references: [id])
+  parentId              String?
+  parent                Parent?       @relation(fields: [parentId], references: [id])
+  amount                Float
+  method                PaymentMethod
+  status                PaymentStatus @default(PENDING)
+  stripePaymentIntentId String?       @unique
+  stripeCustomerId      String?
+  recordedBy            String?
+  pdfReceiptUrl         String?
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}

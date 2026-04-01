@@ -1,0 +1,26 @@
+// ─── TEACHER ───────────────────────────────────────────────
+
+model Teacher {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId            String   @unique
+  name                  String
+  email                 String
+  phone                 String?
+  subjectSpecialization String?
+  joiningDate           DateTime
+  photo                 String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  sectionTeacher     Section[]
+  subjectAssignments SubjectAssignment[]
+  attendances        TeacherAttendance[]
+  homeworks          Homework[]
+  marks              Mark[]
+  timetableSlots     TimetableSlot[]
+  attendanceTaken    StudentAttendance[]
+}
+

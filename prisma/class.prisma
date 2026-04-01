@@ -1,0 +1,13 @@
+
+model Class {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  numericLevel Int
+  createdAt    DateTime @default(now())
+
+  sections      Section[]
+  subjects      Subject[]
+  feeStructures FeeStructure[]
+  examSchedules ExamSchedule[]
+  admissions    AdmissionApplication[]
+}

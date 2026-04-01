@@ -1,0 +1,15 @@
+model Invoice {
+  id             String        @id @default(uuid())
+  studentId      String
+  student        Student       @relation(fields: [studentId], references: [id])
+  feeStructureId String
+  feeStructure   FeeStructure  @relation(fields: [feeStructureId], references: [id])
+  amount         Float
+  dueDate        DateTime
+  month          Int?
+  year           Int
+  status         PaymentStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+
+  payment Payment?
+}

@@ -1,0 +1,34 @@
+model Notice {
+  id           String   @id @default(uuid())
+  title        String
+  body         String
+  isPinned     Boolean  @default(false)
+  publishedBy  String
+  isSchoolWide Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sectionTargets NoticeSectionTarget[]
+  recipients     NoticeRecipient[]
+}
+model NoticeSectionTarget {
+  id        String  @id @default(uuid())
+  noticeId  String
+  notice    Notice  @relation(fields: [noticeId], references: [id])
+  sectionId String
+  section   Section @relation(fields: [sectionId], references: [id])
+
+  @@unique([noticeId, sectionId])
+}
+model NoticeRecipient {
+  id        String   @id @default(uuid())
+  noticeId  String
+  notice    Notice   @relation(fields: [noticeId], references: [id])
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id])
+  parentId  String?
+  parent    Parent?  @relation(fields: [parentId], references: [id])
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,26 @@
+model Exam {
+  id        String   @id @default(uuid())
+  name      String
+  type      ExamType
+  createdAt DateTime @default(now())
+
+  marks       Mark[]
+  schedules   ExamSchedule[]
+  admitCards  AdmitCard[]
+  reportCards ReportCard[]
+}
+model ExamSchedule {
+  id        String   @id @default(uuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id])
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  examDate  DateTime @db.Date
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  @@unique([examId, classId, subjectId])
+}

@@ -1,0 +1,14 @@
+model FeeStructure {
+  id        String   @id @default(uuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  feeType   FeeType
+  amount    Float
+  dueDay    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices Invoice[]
+
+  @@unique([classId, feeType])
+}

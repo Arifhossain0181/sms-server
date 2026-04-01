@@ -1,0 +1,11 @@
+model AdmitCard {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id])
+  pdfUrl    String?
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, examId])
+}

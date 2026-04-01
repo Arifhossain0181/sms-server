@@ -1,0 +1,18 @@
+model Section {
+  id             String   @id @default(uuid())
+  name           String
+  classId        String
+  class          Class    @relation(fields: [classId], references: [id])
+  classTeacherId String?
+  classTeacher   Teacher? @relation(fields: [classTeacherId], references: [id])
+  maxCapacity    Int      @default(40)
+  createdAt      DateTime @default(now())
+
+  students      Student[]
+  timetable     TimetableSlot[]
+  attendances   StudentAttendance[]
+  homeworks     Homework[]
+  noticeTargets NoticeSectionTarget[]
+
+  @@unique([classId, name])
+}

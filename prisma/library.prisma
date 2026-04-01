@@ -1,0 +1,27 @@
+// ─── LIBRARY ───────────────────────────────────────────────
+
+model Book {
+  id           String     @id @default(uuid())
+  title        String
+  author       String
+  isbn         String     @unique
+  totalQty     Int
+  availableQty Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  issues BookIssue[]
+}
+
+model BookIssue {
+  id         String    @id @default(uuid())
+  bookId     String
+  book       Book      @relation(fields: [bookId], references: [id])
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id])
+  issueDate  DateTime  @default(now())
+  dueDate    DateTime
+  returnDate DateTime?
+  fine       Float     @default(0)
+  createdAt  DateTime  @default(now())
+}

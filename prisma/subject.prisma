@@ -1,0 +1,31 @@
+// ─── SUBJECT ───────────────────────────────────────────────
+
+model Subject {
+  id           String   @id @default(uuid())
+  name         String
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id])
+  fullMarks    Int
+  passMarks    Int
+  isCompulsory Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  assignments    SubjectAssignment[]
+  marks          Mark[]
+  timetableSlots TimetableSlot[]
+  examSchedules  ExamSchedule[]
+  homeworks      Homework[]
+
+  @@unique([name, classId])
+}
+
+model SubjectAssignment {
+  id        String   @id @default(uuid())
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([subjectId, teacherId])
+}

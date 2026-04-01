@@ -1,0 +1,17 @@
+// ─── TIMETABLE ─────────────────────────────────────────────
+
+model TimetableSlot {
+  id        String    @id @default(uuid())
+  sectionId String
+  section   Section   @relation(fields: [sectionId], references: [id])
+  subjectId String
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+  teacherId String
+  teacher   Teacher   @relation(fields: [teacherId], references: [id])
+  dayOfWeek DayOfWeek
+  startTime String
+  endTime   String
+  createdAt DateTime  @default(now())
+
+  @@unique([teacherId, dayOfWeek, startTime])
+}

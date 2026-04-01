@@ -1,0 +1,18 @@
+model Mark {
+  id            String   @id @default(uuid())
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id])
+  subjectId     String
+  subject       Subject  @relation(fields: [subjectId], references: [id])
+  teacherId     String
+  teacher       Teacher  @relation(fields: [teacherId], references: [id])
+  marksObtained Float
+  grade         String?
+  gpa           Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, examId, subjectId])
+}

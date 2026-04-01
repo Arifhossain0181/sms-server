@@ -1,0 +1,8 @@
+model GradingRule {
+  id         String   @id @default(uuid())
+  minPercent Float
+  maxPercent Float
+  grade      String
+  gpa        Float
+  createdAt  DateTime @default(now())
+}
