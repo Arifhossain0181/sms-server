@@ -16739,7 +16739,7 @@ var require_multer = __commonJS({
 });
 
 // src/index.ts
-var import_express9 = __toESM(require("express"));
+var import_express10 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
@@ -16779,7 +16779,7 @@ var errorMiddleware = (err, req, res, next) => {
 };
 
 // src/routes/index.ts
-var import_express8 = __toESM(require("express"));
+var import_express9 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
@@ -19205,28 +19205,361 @@ router7.get(
 );
 var teacher_routes_default = router7;
 
+// src/modules/result/result.router.ts
+var import_express8 = require("express");
+
+// src/modules/result/result.service.ts
+var calculateGrade = (percentage) => {
+  if (percentage >= 80) return { grade: "A+", gpa: 5 };
+  if (percentage >= 70) return { grade: "A", gpa: 4 };
+  if (percentage >= 60) return { grade: "A-", gpa: 3.5 };
+  if (percentage >= 50) return { grade: "B", gpa: 3 };
+  if (percentage >= 40) return { grade: "C", gpa: 2 };
+  if (percentage >= 33) return { grade: "D", gpa: 1 };
+  return { grade: "F", gpa: 0 };
+};
+var recalculateAndSaveReportCard = async (studentId, examId) => {
+  const marks = await db_default.mark.findMany({
+    where: { studentId, examId },
+    include: {
+      subject: {
+        select: {
+          fullMarks: true,
+          passMarks: true
+        }
+      }
+    }
+  });
+  const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
+  const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
+  const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
+  const failed = marks.some((m) => m.marksObtained < m.subject.passMarks);
+  const { grade, gpa } = calculateGrade(percentage);
+  const reportCard = await db_default.reportCard.upsert({
+    where: {
+      studentId_examId: {
+        studentId,
+        examId
+      }
+    },
+    create: {
+      studentId,
+      examId,
+      gpa
+    },
+    update: {
+      gpa
+    }
+  });
+  return { reportCard, totalObtained, totalFull, percentage, grade, gpa, isPassed: !failed };
+};
+var submitResult = async (dto) => {
+  const exam = await db_default.exam.findUnique({ where: { id: dto.examId } });
+  if (!exam) throw { status: 404, message: "Exam not found" };
+  const student = await db_default.student.findUnique({ where: { id: dto.studentId }, select: { id: true } });
+  if (!student) throw { status: 404, message: "Student not found" };
+  if (!dto.marks.length) throw { status: 400, message: "At least one subject mark is required" };
+  const subjects = await db_default.subject.findMany({
+    where: { id: { in: dto.marks.map((m) => m.subjectId) } },
+    include: {
+      assignments: {
+        select: {
+          teacherId: true
+        }
+      }
+    }
+  });
+  const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+  await db_default.$transaction(async (tx) => {
+    for (const m of dto.marks) {
+      const subject = subjectMap.get(m.subjectId);
+      if (!subject) throw { status: 404, message: `Subject not found: ${m.subjectId}` };
+      if (m.marksObtained < 0 || m.marksObtained > subject.fullMarks) {
+        throw { status: 400, message: `Marks must be between 0 and ${subject.fullMarks} for ${subject.name}` };
+      }
+      const assignedTeacher = subject.assignments[0];
+      if (!assignedTeacher) {
+        throw { status: 400, message: `No teacher assigned for subject ${subject.name}` };
+      }
+      const percentage = subject.fullMarks > 0 ? m.marksObtained / subject.fullMarks * 100 : 0;
+      const { grade, gpa } = calculateGrade(percentage);
+      await tx.mark.upsert({
+        where: {
+          studentId_examId_subjectId: {
+            studentId: dto.studentId,
+            examId: dto.examId,
+            subjectId: m.subjectId
+          }
+        },
+        create: {
+          studentId: dto.studentId,
+          examId: dto.examId,
+          subjectId: m.subjectId,
+          teacherId: assignedTeacher.teacherId,
+          marksObtained: m.marksObtained,
+          grade,
+          gpa
+        },
+        update: {
+          teacherId: assignedTeacher.teacherId,
+          marksObtained: m.marksObtained,
+          grade,
+          gpa
+        }
+      });
+    }
+  });
+  const summary = await recalculateAndSaveReportCard(dto.studentId, dto.examId);
+  try {
+    getIO().to(dto.studentId).emit("result:Published", {
+      examId: dto.examId,
+      grade: summary.grade,
+      percentage: summary.percentage,
+      gpa: summary.gpa,
+      isPassed: summary.isPassed
+    });
+  } catch (_) {
+  }
+  return {
+    studentId: dto.studentId,
+    examId: dto.examId,
+    ...summary
+  };
+};
+var getResultByStudent = async (studentId, examId) => {
+  const marks = await db_default.mark.findMany({
+    where: {
+      studentId,
+      ...examId ? { examId } : {}
+    },
+    include: {
+      exam: true,
+      subject: true
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+  const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
+  const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
+  const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
+  return {
+    studentId,
+    examId: examId ?? null,
+    totalObtained,
+    totalFull,
+    percentage,
+    marks
+  };
+};
+var getResultByExam = async (examId) => {
+  const marks = await db_default.mark.findMany({
+    where: { examId },
+    include: {
+      student: true,
+      subject: true
+    }
+  });
+  const grouped = /* @__PURE__ */ new Map();
+  for (const mark of marks) {
+    const current = grouped.get(mark.studentId);
+    const pass = mark.marksObtained >= mark.subject.passMarks;
+    const markEntry = {
+      id: mark.id,
+      subjectId: mark.subjectId,
+      subjectName: mark.subject.name,
+      marksObtained: mark.marksObtained,
+      fullMarks: mark.subject.fullMarks,
+      passMarks: mark.subject.passMarks,
+      grade: mark.grade,
+      gpa: mark.gpa
+    };
+    if (!current) {
+      grouped.set(mark.studentId, {
+        student: mark.student,
+        marks: [markEntry],
+        totalMarks: mark.marksObtained,
+        fullMarks: mark.subject.fullMarks,
+        gpa: mark.gpa ?? 0,
+        isPassed: pass
+      });
+      continue;
+    }
+    current.marks.push(markEntry);
+    current.totalMarks += mark.marksObtained;
+    current.fullMarks += mark.subject.fullMarks;
+    current.isPassed = current.isPassed && pass;
+  }
+  const results = Array.from(grouped.values()).map((item) => {
+    const percentage = item.fullMarks > 0 ? Math.round(item.totalMarks / item.fullMarks * 100) : 0;
+    const calculated = calculateGrade(percentage);
+    return {
+      student: item.student,
+      marks: item.marks,
+      totalMarks: item.totalMarks,
+      fullMarks: item.fullMarks,
+      percentage,
+      grade: calculated.grade,
+      gpa: calculated.gpa,
+      isPassed: item.isPassed
+    };
+  }).sort((a, b) => b.gpa - a.gpa);
+  const total = results.length;
+  const passed = results.filter((r) => r.isPassed).length;
+  const failed = total - passed;
+  const avgGpa = total > 0 ? Number((results.reduce((sum, r) => sum + r.gpa, 0) / total).toFixed(2)) : 0;
+  return { results, summary: { total, passed, failed, avgGpa } };
+};
+var updateMark = async (id, dto) => {
+  const mark = await db_default.mark.findUnique({
+    where: { id },
+    include: {
+      subject: {
+        select: {
+          fullMarks: true
+        }
+      }
+    }
+  });
+  if (!mark) throw { status: 404, message: "Mark record not found" };
+  if (dto.marksObtained < 0 || dto.marksObtained > mark.subject.fullMarks) {
+    throw { status: 400, message: "Marks exceed full marks" };
+  }
+  const percentage = mark.subject.fullMarks > 0 ? dto.marksObtained / mark.subject.fullMarks * 100 : 0;
+  const { grade, gpa } = calculateGrade(percentage);
+  const updated = await db_default.mark.update({
+    where: { id },
+    data: {
+      marksObtained: dto.marksObtained,
+      grade,
+      gpa
+    }
+  });
+  const summary = await recalculateAndSaveReportCard(updated.studentId, updated.examId);
+  return { mark: updated, summary };
+};
+var getFailedStudents3 = async (examId) => {
+  const marks = await db_default.mark.findMany({
+    where: { examId },
+    include: {
+      student: true,
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          passMarks: true
+        }
+      }
+    }
+  });
+  const grouped = /* @__PURE__ */ new Map();
+  for (const mark of marks) {
+    if (mark.marksObtained >= mark.subject.passMarks) continue;
+    const current = grouped.get(mark.studentId);
+    const markEntry = {
+      id: mark.id,
+      subjectId: mark.subject.id,
+      subjectName: mark.subject.name,
+      marksObtained: mark.marksObtained,
+      passMarks: mark.subject.passMarks
+    };
+    if (!current) {
+      grouped.set(mark.studentId, { student: mark.student, marks: [markEntry] });
+      continue;
+    }
+    current.marks.push(markEntry);
+  }
+  return Array.from(grouped.values());
+};
+
+// src/modules/result/result.controller.ts
+var toSingleString = (value) => {
+  if (Array.isArray(value)) return value[0] ? String(value[0]) : void 0;
+  if (value === void 0 || value === null) return void 0;
+  return String(value);
+};
+var submitResult2 = async (req, res, next) => {
+  try {
+    const data = await submitResult(req.body);
+    sendSuccess(res, data, "Result submitted", 201);
+  } catch (err) {
+    next(err);
+  }
+};
+var getResultByStudent2 = async (req, res, next) => {
+  try {
+    const examId = toSingleString(req.query.examId);
+    const studentId = toSingleString(req.params.studentId);
+    if (!studentId) throw { status: 400, message: "studentId is required" };
+    const data = await getResultByStudent(studentId, examId);
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+var getResultByExam2 = async (req, res, next) => {
+  try {
+    const examId = toSingleString(req.params.examId);
+    if (!examId) throw { status: 400, message: "examId is required" };
+    const data = await getResultByExam(examId);
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+var updateMark2 = async (req, res, next) => {
+  try {
+    const id = toSingleString(req.params.id);
+    if (!id) throw { status: 400, message: "id is required" };
+    const data = await updateMark(id, req.body);
+    sendSuccess(res, data, "Mark updated");
+  } catch (err) {
+    next(err);
+  }
+};
+var getFailedStudents4 = async (req, res, next) => {
+  try {
+    const examId = toSingleString(req.params.examId);
+    if (!examId) throw { status: 400, message: "examId is required" };
+    const data = await getFailedStudents3(examId);
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// src/modules/result/result.router.ts
+var router8 = (0, import_express8.Router)();
+router8.post("/", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitResult2);
+router8.get("/student/:studentId", authenticate, getResultByStudent2);
+router8.get("/exam/:examId", authenticate, getResultByExam2);
+router8.get("/exam/:examId/failed", authenticate, authorizeRoles("ADMIN", "TEACHER"), getFailedStudents4);
+router8.patch("/marks/:id", authenticate, authorizeRoles("ADMIN", "TEACHER"), updateMark2);
+var result_router_default = router8;
+
 // src/routes/index.ts
-var router8 = import_express8.default.Router();
-router8.get("/health", (req, res) => {
+var router9 = import_express9.default.Router();
+router9.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router8.use("/auth", auth_route_default);
-router8.use("/students", students_route_default);
-router8.use("/subjects", subject_router_default);
-router8.use("/classes", class_route_default);
-router8.use("/exams", exam_route_default);
-router8.use("/attendance", attendacne_router_default);
-router8.use("/teachers", teacher_routes_default);
-var routes_default = router8;
+router9.use("/auth", auth_route_default);
+router9.use("/students", students_route_default);
+router9.use("/subjects", subject_router_default);
+router9.use("/classes", class_route_default);
+router9.use("/exams", exam_route_default);
+router9.use("/attendance", attendacne_router_default);
+router9.use("/teachers", teacher_routes_default);
+router9.use("/results", result_router_default);
+var routes_default = router9;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express9.default)();
+var app = (0, import_express10.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
 app.use((0, import_cors.default)({ origin: process.env.CLIENT_URL, credentials: true }));
-app.use(import_express9.default.json());
+app.use(import_express10.default.json());
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
