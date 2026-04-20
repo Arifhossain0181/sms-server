@@ -1,4 +1,3 @@
-
 model Class {
   id           String   @id @default(uuid())
   name         String   @unique
@@ -10,4 +9,5 @@ model Class {
   feeStructures FeeStructure[]
   examSchedules ExamSchedule[]
   admissions    AdmissionApplication[]
+  students     Student[]
 }

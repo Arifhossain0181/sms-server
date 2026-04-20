@@ -74,3 +74,11 @@ enum DayOfWeek {
   SATURDAY
   SUNDAY
 }
+
+enum FeeStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+  WAIVED
+}

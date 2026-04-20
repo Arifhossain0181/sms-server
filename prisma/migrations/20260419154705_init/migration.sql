@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "FeeStructure" ADD COLUMN     "Paidamount" DOUBLE PRECISION NOT NULL DEFAULT 0;

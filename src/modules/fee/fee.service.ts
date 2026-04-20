@@ -1,0 +1,122 @@
+import prisma from "../../config/db";
+import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, } from "./fee.dto";
+import { paginate } from "../../utils/pagination.util";
+
+export  const createfee = async (dto: CreateFeeDto) => {
+    const student = await prisma.student.findUnique({
+        where: { id: dto.studentId },
+    });
+    if (!student) {
+        throw new Error('Student not found');
+    }
+        return await prisma.feeStructure.create({
+            data: {
+                ...dto,
+                dueDate: new Date(dto.dueDate),
+                status: 'PENDING',
+                Paidamount: 0,
+                classId: dto.classId, // Ensure `classId` is provided in `dto`
+                feeType: dto.type, // Corrected to use `type` from `CreateFeeDto`
+                dueDay: dto.dueDay,   // Ensure `dueDay` is provided in `dto`
+            },
+            include: {
+                student: {
+                    include: {
+                        user: {
+                            select: {
+                                name: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
+            },
+        })
+    
+
+}
+export const bulkcreate = async (dto: BulkCreateFeeDto) => {
+    const students = await prisma.student.findMany({
+        where: { classId: dto.classId },
+        select: { id: true },
+    });
+
+    const fees = students.map((student) => ({
+        title: dto.title,
+        feeType: dto.type, // Updated to use `feeType` as required by Prisma
+        amount: dto.amount,
+        dueDate: dto.dueDate,
+        dueDay: new Date(dto.dueDate).getDate(),
+        description: dto.description,
+        status: 'PENDING',
+        paidAmount: 0,
+        studentId: student.id,
+        classId: dto.classId,
+    }));
+
+    await prisma.feeStructure.createMany({ data: fees });
+
+    return { created: students.length };
+};
+export const findAll = async (dto: FeeQueryDto) => {
+
+  const { page = '1', limit = '10', studentId, classId, type, status, month } = dto;
+
+  //  base filter
+  const where: any = {
+    ...(studentId && { studentId }),
+    ...(classId && { classId }),
+    ...(type && { feeType: type }),
+    ...(status && { status }),
+  };
+
+  //  month filter
+  if (month) {
+    const start = new Date(`${month}-01`);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+
+    where.dueDate = {
+      gte: start,
+      lt: end,
+    };
+  }
+
+  //  ALWAYS paginate (important fix)
+  const { skip, take, meta } = await paginate(
+    prisma.feeStructure,
+    where,
+    parseInt(page),
+    parseInt(limit)
+  );
+
+  //  fetch data
+  const fees = await prisma.feeStructure.findMany({
+    where,
+    skip,
+    take,
+    include: {
+      student: {
+        select: {
+          id: true,
+          rollNumber: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          class: {
+            select: {
+              name: true,
+              sections: true,
+            },
+          },
+        },
+      },
+      payments: true,
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  return { data: fees, meta };
+};
