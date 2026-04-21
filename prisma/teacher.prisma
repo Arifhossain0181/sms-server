@@ -23,4 +23,3 @@ model Teacher {
   timetableSlots     TimetableSlot[]
   attendanceTaken    StudentAttendance[]
 }
-

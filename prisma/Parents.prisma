@@ -1,18 +1,18 @@
 // ─── PARENT ────────────────────────────────────────────────
 
 model Parent {
-  id               String    @id @default(uuid())
-  userId           String    @unique
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name             String
   phone            String
   address          String?
   occupation       String?
   stripeCustomerId String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  children  Student[]
-  payments  Payment[]
-  notices   NoticeRecipient[]
+  children Student[]
+  payments Payment[]
+  notices  NoticeRecipient[]
 }

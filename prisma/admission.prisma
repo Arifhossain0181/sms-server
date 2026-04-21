@@ -24,4 +24,3 @@ model AdmissionApplication {
   studentId String?  @unique
   student   Student? @relation(fields: [studentId], references: [id])
 }
-

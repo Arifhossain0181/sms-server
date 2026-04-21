@@ -1,14 +1,14 @@
 // ─── USER & AUTH ───────────────────────────────────────────
 
 model User {
-  id            String    @id @default(uuid())
-  name          String
-  email         String    @unique
-  passwordHash  String
-  role          Role
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   refreshTokens  RefreshToken[]
   passwordResets PasswordReset[]

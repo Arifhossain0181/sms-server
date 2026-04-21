@@ -16,4 +16,6 @@ model Payment {
   paidAt                DateTime?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
+  feeStructure          FeeStructure? @relation(fields: [feeStructureId], references: [id])
+  feeStructureId        String?
 }

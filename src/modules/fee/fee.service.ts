@@ -1,5 +1,5 @@
 import prisma from "../../config/db";
-import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, } from "./fee.dto";
+import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, UpdateFeeDto, } from "./fee.dto";
 import { paginate } from "../../utils/pagination.util";
 
 export  const createfee = async (dto: CreateFeeDto) => {
@@ -119,4 +119,61 @@ export const findAll = async (dto: FeeQueryDto) => {
   });
 
   return { data: fees, meta };
+};
+
+export const findByid = async (id: string) => {
+  const fee = await prisma.feeStructure.findUnique({
+    where: { id },
+    include: {
+      student: {
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          class: {
+            select: {
+              name: true,
+              sections: true,
+            },
+          },
+        },
+      },
+      payments: { orderBy: { createdAt: 'desc' } },
+    },
+  });
+
+  if (!fee) {
+    throw new Error('Fee not found');
+  }
+
+  // Ensure payments are safely accessed
+  const payments = fee.payments ?? [];
+  return { ...fee, payments };
+};
+
+export const updateFee = async (id: string, dto: UpdateFeeDto) => {
+
+  //  check exists
+  const existing = await prisma.feeStructure.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    throw new Error("Fee not found");
+  }
+
+  //  update
+  return await prisma.feeStructure.update({
+    where: { id },
+    data: {
+      ...dto,
+      ...(dto.dueDate && { dueDate: new Date(dto.dueDate) }),
+    },
+    include: {
+      payments: true,
+    },
+  });
 };

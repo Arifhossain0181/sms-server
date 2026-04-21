@@ -9,6 +9,7 @@ model Exam {
   admitCards  AdmitCard[]
   reportCards ReportCard[]
 }
+
 model ExamSchedule {
   id        String   @id @default(uuid())
   examId    String

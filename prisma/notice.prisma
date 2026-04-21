@@ -11,6 +11,7 @@ model Notice {
   sectionTargets NoticeSectionTarget[]
   recipients     NoticeRecipient[]
 }
+
 model NoticeSectionTarget {
   id        String  @id @default(uuid())
   noticeId  String
@@ -20,15 +21,16 @@ model NoticeSectionTarget {
 
   @@unique([noticeId, sectionId])
 }
+
 model NoticeRecipient {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   noticeId  String
-  notice    Notice   @relation(fields: [noticeId], references: [id])
+  notice    Notice    @relation(fields: [noticeId], references: [id])
   studentId String?
-  student   Student? @relation(fields: [studentId], references: [id])
+  student   Student?  @relation(fields: [studentId], references: [id])
   parentId  String?
-  parent    Parent?  @relation(fields: [parentId], references: [id])
-  isRead    Boolean  @default(false)
+  parent    Parent?   @relation(fields: [parentId], references: [id])
+  isRead    Boolean   @default(false)
   readAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }

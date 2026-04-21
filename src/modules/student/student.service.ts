@@ -1,4 +1,3 @@
-
 import { CreateStudentDto, StudentQueryDto, UpdateStudentDto } from './student.dto';
 import prisma from '../../config/db';
 import bcrypt from 'bcryptjs';
@@ -240,61 +239,79 @@ export class StudentService {
 
         return student;
     }
-    async update(id:string ,dto:UpdateStudentDto){
-        const student = await prisma.student.findUnique({
-            where:{
-                id
-            }
-        })
-        if(!student) {
-            throw new Error("Student not found");
-        }
-        if(dto.classId){
-            const classExists = await prisma.class.findUnique({
-                where:{
-                    id: dto.classId
-                }
-            })
-            if(!classExists) {
-                throw new Error("Class not found");
-            }
-        }
-        const {name, bloodGroup, ...studentFields} = dto;
+    async update(id: string, dto: UpdateStudentDto) {
 
-        const updatedStudent = await prisma.student.update({
-            where:{
-                id
-            },
-            data:{
-                ...studentFields,
-                ...(bloodGroup !== undefined && { bloodGroup: bloodGroup as any }),
-                ...(name && {
-                    user:{
-                        update:{
-                            name
-                        }
-                    }
-                })
-            },
-            include:{
-                user:{
-                    select:{
-                        id:true,
-                        name:true,
-                        email:true
-                    }
-                },
-                section:{
-                    select:{
-                        id:true,
-                        name:true,
-                        class:true
-                    }
-                }
-            }
-        })
-        return updatedStudent;
+  //  check student
+  const student = await prisma.student.findUnique({
+    where: { id }
+  });
+
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  //  check class
+  if (dto.classId) {
+    const classExists = await prisma.class.findUnique({
+      where: { id: dto.classId }
+    });
+
+    if (!classExists) {
+      throw new Error("Class not found");
     }
+  }
+
+  const { name, bloodGroup, classId, ...studentFields } = dto;
+
+  const updatedStudent = await prisma.student.update({
+    where: { id },
+    data: {
+
+      //  normal fields
+      ...studentFields,
+
+      //  FIXED relation update
+      ...(classId && {
+        class: {
+          connect: { id: classId }
+        }
+      }),
+
+      // enum / custom field
+      ...(bloodGroup !== undefined && {
+        bloodGroup: bloodGroup as any
+      }),
+
+      //  nested update (user)
+      ...(name && {
+        user: {
+          update: {
+            name
+          }
+        }
+      }),
+    },
+
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      section: {
+        select: {
+          id: true,
+          name: true,
+          class: true,
+        },
+      },
+    },
+  });
+
+  return updatedStudent;
+}
   async delete(id:string){
         const student = await prisma.student.findUnique({
             where:{
