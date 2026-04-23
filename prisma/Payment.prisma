@@ -18,4 +18,6 @@ model Payment {
   updatedAt             DateTime      @updatedAt
   feeStructure          FeeStructure? @relation(fields: [feeStructureId], references: [id])
   feeStructureId        String?
+  transactionId        String?       @unique
+  note                  String?
 }

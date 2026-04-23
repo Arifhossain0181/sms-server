@@ -1,5 +1,5 @@
 import prisma from "../../config/db";
-import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, UpdateFeeDto, } from "./fee.dto";
+import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, RecordPaymentDto, UpdateFeeDto, } from "./fee.dto";
 import { paginate } from "../../utils/pagination.util";
 
 export  const createfee = async (dto: CreateFeeDto) => {
@@ -175,5 +175,76 @@ export const updateFee = async (id: string, dto: UpdateFeeDto) => {
     include: {
       payments: true,
     },
+  }); 
+  
+};
+ export const deleteFee = async (id: string) => {
+   
+  await prisma.feeStructure.delete({ where: { id } });
+
+ }
+
+ // Payment related operations 
+
+ export const recordPayment = async(dto: RecordPaymentDto) => {
+  const fee = await prisma.feeStructure.findUnique({
+    where: { id: dto.feeId },
   });
+  if (!fee) {
+    throw new Error("Fee not found");
+  }
+  if (fee.status === "PAID") {
+    throw new Error("Fee is already paid");
+  }
+  const totalPaid = fee.Paidamount + dto.amountPaid;
+  if (totalPaid > fee.amount) {
+    throw new Error("Payment exceeds fee amount");
+  }
+
+  // Fetch required fields for PaymentUncheckedCreateInput
+  const student = await prisma.student.findUnique({
+    where: { id: fee.studentId },
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { feeStructureId: fee.id },
+  });
+  if (!invoice) {
+    throw new Error("Invoice not found for the fee structure");
+  }
+
+  // Determine new status
+  const newStatus =
+    totalPaid === fee.amount
+      ? "PAID"
+      : totalPaid > 0
+      ? "PARTIAL"
+      : fee.status;
+
+  // Create Payment record and update fee atomically
+  const [payment] = await prisma.$transaction([
+    prisma.payment.create({
+      data: {
+        feeStructureId: dto.feeId,
+        amount: dto.amountPaid,
+        method: dto.method,
+        transactionId: dto.transactionId ?? undefined, // Convert null to undefined
+        note: dto.note ?? undefined, // Convert null to undefined
+        invoiceId: invoice.id, // Required field
+        studentId: student.id, // Required field
+      },
+    }),
+    prisma.feeStructure.update({
+      where: { id: dto.feeId },
+      data: {
+        paidAmount: totalPaid,
+        status: newStatus,
+      },
+    }),
+  ]);
+
+  return payment;
 };
