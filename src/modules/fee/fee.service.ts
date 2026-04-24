@@ -203,7 +203,7 @@ export const updateFee = async (id: string, dto: UpdateFeeDto) => {
 
   // Fetch required fields for PaymentUncheckedCreateInput
   const student = await prisma.student.findUnique({
-    where: { id: fee.studentId },
+    where: { id: fee.studentId ?? undefined },
   });
   if (!student) {
     throw new Error("Student not found");
@@ -247,4 +247,63 @@ export const updateFee = async (id: string, dto: UpdateFeeDto) => {
   ]);
 
   return payment;
+};
+// rePorts 
+
+export const getstudentFeeSummary = async (studentId: string) => {
+  const fees = await prisma.feeStructure.findMany({
+    where: { studentId },
+    include: {
+      payments: true,
+    },
+  });
+     const totalFees = fees.reduce((sum, fee) => sum + fee.amount, 0);
+  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
+  const outstanding = totalFees - totalPaid;
+
+  const overDue = fees.filter((f) =>f.status === "PENDING" && new Date(f.dueDate) < new Date()).length;
+
+  return {
+    totalFees,
+    totalPaid,
+    outstanding,
+    overDue,
+  };   
+}
+export const getCollectionReport = async (classId: string, month: string) => {
+  const start = new Date(`${month}-01`);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const payments = await prisma.payment.findMany({
+    where: {
+      createdAt: {
+        gte: start,
+        lt: end,
+      }
+    },
+    include: {
+      feeStructure: {
+        select: {
+          feeType: true, title: true
+        }
+      }
+    }
+  });
+  const totalCollected = payments.reduce((s, p) => s + p.amount, 0);
+
+  // Group by fee type
+  const byType = payments.reduce((acc: Record<string, number>, p) => {
+    const key = p.feeStructure?.feeType || 'UNKNOWN';
+    acc[key] = (acc[key] || 0) + p.amount;
+    return acc;
+  }, {});
+
+  return { month, totalCollected, byType, totalTransactions: payments.length };
+}
+
+// ─── PRIVATE
+
+export const _exists = async (id: string) => {
+  const fee = await prisma.feeStructure.findUnique({ where: { id } });
+  if (!fee) throw new Error('Fee record not found');
+  return fee;
 };
