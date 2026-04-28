@@ -1,4 +1,5 @@
-import { AdmissionQueryDto, AdmissionQueryDto, CreateAdmissionDto, UpdateAdmissionDto, UpdateAdmissionStatusDto } from "./admission.dto";
+import prisma from "../../config/db";
+import { AdmissionQueryDto, AdmissionQueryDto, ConvertToStudentDto, CreateAdmissionDto, UpdateAdmissionDto, UpdateAdmissionStatusDto } from "./admission.dto";
 
 
 export const create= async(dto:CreateAdmissionDto) =>{
@@ -146,4 +147,89 @@ export const updateStatus = async(id:string, dto: UpdateAdmissionStatusDto ,revi
     return updated;
 }
 
-    
+export const convertToStudent = async (dto:ConvertToStudentDto) =>{
+    const admission = await prisma.admission.findUnique({ where: { id: dto.admissionId } });
+    if (!admission) {
+        throw new Error('Admission not found');
+    }
+    if(admission.status !== 'APPROVED') {
+        throw new Error('Only approved admissions can be converted to students');
+    } 
+    if(admission.convertedToStudent) {
+        throw new Error('This admission has already been converted to a student');
+        
+    }
+    const emailExists = await prisma.user.findUnique({ where: { email: dto.email } });
+    if (emailExists) {
+        throw new Error('Email already in use');
+    }
+    const rollExists = await prisma.student.findUnique({ where: { rollNumber: dto.rollNumber } });
+    if (rollExists) {
+        throw new Error('Roll number already in use');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+// Create user + student in a transaction, then link back to admission
+    const student = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: `${admission.firstName} ${admission.lastName}`,
+          email: dto.email,
+          password: hashedPassword,
+          role: 'STUDENT',
+          student: {
+            create: {
+              rollNumber: dto.rollNumber,
+              classId: admission.applyingForClass,
+              dateOfBirth: admission.dateOfBirth,
+              gender: admission.gender,
+              bloodGroup: admission.bloodGroup,
+              guardianName: admission.guardianName,
+              guardianPhone: admission.guardianPhone,
+              guardianEmail: admission.guardianEmail,
+              guardianRelation: admission.guardianRelation,
+              avatarUrl: admission.photoUrl,
+            },
+          },
+        },
+        include: { student: true },
+      });
+ 
+      await tx.admission.update({
+        where: { id: dto.admissionId },
+        data: { convertedToStudentId: user.student!.id },
+      });
+ 
+      return user;
+    });
+    return student;
+}
+
+export const delete(id:string) =>{
+    const admission = prisma.admission.findUnique({ where: { id } });
+    if (!admission) {
+        throw new Error('Admission not found');
+    }
+    return prisma.admission.delete({ where: { id } });
+
+}
+
+export const  getStats() {
+    const [total, pending, approved, rejected, reviewing, waitlisted] = await Promise.all([
+      prisma.admission.count(),
+      prisma.admission.count({ where: { status: 'PENDING' } }),
+      prisma.admission.count({ where: { status: 'APPROVED' } }),
+      prisma.admission.count({ where: { status: 'REJECTED' } }),
+      prisma.admission.count({ where: { status: 'REVIEWING' } }),
+      prisma.admission.count({ where: { status: 'WAITLISTED' } }),
+    ]);
+ 
+    return { total, pending, approved, rejected, reviewing, waitlisted };
+
+}
+      private async _exists(id: string) {
+    const admission = await prisma.admission.findUnique({ where: { id } });
+    if (!admission) throw new Error('Admission record not found');
+    return admission;
+  }
+}
