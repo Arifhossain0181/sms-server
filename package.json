@@ -23,6 +23,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.6.0",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",
@@ -33,6 +34,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^8.0.4",
+    "pg": "^8.20.0",
     "prisma": "^7.6.0",
     "socket.io": "^4.8.3",
     "stripe": "^21.0.1",
