@@ -23,14 +23,14 @@ export class AdmissionController {
 
   async findById(req: Request, res: Response, next: NextFunction) {
     try {
-      const admission = await admissionService.findById(req.params.id);
+      const admission = await admissionService.findById(String(req.params.id));
       sendSuccess(res, admission, 'Admission fetched');
     } catch (err) { next(err); }
   }
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const admission = await admissionService.update(req.params.id, req.body);
+      const admission = await admissionService.update(String(req.params.id), req.body);
       sendSuccess(res, admission, 'Admission updated');
     } catch (err) { next(err); }
   }
@@ -38,9 +38,8 @@ export class AdmissionController {
   async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const admission = await admissionService.updateStatus(
-        req.params.id,
-        req.body,
-        req.user!.id
+        String(req.params.id),
+        req.body
       );
       sendSuccess(res, admission, 'Admission status updated');
     } catch (err) { next(err); }
@@ -55,7 +54,7 @@ export class AdmissionController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await admissionService.delete(req.params.id);
+      await admissionService.delete(String(req.params.id));
       sendSuccess(res, null, 'Admission deleted');
     } catch (err) { next(err); }
   }
@@ -72,6 +71,13 @@ export class AdmissionController {
       if (!req.file) throw new Error('No file uploaded');
       const result = await uploadToCloudinary(req.file.buffer, 'admissions/documents');
       sendSuccess(res, { url: result.secure_url }, 'Document uploaded');
+    } catch (err) { next(err); }
+  }
+
+  async getPublicClasses(req: Request, res: Response, next: NextFunction) {
+    try {
+      const classes = await admissionService.getPublicClasses();
+      sendSuccess(res, classes, 'Classes fetched');
     } catch (err) { next(err); }
   }
 }

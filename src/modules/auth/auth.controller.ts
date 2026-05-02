@@ -57,7 +57,7 @@ async  refreshToken(req:Request,res:Response ,next:NextFunction) {
 , 
 async logout(req:Request,res:Response ,next:NextFunction) {
     try{
-        await authService.logout(req.body);
+    await authService.logout(req.user!.id);
         res.status(200).json({
             success:true,
             message:"Logout Successful"

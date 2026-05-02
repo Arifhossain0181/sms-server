@@ -7,6 +7,7 @@ import examRoutes from '../modules/exam/exam.route';
 import attendanceRoutes from '../modules/attendance/attendacne.router';
 import teacherRoutes from '../modules/teachers/teacher.routes';
 import resultRoutes from '../modules/result/result.router';
+import admissionRoutes from '../modules/admission/admission.routes';
 
 const router = express.Router();
 
@@ -23,5 +24,6 @@ router.use('/exams', examRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/teachers', teacherRoutes);
 router.use('/results', resultRoutes);
+router.use('/admission', admissionRoutes);
 
 export default router;

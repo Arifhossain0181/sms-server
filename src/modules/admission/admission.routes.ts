@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { AdmissionController } from './admission.controller';
-import { authMiddleware } from '../../middlewares/auth.middleware';
-import { roleMiddleware } from '../../middlewares/role.middleware';
-import { uploadMiddleware } from '../../middlewares/upload.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
+import { authorizeRoles } from '../../middleware/role.middleware';
+import { upload } from '../../utils/upload.middleware';
 
 const router = Router();
 const c = new AdmissionController();
@@ -10,15 +10,18 @@ const c = new AdmissionController();
 // ── Public: submit application (no login needed) ───────────────────
 router.post('/apply', c.apply.bind(c));
 
+// ── Public: class list for admission form ──────────────────────────
+router.get('/classes', c.getPublicClasses.bind(c));
+
 // ── Document upload (public, pre-auth form) ────────────────────────
 router.post(
   '/upload-document',
-  uploadMiddleware.single('document'),
+  upload.single('document'),
   c.uploadDocument.bind(c)
 );
 
 // ── All routes below require Admin auth ────────────────────────────
-router.use(authMiddleware, roleMiddleware('ADMIN'));
+router.use(authenticate, authorizeRoles('ADMIN'));
 
 router.get('/stats',                  c.getStats.bind(c));
 router.get('/',                       c.findAll.bind(c));

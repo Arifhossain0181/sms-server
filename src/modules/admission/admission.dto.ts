@@ -1,58 +1,42 @@
-export type AdmissionStatus = 'PENDING' | 'REVIEWING' | 'APPROVED' | 'REJECTED' | 'WAITLISTED';
+export type AdmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
-export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
+export type BloodGroup = 'A_POS' | 'A_NEG' | 'B_POS' | 'B_NEG' | 'O_POS' | 'O_NEG' | 'AB_POS' | 'AB_NEG';
 
 // ─── Apply for admission (public form) ──────────────────────────────
 export interface CreateAdmissionDto {
-  // Applicant
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
+  applicantName: string;
+  dob: string; // ISO date string
   gender: Gender;
-  bloodGroup?: BloodGroup;
-  nationality?: string;
   religion?: string;
-  previousSchool?: string;
-  previousClass?: string;
-
-  // Apply to
-  applyingForClass: string;   // classId
-  academicYear: string;       // e.g. "2024-2025"
-
-  // Guardian
+  bloodGroup?: BloodGroup;
+  address: string;
   guardianName: string;
-  guardianRelation: string;
   guardianPhone: string;
   guardianEmail: string;
-  guardianOccupation?: string;
-  guardianAddress: string;
-
-  // Documents (Cloudinary URLs)
-  birthCertificateUrl?: string;
-  transferCertificateUrl?: string;
+  targetClassId: string;
   photoUrl?: string;
+  birthCertUrl?: string;
 }
 
 // ─── Admin: review & update status ──────────────────────────────────
 export interface UpdateAdmissionStatusDto {
   status: AdmissionStatus;
-  remarks?: string;            // reason for rejection / notes
+  rejectionReason?: string;
 }
 
 export interface UpdateAdmissionDto {
-  firstName?: string;
-  lastName?: string;
-  dateOfBirth?: string;
+  applicantName?: string;
+  dob?: string;
   gender?: Gender;
+  religion?: string;
   bloodGroup?: BloodGroup;
-  applyingForClass?: string;
+  address?: string;
   guardianName?: string;
   guardianPhone?: string;
   guardianEmail?: string;
-  guardianAddress?: string;
-  birthCertificateUrl?: string;
-  transferCertificateUrl?: string;
+  targetClassId?: string;
   photoUrl?: string;
+  birthCertUrl?: string;
 }
 
 // ─── Convert approved admission → Student account ───────────────────
@@ -70,5 +54,4 @@ export interface AdmissionQueryDto {
   search?: string;
   status?: AdmissionStatus;
   classId?: string;
-  academicYear?: string;
 }

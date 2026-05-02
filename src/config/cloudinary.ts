@@ -7,3 +7,13 @@ cloudinary.config({
 });
 
 export default cloudinary;
+
+export const uploadToCloudinary = (fileBuffer: Buffer, folder: string) =>
+  new Promise<{ secure_url: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream({ folder }, (error, result) => {
+      if (error || !result) return reject(error || new Error("Upload failed"));
+      resolve({ secure_url: result.secure_url });
+    });
+
+    stream.end(fileBuffer);
+  });
