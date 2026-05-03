@@ -211,7 +211,7 @@ export const TeachersService = {
       where: { teacherId: id },
       include: {
         subject: { select: { id: true, name: true } },
-        section: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true, classId: true, class: { select: { name: true } } } },
       },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });

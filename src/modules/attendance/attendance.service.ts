@@ -53,10 +53,21 @@ export const takeAttendance = async (dto: TakeAttendanceDto, teacherId: string) 
 
 
 export const getAttendanceByDate = async( classId:string, sectionId:string, date:string) => {
+    if (!sectionId) throw new Error("sectionId is required");
+
+    if (classId) {
+        const section = await prisma.section.findUnique({
+            where: { id: sectionId },
+            select: { classId: true },
+        });
+        if (section && section.classId !== classId) {
+            throw new Error("Section does not belong to the selected class");
+        }
+    }
+
     const d = new Date(date);
     return await prisma.studentAttendance.findMany({
         where:{
-            classId,
             sectionId,
             date:{
                 gte: new Date(d.setHours(0,0,0,0)),

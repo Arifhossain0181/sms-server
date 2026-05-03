@@ -10,6 +10,7 @@ router.use(authenticate);
 
 // ── Reports (before :id to avoid param clash) ──────────────────────
 router.get('/report/collection',  authorizeRoles('ADMIN'),            c.getCollectionReport.bind(c));
+router.get('/summary',            authorizeRoles('ADMIN'),            c.getSummary.bind(c));
 router.get('/student/:studentId', authorizeRoles('ADMIN', 'STUDENT'), c.getStudentSummary.bind(c));
 
 // ── Core CRUD ──────────────────────────────────────────────────────

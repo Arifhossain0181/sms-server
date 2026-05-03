@@ -270,7 +270,7 @@ export const getstudentFeeSummary = async (studentId: string) => {
     overDue,
   };   
 }
-export const getCollectionReport = async (classId: string, month: string) => {
+export const getCollectionReport = async (month: string, type?: string) => {
   const start = new Date(`${month}-01`);
   const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
   const payments = await prisma.payment.findMany({
@@ -278,7 +278,8 @@ export const getCollectionReport = async (classId: string, month: string) => {
       createdAt: {
         gte: start,
         lt: end,
-      }
+      },
+      ...(type ? { feeStructure: { feeType: type as any } } : {}),
     },
     include: {
       feeStructure: {
@@ -299,6 +300,27 @@ export const getCollectionReport = async (classId: string, month: string) => {
 
   return { month, totalCollected, byType, totalTransactions: payments.length };
 }
+
+export const getFeeSummary = async (month?: string) => {
+  const where: any = {};
+
+  if (month) {
+    const start = new Date(`${month}-01`);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    where.dueDate = { gte: start, lt: end };
+  }
+
+  const fees = await prisma.feeStructure.findMany({ where });
+  const totalAmount = fees.reduce((sum, fee) => sum + fee.amount, 0);
+  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
+  const outstanding = totalAmount - totalPaid;
+  const pendingCount = fees.filter((f) => f.status === "PENDING").length;
+  const overdueCount = fees.filter(
+    (f) => f.status === "PENDING" && new Date(f.dueDate) < new Date()
+  ).length;
+
+  return { totalAmount, totalPaid, outstanding, pendingCount, overdueCount };
+};
 
 // ─── PRIVATE
 

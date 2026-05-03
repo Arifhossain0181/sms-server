@@ -8,7 +8,8 @@ import {
   deleteFee,
   recordPayment,
   getstudentFeeSummary,
-  getCollectionReport
+  getCollectionReport,
+  getFeeSummary
 } from './fee.service';
 import { sendSuccess } from '../../utils/response.util';
 
@@ -88,10 +89,19 @@ export class FeesController {
     try {
       let { month, type } = req.query as { month: string | string[], type?: string | string[] };
       const monthStr = Array.isArray(month) ? month[0] : month;
-      const typeStr = type ? (Array.isArray(type) ? type[0] : type) : '';
+      const typeStr = type ? (Array.isArray(type) ? type[0] : type) : undefined;
       if (!monthStr) throw new Error('month query param required (e.g. 2024-09)');
       const data = await getCollectionReport(monthStr, typeStr);
       sendSuccess(res, data, 'Collection report fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      let { month } = req.query as { month?: string | string[] };
+      const monthStr = month ? (Array.isArray(month) ? month[0] : month) : undefined;
+      const data = await getFeeSummary(monthStr);
+      sendSuccess(res, data, 'Fee summary fetched');
     } catch (err) { next(err); }
   }
 }

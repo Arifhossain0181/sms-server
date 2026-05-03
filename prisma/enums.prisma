@@ -82,3 +82,18 @@ enum FeeStatus {
   PARTIAL
   WAIVED
 }
+
+enum NoticeAudience {
+  ALL
+  STUDENTS
+  TEACHERS
+  PARENTS
+  STAFF
+}
+
+enum NoticePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}

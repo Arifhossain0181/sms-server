@@ -207,3 +207,6 @@ Stack: Next.js · React · Tailwind · Node.js · Express.js · Prisma · TypeSc
 - All data transmitted over HTTPS/SSL
 - Daily automated database backup
 - System supports minimum 1000 concurrent users
+- Clean and simple UI — usable by non-technical school staff
+- Input validation on all forms (frontend and backend)
+- Proper error handling with user-friendly error messages

@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { NotificationController } from './notification.controller';
-import { authMiddleware } from '../../middlewares/auth.middleware';
-import { roleMiddleware } from '../../middlewares/role.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
+import { authorizeRoles } from '../../middleware/role.middleware';
 
 const router = Router();
 const c = new NotificationController();
 
-router.use(authMiddleware);
+router.use(authenticate);
 
 // ── Admin: send & broadcast ────────────────────────────────────────
-router.post('/',          roleMiddleware('ADMIN'), c.send.bind(c));
-router.post('/broadcast', roleMiddleware('ADMIN'), c.broadcast.bind(c));
+router.post('/',          authorizeRoles('ADMIN'), c.send.bind(c));
+router.post('/broadcast', authorizeRoles('ADMIN'), c.broadcast.bind(c));
 
 // ── Any authenticated user: own notifications ─────────────────────
 router.get('/',                   c.findAll.bind(c));
