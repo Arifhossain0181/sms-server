@@ -1,6 +1,7 @@
 import { AssignClassDto, AssignSubjectDto, CreateTeacherDto, TeacherQueryDto, UpdateTeacherDto } from './teachers.dto';
 import prisma from '../../config/db';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { paginate } from "../../utils/pagination.util";
 
 export const TeachersService = {
@@ -11,7 +12,8 @@ export const TeachersService = {
     const employeeExists = await prisma.teacher.findUnique({ where: { employeeId: dto.TeachersId } });
     if (employeeExists) throw new Error('Teacher ID already exists');
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const rawPassword = dto.password ?? randomBytes(4).toString('hex');
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const teacherUser = await prisma.user.create({
       data: {
@@ -105,7 +107,9 @@ export const TeachersService = {
       },
     });
 
-    if (!teacher) throw new Error('Teacher not found');
+    if (!teacher) {
+      throw { status: 404, message: 'Teacher profile not found' };
+    }
     return teacher;
   },
 

@@ -1,0 +1,26 @@
+// ─── TEACHING APPLICATION ──────────────────────────────────
+
+model TeachingApplication {
+  id                   String                     @id @default(uuid())
+  name                 String
+  email                String
+  phone                String
+  gender               Gender
+  dob                  DateTime                   @db.Date
+  address              String
+  designation          String
+  department           String?
+  qualification        String
+  experience           Int
+  subjectSpecialization String?
+  expectedSalary       Float?
+  resumeUrl            String?
+  coverLetter          String?
+  status               TeachingApplicationStatus  @default(PENDING)
+  reviewedAt           DateTime?
+  rejectionReason      String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  @@index([email])
+}

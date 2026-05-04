@@ -29,6 +29,10 @@ const paginate = async (
 
 export class StudentService {
 
+    private notFound(message: string) {
+        return Object.assign(new Error(message), { status: 404 });
+    }
+
     async createStudent(dto: CreateStudentDto) {
         const rollNumber = Number(dto.rollNumber);
         if (!Number.isInteger(rollNumber)) {
@@ -100,13 +104,13 @@ export class StudentService {
     async findAllStudents(query:StudentQueryDto) {
          const { page = '1', limit = '10', search, classId, gender } = query; 
          const where :any ={
-            ...(classId && { student: { classId } }),
-            ...(gender && { student: { gender } }),
+            ...(classId && { classId }),
+            ...(gender && { gender }),
             ...(search && {
                 OR: [
                     { name: { contains: search, mode: 'insensitive' } },
                     { email: { contains: search, mode: 'insensitive' } },
-                    { student: { rollNumber: isNaN(Number(search)) ? undefined : Number(search) } }
+                    ...(isNaN(Number(search)) ? [] : [{ rollNumber: Number(search) }])
                 ]
             })
         }; 
@@ -136,7 +140,7 @@ export class StudentService {
                     select:{
                         id:true,
                         name:true,
-                        section:true
+                        sections:true
                     }
                 }
             },
@@ -201,7 +205,7 @@ export class StudentService {
             }}
         })
         if(!student) {
-            throw new Error("Student not found");
+            throw this.notFound("Student not found");
         }
 
 
@@ -234,7 +238,7 @@ export class StudentService {
         });
 
         if (!student) {
-            throw new Error("Student not found");
+            throw this.notFound("Student not found");
         }
 
         return student;
@@ -261,36 +265,45 @@ export class StudentService {
     }
   }
 
-  const { name, bloodGroup, classId, ...studentFields } = dto;
+    const {
+        name,
+        email,
+        dateOfBirth,
+        address,
+        bloodGroup,
+        avatarUrl,
+        classId,
+    } = dto as UpdateStudentDto & { email?: string; dateOfBirth?: string };
 
-  const updatedStudent = await prisma.student.update({
-    where: { id },
-    data: {
+    const dob = dateOfBirth ? new Date(dateOfBirth) : undefined;
+    if (dateOfBirth && Number.isNaN(dob?.getTime())) {
+        throw new Error('Invalid dateOfBirth');
+    }
 
-      //  normal fields
-      ...studentFields,
+    const userUpdate: { name?: string; email?: string } = {};
+    if (name) userUpdate.name = name;
+    if (email) userUpdate.email = email;
 
-      //  FIXED relation update
-      ...(classId && {
-        class: {
-          connect: { id: classId }
+    if (email) {
+        const existingUser = await prisma.user.findUnique({
+            where: { email }
+        });
+        if (existingUser && existingUser.id !== student.userId) {
+            throw new Error("Email already in use");
         }
-      }),
+    }
 
-      // enum / custom field
-      ...(bloodGroup !== undefined && {
-        bloodGroup: bloodGroup as any
-      }),
-
-      //  nested update (user)
-      ...(name && {
-        user: {
-          update: {
-            name
-          }
-        }
-      }),
-    },
+    const updatedStudent = await prisma.student.update({
+        where: { id },
+        data: {
+            ...(address !== undefined && { address }),
+            ...(avatarUrl !== undefined && { photo: avatarUrl }),
+            ...(bloodGroup !== undefined && { bloodGroup: bloodGroup as any }),
+            ...(dob && { dob }),
+            ...(classId && { class: { connect: { id: classId } } }),
+            ...(name && { name }),
+            ...(Object.keys(userUpdate).length > 0 && { user: { update: userUpdate } }),
+        },
 
     include: {
       user: {

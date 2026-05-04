@@ -8,6 +8,8 @@ import attendanceRoutes from '../modules/attendance/attendacne.router';
 import teacherRoutes from '../modules/teachers/teacher.routes';
 import resultRoutes from '../modules/result/result.router';
 import admissionRoutes from '../modules/admission/admission.routes';
+import feeRoutes from '../modules/fee/router';
+import teachingApplicationRoutes from '../modules/teachingApplication/teachingApplication.routes';
 
 const router = express.Router();
 
@@ -25,5 +27,7 @@ router.use('/attendance', attendanceRoutes);
 router.use('/teachers', teacherRoutes);
 router.use('/results', resultRoutes);
 router.use('/admission', admissionRoutes);
+router.use('/fees', feeRoutes);
+router.use('/teaching', teachingApplicationRoutes);
 
 export default router;

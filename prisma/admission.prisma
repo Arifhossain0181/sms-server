@@ -18,6 +18,11 @@ model AdmissionApplication {
   status          AdmissionStatus @default(PENDING)
   rejectionReason String?
   reviewedAt      DateTime?
+  paymentStatus   PaymentStatus   @default(PENDING)
+  paymentMethod   PaymentMethod?
+  paymentAmount   Float?
+  transactionId   String?
+  paymentDate     DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 

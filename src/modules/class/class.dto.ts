@@ -12,10 +12,11 @@ export interface CreateSectionDto {
   name: string;        // "A", "B", "C"
   classId: string;
   classTeacherId?: string;
+  maxCapacity?: number;
 }
 
 export interface UpdateSectionDto {
   name?: string;
   classTeacherId?: string;
-  capacity?: number;
+  maxCapacity?: number;
 }

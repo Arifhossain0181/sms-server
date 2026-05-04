@@ -24,15 +24,10 @@ export const getAllClasses = async () =>{
             sections:{
                 include:{
                     classTeacher: true
-                },
-                _count:{
-                    select:{
-                        students: true
                     },
                     orderBy:{
                         name: 'asc'
                     }
-                }
             }
         }
     })
@@ -47,16 +42,10 @@ export const getClassById = async (id:string) =>{
             sections:{
                 include:{
                     classTeacher: true
-                },
-                _count:{
-                    select:{
-                        students: true
                     },
                     orderBy:{
                         name: 'asc'
                     }
-
-                }
             }
         }
     })
@@ -81,6 +70,7 @@ export const updateClass = async(id:string, dto:UpdateClassDto) =>{
 }
 export const deleteClass = async (id:string) =>{
     await getClassById(id);
+    await prisma.section.deleteMany({ where: { classId: id } });
     return await prisma.class.delete({
         where: {
             id
@@ -100,7 +90,12 @@ export const createSection = async (dto:CreateSectionDto) =>{
         throw new Error("Section with this name already exists in this class");
     }
     return await prisma.section.create({
-        data: dto,
+        data: {
+            name: dto.name,
+            classId: dto.classId,
+            classTeacherId: dto.classTeacherId,
+            maxCapacity: dto.maxCapacity,
+        },
         include:{
             class:true,
         }
@@ -112,15 +107,22 @@ export const  getSectionsByClass = async (classId: string) => {
     where: { classId },
     include: {
       classTeacher: true,
-      _count: { select: { students: true } },
-    },
-  });
+        },
+        orderBy: { name: 'asc' },
+    });
 };
 
 export const updateSection = async (id: string, dto: UpdateSectionDto) => {
   const section = await prisma.section.findUnique({ where: { id } });
   if (!section) throw { status: 404, message: 'Section not found' };
-  return await prisma.section.update({ where: { id }, data: dto });
+    return await prisma.section.update({
+        where: { id },
+        data: {
+            name: dto.name,
+            classTeacherId: dto.classTeacherId,
+            maxCapacity: dto.maxCapacity,
+        },
+    });
 };
 
 export const deleteSection = async (id: string) => {

@@ -8,6 +8,7 @@ export interface TakeAttendanceDto {
   sectionId: string;
   date: string;           // "2025-01-15"
   entries: AttendanceEntryDto[];
+  teacherId?: string;
 }
 
 export interface UpdateAttendanceDto {

@@ -13,6 +13,10 @@ router.post('/apply', c.apply.bind(c));
 // ── Public: class list for admission form ──────────────────────────
 router.get('/classes', c.getPublicClasses.bind(c));
 
+// ── Public: Stripe checkout (Pay Now) ─────────────────────────────
+router.post('/stripe/checkout', c.createStripeCheckout.bind(c));
+router.get('/stripe/verify', c.verifyStripeSession.bind(c));
+
 // ── Document upload (public, pre-auth form) ────────────────────────
 router.post(
   '/upload-document',

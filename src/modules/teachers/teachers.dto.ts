@@ -2,7 +2,7 @@ export interface CreateTeacherDto {
   // User info
   name: string;
   email: string;
-  password: string;
+  password?: string;
  
   // Teacher profile
   TeachersId: string;

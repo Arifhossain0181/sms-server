@@ -51,3 +51,4 @@ export interface FeeQueryDto {
   status?: FeeStatus;
   month?: string; // e.g. "2024-09"
 }
+

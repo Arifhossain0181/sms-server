@@ -2,7 +2,11 @@ import { TakeAttendanceDto, UpdateAttendanceDto } from "./attendance.dto";
 import prisma from "../../config/db";
 import { getIO } from "../../config/socket";
 
-export const takeAttendance = async (dto: TakeAttendanceDto, teacherId: string) => {
+export const takeAttendance = async (
+    dto: TakeAttendanceDto,
+    requesterId: string,
+    requesterRole: string
+) => {
     const attendanceDate = new Date(dto.date);
     attendanceDate.setHours(0, 0, 0, 0);
 
@@ -20,13 +24,28 @@ export const takeAttendance = async (dto: TakeAttendanceDto, teacherId: string) 
         throw new Error("Attendance for this class, section and date already exists");
     }
 
+    let resolvedTeacherId = dto.teacherId;
+
+    if (!resolvedTeacherId) {
+        if (requesterRole === "TEACHER") {
+            const teacher = await prisma.teacher.findFirst({
+                where: { userId: requesterId },
+                select: { id: true },
+            });
+            if (!teacher) throw new Error("Teacher profile not found");
+            resolvedTeacherId = teacher.id;
+        } else {
+            throw new Error("Teacher is required for attendance");
+        }
+    }
+
     const records = await prisma.$transaction(
         dto.entries.map((entry) => {
             return prisma.studentAttendance.create({
                 data: {
                     studentId: entry.studentId,
                     sectionId: dto.sectionId,
-                    teacherId,
+                    teacherId: resolvedTeacherId,
                     date: attendanceDate,
                     status: entry.status,
                 },

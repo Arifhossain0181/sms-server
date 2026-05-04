@@ -5,7 +5,7 @@ import { sendSuccess } from '../../utils/response.util';
 export const takeAttendance = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) throw { status: 401, message: 'Unauthorized' };
-    const data = await attendanceService.takeAttendance(req.body, req.user.id);
+    const data = await attendanceService.takeAttendance(req.body, req.user.id, req.user.role);
     sendSuccess(res, data, 'Attendance saved', 201);
   } catch (err) { next(err); }
 };

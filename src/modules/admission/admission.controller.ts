@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AdmissionService } from './admission.service';
 import { sendSuccess } from '../../utils/response.util';
 import { uploadToCloudinary } from '../../config/cloudinary';
+import stripe from '../../config/striPe';
 
 const admissionService = new AdmissionService();
 
@@ -78,6 +79,61 @@ export class AdmissionController {
     try {
       const classes = await admissionService.getPublicClasses();
       sendSuccess(res, classes, 'Classes fetched');
+    } catch (err) { next(err); }
+  }
+
+  async createStripeCheckout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const amount = Number(req.body?.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      const currency = (process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency,
+              unit_amount: Math.round(amount * 100),
+              product_data: {
+                name: 'Admission Fee',
+                description: req.body?.targetClassId ? `Class: ${req.body.targetClassId}` : undefined,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        success_url: `${frontendUrl}/apply-for-admission?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/apply-for-admission?payment=cancel`,
+        metadata: {
+          applicantName: req.body?.applicantName ?? '',
+          targetClassId: req.body?.targetClassId ?? '',
+        },
+      });
+
+      sendSuccess(res, { url: session.url, sessionId: session.id }, 'Stripe session created');
+    } catch (err) { next(err); }
+  }
+
+  async verifyStripeSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessionId = String(req.query.session_id || '');
+      if (!sessionId) throw new Error('Missing session_id');
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const paid = session.payment_status === 'paid';
+
+      sendSuccess(res, {
+        paid,
+        amountTotal: session.amount_total ? session.amount_total / 100 : null,
+        currency: session.currency,
+        sessionId: session.id,
+      }, 'Stripe session verified');
     } catch (err) { next(err); }
   }
 }

@@ -23,8 +23,10 @@ export interface CreateStudentDto {
 }
 export interface UpdateStudentDto {
   name?: string;
+  email?: string;
   phone?: string;
   address?: string;
+  dateOfBirth?: string;
   bloodGroup?: string;
   avatarUrl?: string;
   classId?: string;

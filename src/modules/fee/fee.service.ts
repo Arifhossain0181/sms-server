@@ -319,7 +319,7 @@ export const getFeeSummary = async (month?: string) => {
     (f) => f.status === "PENDING" && new Date(f.dueDate) < new Date()
   ).length;
 
-  return { totalAmount, totalPaid, outstanding, pendingCount, overdueCount };
+  return { totalAmount, totalPaid, outstanding, pendingCount, overdueCount, overDue: overdueCount };
 };
 
 // ─── PRIVATE

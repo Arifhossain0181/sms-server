@@ -16,6 +16,9 @@ export interface CreateAdmissionDto {
   targetClassId: string;
   photoUrl?: string;
   birthCertUrl?: string;
+  paymentMethod?: 'CASH' | 'STRIPE';
+  paymentAmount?: number;
+  transactionId?: string;
 }
 
 // ─── Admin: review & update status ──────────────────────────────────
