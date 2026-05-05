@@ -1,9 +1,18 @@
 import { CreateNoticeDto, NoticeAudience, NoticeQueryDto, UpdateNoticeDto } from './notice.dto';
 import prisma from '../../config/db';
 import { paginate } from '../../utils/pagination.util';
+import { emitToRole } from '../../config/socket';
+
+const audienceToRoles: Record<NoticeAudience, string[]> = {
+    ALL: ['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'],
+    TEACHERS: ['TEACHER'],
+    STUDENTS: ['STUDENT'],
+    PARENTS: ['PARENT'],
+    STAFF: ['ADMIN'],
+};
 
 export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
-    return prisma.notice.create({
+    const notice = await prisma.notice.create({
         data: {
             title: dto.title,
             content: dto.content,
@@ -26,6 +35,23 @@ export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
             },
         },
     });
+
+    try {
+        const roles = audienceToRoles[dto.audience] ?? ['ADMIN'];
+        roles.forEach((role) => {
+            emitToRole(role, 'notification:new', {
+                title: notice.title,
+                body: notice.content,
+                type: 'NOTICE',
+                referenceId: notice.id,
+                createdAt: notice.createdAt,
+            });
+        });
+    } catch (err) {
+        console.error('Failed to emit notice notification:', err);
+    }
+
+    return notice;
 };
 
 export const findAll = async (query: NoticeQueryDto) => {

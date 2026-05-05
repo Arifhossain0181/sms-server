@@ -41,6 +41,15 @@ export interface RecordPaymentDto {
   note?: string;
 }
 
+export interface RecordCashPaymentDto {
+  studentId: string;
+  type: FeeType;
+  amountPaid: number;
+  dueDate?: string;
+  transactionId?: string;
+  note?: string;
+}
+
 // ─── Query / filter ─────────────────────────────────────────────────
 export interface FeeQueryDto {
   page?: string;

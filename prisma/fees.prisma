@@ -16,5 +16,5 @@ model FeeStructure {
   invoices Invoice[]
   payments Payment[]
 
-  @@unique([classId, feeType])
+  @@unique([classId, feeType, studentId])
 }

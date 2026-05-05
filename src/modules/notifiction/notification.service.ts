@@ -1,8 +1,7 @@
-import { read } from "node:fs"
 import prisma from "../../config/db"
 import { paginate } from "../../utils/pagination.util"
 import { BroadcastNotificationDto, NotificationQueryDto, SendNotificationDto } from "./notification.dto"
-import { emit } from "node:cluster"
+import { emitToRole, emitToUser } from "../../config/socket"
 
 
 export const send =async(dto:SendNotificationDto)=>{
@@ -17,7 +16,7 @@ export const send =async(dto:SendNotificationDto)=>{
         }
     })
     // real time Push to the users Personal room 
-    emitToUser(dto.userId,"notification :new " ,{
+    emitToUser(dto.userId,"notification:new" ,{
         id: notification.id,
         title: notification.title,
         body: notification.body,

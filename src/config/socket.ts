@@ -16,8 +16,13 @@ export const initSocket = (server: http.Server) => {
     console.log('Client connected:', socket.id);
 
     // User using own  room  join  (userId)
-    socket.on('join', (userId: string) => {
-      socket.join(userId);
+    socket.on('join', (payload: string | { userId?: string; role?: string }) => {
+      if (typeof payload === 'string') {
+        socket.join(payload);
+        return;
+      }
+      if (payload?.userId) socket.join(payload.userId);
+      if (payload?.role) socket.join(payload.role);
     });
 
     socket.on('disconnect', () => {
@@ -30,4 +35,12 @@ export const initSocket = (server: http.Server) => {
 export const getIO = () => {
   if (!io) throw new Error('Socket not initialized');
   return io;
+};
+
+export const emitToUser = (userId: string, event: string, payload: unknown) => {
+  getIO().to(userId).emit(event, payload);
+};
+
+export const emitToRole = (role: string, event: string, payload: unknown) => {
+  getIO().to(role).emit(event, payload);
 };

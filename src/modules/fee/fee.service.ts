@@ -1,5 +1,5 @@
 import prisma from "../../config/db";
-import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, RecordPaymentDto, UpdateFeeDto, } from "./fee.dto";
+import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, RecordCashPaymentDto, RecordPaymentDto, UpdateFeeDto, } from "./fee.dto";
 import { paginate } from "../../utils/pagination.util";
 
 export  const createfee = async (dto: CreateFeeDto) => {
@@ -9,15 +9,16 @@ export  const createfee = async (dto: CreateFeeDto) => {
     if (!student) {
         throw new Error('Student not found');
     }
-        return await prisma.feeStructure.create({
+    const { title, type, ...rest } = dto;
+    return await prisma.feeStructure.create({
             data: {
-                ...dto,
+        ...rest,
                 dueDate: new Date(dto.dueDate),
                 status: 'PENDING',
                 Paidamount: 0,
-                classId: dto.classId, // Ensure `classId` is provided in `dto`
-                feeType: dto.type, // Corrected to use `type` from `CreateFeeDto`
-                dueDay: dto.dueDay,   // Ensure `dueDay` is provided in `dto`
+        classId: dto.classId,
+        feeType: type,
+        dueDay: dto.dueDay,
             },
             include: {
                 student: {
@@ -247,6 +248,69 @@ export const updateFee = async (id: string, dto: UpdateFeeDto) => {
   ]);
 
   return payment;
+};
+
+export const recordCashPayment = async (dto: RecordCashPaymentDto) => {
+  const student = await prisma.student.findUnique({
+    where: { id: dto.studentId },
+    select: { id: true, classId: true },
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  const now = new Date();
+  const dueDate = dto.dueDate ? new Date(dto.dueDate) : now;
+  if (Number.isNaN(dueDate.getTime())) {
+    throw new Error("Invalid dueDate");
+  }
+
+  const dueDay = dueDate.getDate();
+  const year = dueDate.getFullYear();
+  const month = dueDate.getMonth() + 1;
+
+  return prisma.$transaction(async (tx) => {
+    const fee = await tx.feeStructure.create({
+      data: {
+        studentId: student.id,
+        classId: student.classId,
+        feeType: dto.type,
+        amount: dto.amountPaid,
+        dueDate,
+        dueDay,
+        status: "PAID",
+        Paidamount: dto.amountPaid,
+      },
+    });
+
+    const invoice = await tx.invoice.create({
+      data: {
+        studentId: student.id,
+        feeStructureId: fee.id,
+        amount: dto.amountPaid,
+        dueDate,
+        year,
+        month,
+        status: "PAID",
+      },
+    });
+
+    const payment = await tx.payment.create({
+      data: {
+        feeStructureId: fee.id,
+        invoiceId: invoice.id,
+        studentId: student.id,
+        amount: dto.amountPaid,
+        method: "CASH",
+        status: "PAID",
+        paidAt: now,
+        transactionId: dto.transactionId ?? undefined,
+        note: dto.note ?? undefined,
+      },
+    });
+
+    return { fee, invoice, payment };
+  });
 };
 // rePorts 
 

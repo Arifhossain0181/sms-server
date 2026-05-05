@@ -7,6 +7,7 @@ import {
   updateFee,
   deleteFee,
   recordPayment,
+  recordCashPayment,
   getstudentFeeSummary,
   getCollectionReport,
   getFeeSummary
@@ -72,6 +73,13 @@ export class FeesController {
     try {
       const payment = await recordPayment(req.body);
       sendSuccess(res, payment, 'Payment recorded', 201);
+    } catch (err) { next(err); }
+  }
+
+  async recordCashPayment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const payment = await recordCashPayment(req.body);
+      sendSuccess(res, payment, 'Cash payment recorded', 201);
     } catch (err) { next(err); }
   }
 

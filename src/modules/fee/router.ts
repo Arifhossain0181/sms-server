@@ -23,5 +23,6 @@ router.delete('/:id',  authorizeRoles('ADMIN'), c.delete.bind(c));
 
 // ── Payments ───────────────────────────────────────────────────────
 router.post('/pay', authorizeRoles('ADMIN'), c.recordPayment.bind(c));
+router.post('/cash', authorizeRoles('ADMIN'), c.recordCashPayment.bind(c));
 
 export default router;

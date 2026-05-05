@@ -10,6 +10,7 @@ import resultRoutes from '../modules/result/result.router';
 import admissionRoutes from '../modules/admission/admission.routes';
 import feeRoutes from '../modules/fee/router';
 import teachingApplicationRoutes from '../modules/teachingApplication/teachingApplication.routes';
+import noticeRoutes from '../modules/notice/notice.route';
 
 const router = express.Router();
 
@@ -29,5 +30,6 @@ router.use('/results', resultRoutes);
 router.use('/admission', admissionRoutes);
 router.use('/fees', feeRoutes);
 router.use('/teaching', teachingApplicationRoutes);
+router.use('/notices', noticeRoutes);
 
 export default router;

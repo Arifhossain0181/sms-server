@@ -1,5 +1,7 @@
 import prisma from "../../config/db";
 import { CreateTeachingApplicationDto, UpdateTeachingApplicationStatusDto } from "./teachingApplication.dto";
+import { TeachersService } from "../teachers/teachers.service";
+import { randomBytes } from "node:crypto";
 
 export const applyForTeaching = async (dto: CreateTeachingApplicationDto) => {
   const existing = await prisma.teachingApplication.findFirst({
@@ -51,7 +53,34 @@ export const updateTeachingApplicationStatus = async (
   id: string,
   dto: UpdateTeachingApplicationStatusDto
 ) => {
-  await getTeachingApplicationById(id);
+  const application = await getTeachingApplicationById(id);
+
+  if (dto.status === "APPROVED" && application.status !== "APPROVED") {
+    const existingTeacher = await prisma.teacher.findFirst({
+      where: { email: application.email },
+      select: { id: true },
+    });
+
+    if (!existingTeacher) {
+      const generatedId = `TCH-${randomBytes(3).toString("hex")}`.toUpperCase();
+      await TeachersService.create({
+        name: application.name,
+        email: application.email,
+        TeachersId: generatedId,
+        designation: application.designation,
+        department: application.department ?? undefined,
+        qualification: application.qualification,
+        experience: application.experience,
+        phone: application.phone,
+        address: application.address,
+        gender: application.gender,
+        dateOfBirth: application.dob.toISOString().split("T")[0],
+        dateOfJoining: new Date().toISOString().split("T")[0],
+        salary: application.expectedSalary ?? undefined,
+      });
+    }
+  }
+
   return prisma.teachingApplication.update({
     where: { id },
     data: {
