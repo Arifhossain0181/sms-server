@@ -39,6 +39,16 @@ async   login(req:Request,res:Response ,next:NextFunction) {
 async  refreshToken(req:Request,res:Response ,next:NextFunction) {
     try{
         const data = await authService.refreshToken(req.body);
+    res.cookie("accessToken", data.accessToken, {
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+    res.cookie("refreshToken", data.refreshToken, {
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
         res.status(200).json({
             success:true,
             data,
@@ -46,8 +56,11 @@ async  refreshToken(req:Request,res:Response ,next:NextFunction) {
         });
     }
     catch (error) {
+      const status = typeof error === "object" && error && "status" in error
+        ? (error as any).status
+        : 400;
         next({
-            status:400,
+        status,
             message:error instanceof Error ? error.message : "Token Refresh Failed"
         });
 }

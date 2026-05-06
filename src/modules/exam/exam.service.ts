@@ -11,7 +11,13 @@ import {
 
 
 export const createExam = async(dto:CreateExamDto) =>{
-    const examType: ExamType = dto.type === 'FINAL' ? 'FINAL_EXAM' : dto.type;
+    const examType: ExamType = dto.type
+        ? (dto.type === 'FINAL' ? 'FINAL_EXAM' : dto.type)
+        : 'CLASS_TEST';
+
+    const rawDate = dto.startDate ?? (dto as unknown as { date?: string }).date;
+    const parsedDate = rawDate ? new Date(rawDate) : new Date();
+    const createdAt = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
 
     const existing = await prisma.exam.findFirst({
         where:{
@@ -26,14 +32,14 @@ export const createExam = async(dto:CreateExamDto) =>{
         data:{
             name: dto.name,
             type: examType,
-            createdAt: new Date(dto.startDate),
+            createdAt,
         }
     })
 }
 
 
 export const getAllExams = async(classId?:string) =>{
-    return await prisma.exam.findMany({
+    const exams = await prisma.exam.findMany({
         where: classId ? { schedules: { some: { classId } } } : undefined,
          include:{
             schedules:{
@@ -46,6 +52,19 @@ export const getAllExams = async(classId?:string) =>{
             createdAt: 'desc'
          }
     })
+
+    return exams.map((exam) => {
+        const schedule = exam.schedules?.[0];
+        return {
+            ...exam,
+            subject: schedule?.subject,
+            subjectId: schedule?.subjectId,
+            class: schedule?.class,
+            classId: schedule?.classId,
+            date: schedule?.examDate,
+            totalMarks: schedule?.subject?.fullMarks,
+        };
+    });
 }
 export const getExamById = async(id:string) =>{
     const exam = await prisma.exam.findUnique({

@@ -113,8 +113,12 @@ export class AuthService {
         }
     }
     async refreshToken(dto:RefreshTokenDto){
-
         const payload = verifyRefreshToken(dto.refreshToken)
+        if (!payload) {
+            const err = new Error("Invalid refresh token");
+            (err as any).status = 401;
+            throw err;
+        }
         const user = await prisma.user.findUnique({
             where: {
                 id: payload.id
@@ -131,7 +135,9 @@ export class AuthService {
         });
 
         if(!user || !storedToken){
-            throw new Error("Invalid refresh token");
+            const err = new Error("Invalid refresh token");
+            (err as any).status = 401;
+            throw err;
         }
         const accessToken = generateAccessToken({
             id: user.id,

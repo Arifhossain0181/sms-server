@@ -19,7 +19,7 @@ export const createClass = async (dto:CreateClassDto) =>{
     })
 }
 export const getAllClasses = async () =>{
-    return await prisma.class.findMany({
+    const classes = await prisma.class.findMany({
         include:{
             sections:{
                 include:{
@@ -28,9 +28,25 @@ export const getAllClasses = async () =>{
                     orderBy:{
                         name: 'asc'
                     }
+            },
+            students: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            _count: {
+                select: {
+                    students: true
+                }
             }
         }
     })
+
+    return classes.map((cls) => ({
+        ...cls,
+        studentCount: cls._count?.students ?? 0
+    }))
 }
 
 export const getClassById = async (id:string) =>{
@@ -46,13 +62,27 @@ export const getClassById = async (id:string) =>{
                     orderBy:{
                         name: 'asc'
                     }
+            },
+            students: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            _count: {
+                select: {
+                    students: true
+                }
             }
         }
     })
     if(!cls){
         throw new Error("Class not found");
     }
-    return cls;
+    return {
+        ...cls,
+        studentCount: cls._count?.students ?? 0
+    };
 
 }
 

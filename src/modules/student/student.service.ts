@@ -136,6 +136,11 @@ export class StudentService {
                         createdAt:true
                     }
                 },
+                parent: {
+                    select: {
+                        phone: true
+                    }
+                },
                 class:{
                     select:{
                         id:true,
@@ -148,9 +153,14 @@ export class StudentService {
                 createdAt:'desc'
             }
         })
-        
+        const flattened = students.map((student) => ({
+            ...student,
+            email: student.user?.email,
+            phone: student.parent?.phone ?? null
+        }));
+
         return {
-            data:students,
+            data: flattened,
             meta
         };
     }
