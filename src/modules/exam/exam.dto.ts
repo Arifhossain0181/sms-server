@@ -2,8 +2,15 @@ export interface CreateExamDto {
   name: string;           // "Mid Term 2025", "Final Exam 2025"
   type: 'CLASS_TEST' | 'MID_TERM' | 'FINAL';
   classId: string;
-  startDate: string;
+ 
+    startDate: string;
   endDate: string;
+
+  subjectId: string;
+  totalMarks: number;
+
+  startTime: string;
+  endTime: string;
 }
 
 export interface UpdateExamDto {
@@ -22,6 +29,7 @@ export interface CreateExamScheduleDto {
   startTime: string;     // "09:00"
   endTime: string;       // "12:00"
   room?: string;
+  totalMarks?: number;
 }
 
 export interface SubmitMarkEntryDto {

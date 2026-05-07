@@ -8,6 +8,7 @@ model Exam {
   schedules   ExamSchedule[]
   admitCards  AdmitCard[]
   reportCards ReportCard[]
+  totalMarks   Int?
 }
 
 model ExamSchedule {

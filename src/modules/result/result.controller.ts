@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as resultService from './result.service.js';
 import { sendSuccess } from '../../utils/response.util';
+import { SubmitResultDto } from './result.dto.js';
 
 const toSingleString = (value: unknown): string | undefined => {
   if (Array.isArray(value)) return value[0] ? String(value[0]) : undefined;
@@ -10,8 +11,24 @@ const toSingleString = (value: unknown): string | undefined => {
 
 export const submitResult = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await resultService.submitResult(req.body);
+    const authUser = (req as any).user as { id: string; role: string } | undefined;
+    if (!authUser) throw { status: 401, message: 'Unauthorized' };
+    // examId can come from body or query params
+    const examId = req.body.examId || toSingleString(req.query.examId);
+    const { studentId, marks } = req.body;
+    const data = await resultService.submitResult({ examId, studentId, marks }, authUser);
     sendSuccess(res, data, 'Result submitted', 201);
+  } catch (err) { next(err); }
+};
+
+export const submitBulkResult = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authUser = (req as any).user as { id: string; role: string } | undefined;
+    if (!authUser) throw { status: 401, message: 'Unauthorized' };
+    const examId = req.body.examId || toSingleString(req.query.examId);
+    const { studentId, marks } = req.body;
+    const data = await resultService.submitResult({ examId, studentId, marks }, authUser);
+    sendSuccess(res, data, 'Results submitted', 201);
   } catch (err) { next(err); }
 };
 

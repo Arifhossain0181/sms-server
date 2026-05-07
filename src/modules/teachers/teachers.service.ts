@@ -6,44 +6,79 @@ import { paginate } from "../../utils/pagination.util";
 
 export const TeachersService = {
   async create(dto: CreateTeacherDto) {
-    const emailExists = await prisma.user.findUnique({ where: { email: dto.email } });
-    if (emailExists) throw new Error('Email already exists');
+     // 1. Email check
+  const emailExists = await prisma.user.findUnique({
+    where: { email: dto.email },
+  });
 
-    const employeeExists = await prisma.teacher.findUnique({ where: { employeeId: dto.TeachersId } });
-    if (employeeExists) throw new Error('Teacher ID already exists');
+  if (emailExists) {
+    throw { status: 409, message: "Email already exists" };
+  }
 
-    const rawPassword = dto.password ?? randomBytes(4).toString('hex');
-    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+  // 2. Decide teacher ID (manual OR auto)
+  let employeeId: string;
 
-    const teacherUser = await prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        passwordHash: hashedPassword,
-        role: 'TEACHER',
-        teacherProfile: {
-          create: {
-            employeeId: dto.TeachersId,
-            name: dto.name,
-            email: dto.email,
-            phone: dto.phone,
-            subjectSpecialization: dto.department ?? dto.designation,
-            joiningDate: new Date(dto.dateOfJoining),
-            photo: dto.avatarUrl,
-          },
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        teacherProfile: true,
-      },
+  if (dto.TeachersId) {
+    // manual input
+    employeeId = dto.TeachersId;
+
+    // duplicate check
+    const exists = await prisma.teacher.findUnique({
+      where: { employeeId },
     });
 
-    return teacherUser;
+    if (exists) {
+      throw { status: 409, message: "Teacher ID already exists" };
+    }
+  } else {
+    // auto generate
+    const lastTeacher = await prisma.teacher.findFirst({
+      orderBy: { createdAt: "desc" },
+    });
+
+    let next = 1;
+
+    if (lastTeacher?.employeeId) {
+      next = Number(lastTeacher.employeeId) + 1;
+    }
+
+    employeeId = String(next).padStart(2, "0");
+  }
+
+  // 3. Password
+  const rawPassword =
+    dto.password ?? randomBytes(4).toString("hex");
+
+  const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+  // 4. Create
+  return await prisma.user.create({
+    data: {
+      name: dto.name,
+      email: dto.email,
+      passwordHash: hashedPassword,
+      role: "TEACHER",
+
+      teacherProfile: {
+        create: {
+          employeeId, // FINAL VALUE (manual or auto)
+          name: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          subjectSpecialization: dto.department,
+          joiningDate: new Date(dto.dateOfJoining),
+          photo: dto.avatarUrl,
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      teacherProfile: true,
+    },
+  });
   },
 
   async findAll(query: TeacherQueryDto) {
@@ -72,30 +107,55 @@ export const TeachersService = {
       },
       orderBy: { createdAt: 'desc' },
     });
+    
 
     return { teachers, meta };
   },
 
-  async findById(id: string) {
-    const teacher = await prisma.teacher.findUnique({
-      where: { id },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
-        timetableSlots: {
-          include: {
-            subject: { select: { id: true, name: true } },
-            section: { select: { id: true, name: true } },
-          },
-          take: 20,
-        },
+ async findById(id: string) {
+  const teacher = await prisma.teacher.findUnique({
+    where: { id },
+    include: {
+      user: true,
+      subjectAssignments: {
+        include: { subject: true },
       },
-    });
+      sectionTeacher: {
+        include: { class: true },
+      },
+      timetableSlots: {
+        include: {
+          subject: true,
+          section: true,
+        },
+        take: 20,
+      },
+    },
+  });
 
-    if (!teacher) throw new Error('Teacher not found');
-    return teacher;
-  },
+  if (!teacher) throw new Error("Teacher not found");
+
+  return {
+    id: teacher.id,
+    name: teacher.name,
+    email: teacher.email,
+    phone: teacher.phone ?? "—",
+
+    // SUBJECT FIX
+    subject:
+      teacher.subjectAssignments?.[0]?.subject?.name ||
+      teacher.subjectSpecialization ||
+      "—",
+
+    //  GENDER FIX
+    gender: teacher.gender ?? "—",
+
+    dateOfJoining: teacher.joiningDate,
+    employeeId: teacher.employeeId,
+
+    classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? [],
+  };
+},
 
   async findByUserId(userId: string) {
     const teacher = await prisma.teacher.findUnique({

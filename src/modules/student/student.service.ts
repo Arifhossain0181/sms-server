@@ -147,6 +147,11 @@ export class StudentService {
                         name:true,
                         sections:true
                     }
+                },
+                admissionRecord: {
+                    select: {
+                        guardianPhone: true
+                    }
                 }
             },
             orderBy:{
@@ -156,7 +161,7 @@ export class StudentService {
         const flattened = students.map((student) => ({
             ...student,
             email: student.user?.email,
-            phone: student.parent?.phone ?? null
+            phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
         }));
 
         return {

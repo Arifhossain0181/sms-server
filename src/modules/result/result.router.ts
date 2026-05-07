@@ -6,6 +6,7 @@ import { authorizeRoles } from '../../middleware/role.middleware';
 const router = Router();
 
 router.post('/',                            authenticate, authorizeRoles('ADMIN', 'TEACHER'), resultController.submitResult);
+router.post('/bulk',                         authenticate, authorizeRoles('ADMIN', 'TEACHER'), resultController.submitBulkResult);
 router.get('/student/:studentId',           authenticate, resultController.getResultByStudent);
 router.get('/exam/:examId',                 authenticate, resultController.getResultByExam);
 router.get('/exam/:examId/failed',          authenticate, authorizeRoles('ADMIN', 'TEACHER'), resultController.getFailedStudents);

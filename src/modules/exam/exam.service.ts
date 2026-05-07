@@ -33,7 +33,28 @@ export const createExam = async(dto:CreateExamDto) =>{
             name: dto.name,
             type: examType,
             createdAt,
-        }
+            
+            schedules:{
+                create:[{
+                    classId: dto.classId,
+                    subjectId: dto.subjectId,
+                    examDate: createdAt,
+                    startTime: dto.startTime,
+                    endTime: dto.endTime,
+                }
+                   
+                ]
+            },
+            totalMarks: dto.totalMarks,
+        },
+        include:{
+            schedules:{
+                include:{
+                    subject:true,
+                    class:true,
+                },
+            },
+        },
     })
 }
 
@@ -62,7 +83,9 @@ export const getAllExams = async(classId?:string) =>{
             class: schedule?.class,
             classId: schedule?.classId,
             date: schedule?.examDate,
-            totalMarks: schedule?.subject?.fullMarks,
+            startTime: schedule?.startTime,
+            endTime: schedule?.endTime,
+            
         };
     });
 }

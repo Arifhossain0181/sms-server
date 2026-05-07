@@ -13350,7 +13350,7 @@ var require_buffer_list = __commonJS({
         key: "_getString",
         value: function _getString(n) {
           var p = this.head;
-          var c = 1;
+          var c4 = 1;
           var ret = p.data;
           n -= ret.length;
           while (p = p.next) {
@@ -13361,7 +13361,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === str.length) {
-                ++c;
+                ++c4;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13370,9 +13370,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c;
+            ++c4;
           }
-          this.length -= c;
+          this.length -= c4;
           return ret;
         }
         // Consumes a specified amount of bytes from the buffered data.
@@ -13381,7 +13381,7 @@ var require_buffer_list = __commonJS({
         value: function _getBuffer(n) {
           var ret = Buffer2.allocUnsafe(n);
           var p = this.head;
-          var c = 1;
+          var c4 = 1;
           p.data.copy(ret);
           n -= p.data.length;
           while (p = p.next) {
@@ -13391,7 +13391,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === buf.length) {
-                ++c;
+                ++c4;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13400,9 +13400,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c;
+            ++c4;
           }
-          this.length -= c;
+          this.length -= c4;
           return ret;
         }
         // Make sure the linked list only shows the minimal necessary information.
@@ -14502,8 +14502,8 @@ var require_string_decoder = __commonJS({
       if ((buf.length - i) % 2 === 0) {
         var r = buf.toString("utf16le", i);
         if (r) {
-          var c = r.charCodeAt(r.length - 1);
-          if (c >= 55296 && c <= 56319) {
+          var c4 = r.charCodeAt(r.length - 1);
+          if (c4 >= 55296 && c4 <= 56319) {
             this.lastNeed = 2;
             this.lastTotal = 4;
             this.lastChar[0] = buf[buf.length - 2];
@@ -16739,7 +16739,7 @@ var require_multer = __commonJS({
 });
 
 // src/index.ts
-var import_express10 = __toESM(require("express"));
+var import_express14 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
@@ -16758,8 +16758,13 @@ var initSocket = (server2) => {
   });
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
-    socket.on("join", (userId) => {
-      socket.join(userId);
+    socket.on("join", (payload) => {
+      if (typeof payload === "string") {
+        socket.join(payload);
+        return;
+      }
+      if (payload?.userId) socket.join(payload.userId);
+      if (payload?.role) socket.join(payload.role);
     });
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
@@ -16770,6 +16775,9 @@ var getIO = () => {
   if (!io) throw new Error("Socket not initialized");
   return io;
 };
+var emitToRole = (role, event, payload) => {
+  getIO().to(role).emit(event, payload);
+};
 
 // src/middleware/error.middle.ts
 var errorMiddleware = (err, req, res, next) => {
@@ -16779,14 +16787,21 @@ var errorMiddleware = (err, req, res, next) => {
 };
 
 // src/routes/index.ts
-var import_express9 = __toESM(require("express"));
+var import_express13 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
 
 // src/config/db.ts
+var import_config = require("dotenv/config");
 var import_client = require("@prisma/client");
+var import_adapter_pg = require("@prisma/adapter-pg");
+var import_pg = require("pg");
+var pool = new import_pg.Pool({
+  connectionString: process.env.DATABASE_URL
+});
 var prisma = new import_client.PrismaClient({
+  adapter: new import_adapter_pg.PrismaPg(pool),
   log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"]
 });
 var db_default = prisma;
@@ -16928,6 +16943,11 @@ var AuthService = class {
   }
   async refreshToken(dto) {
     const payload = verifyRefreshToken(dto.refreshToken);
+    if (!payload) {
+      const err = new Error("Invalid refresh token");
+      err.status = 401;
+      throw err;
+    }
     const user = await db_default.user.findUnique({
       where: {
         id: payload.id
@@ -16943,7 +16963,9 @@ var AuthService = class {
       }
     });
     if (!user || !storedToken) {
-      throw new Error("Invalid refresh token");
+      const err = new Error("Invalid refresh token");
+      err.status = 401;
+      throw err;
     }
     const accessToken = generateAccessToken({
       id: user.id,
@@ -17125,21 +17147,32 @@ var AuthController = {
   async refreshToken(req, res, next) {
     try {
       const data = await authService.refreshToken(req.body);
+      res.cookie("accessToken", data.accessToken, {
+        httpOnly: false,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1e3
+      });
+      res.cookie("refreshToken", data.refreshToken, {
+        httpOnly: false,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1e3
+      });
       res.status(200).json({
         success: true,
         data,
         message: "Token Refreshed Successfully"
       });
     } catch (error) {
+      const status = typeof error === "object" && error && "status" in error ? error.status : 400;
       next({
-        status: 400,
+        status,
         message: error instanceof Error ? error.message : "Token Refresh Failed"
       });
     }
   },
   async logout(req, res, next) {
     try {
-      await authService.logout(req.body);
+      await authService.logout(req.user.id);
       res.status(200).json({
         success: true,
         message: "Logout Successful"
@@ -17188,10 +17221,16 @@ var AuthController = {
 // src/middleware/auth.middleware.ts
 var authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  let token;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|; )accessToken=([^;]+)/);
+    token = match?.[1];
+  }
+  if (!token) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
-  const token = authHeader.split(" ")[1];
   const decoded = verifyAccessToken(token);
   if (!decoded) {
     return res.status(401).json({ success: false, message: "Invalid token or expired token " });
@@ -17237,6 +17276,9 @@ var paginate = async (model, where, page, limit) => {
   };
 };
 var StudentService = class {
+  notFound(message) {
+    return Object.assign(new Error(message), { status: 404 });
+  }
   async createStudent(dto) {
     const rollNumber = Number(dto.rollNumber);
     if (!Number.isInteger(rollNumber)) {
@@ -17304,13 +17346,13 @@ var StudentService = class {
   async findAllStudents(query) {
     const { page = "1", limit = "10", search, classId, gender } = query;
     const where = {
-      ...classId && { student: { classId } },
-      ...gender && { student: { gender } },
+      ...classId && { classId },
+      ...gender && { gender },
       ...search && {
         OR: [
           { name: { contains: search, mode: "insensitive" } },
           { email: { contains: search, mode: "insensitive" } },
-          { student: { rollNumber: isNaN(Number(search)) ? void 0 : Number(search) } }
+          ...isNaN(Number(search)) ? [] : [{ rollNumber: Number(search) }]
         ]
       }
     };
@@ -17335,11 +17377,21 @@ var StudentService = class {
             createdAt: true
           }
         },
+        parent: {
+          select: {
+            phone: true
+          }
+        },
         class: {
           select: {
             id: true,
             name: true,
-            section: true
+            sections: true
+          }
+        },
+        admissionRecord: {
+          select: {
+            guardianPhone: true
           }
         }
       },
@@ -17347,8 +17399,13 @@ var StudentService = class {
         createdAt: "desc"
       }
     });
+    const flattened = students.map((student) => ({
+      ...student,
+      email: student.user?.email,
+      phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
+    }));
     return {
-      data: students,
+      data: flattened,
       meta
     };
   }
@@ -17408,7 +17465,7 @@ var StudentService = class {
       }
     });
     if (!student) {
-      throw new Error("Student not found");
+      throw this.notFound("Student not found");
     }
     return student;
   }
@@ -17438,7 +17495,7 @@ var StudentService = class {
       }
     });
     if (!student) {
-      throw new Error("Student not found");
+      throw this.notFound("Student not found");
     }
     return student;
   }
@@ -17457,30 +17514,40 @@ var StudentService = class {
         throw new Error("Class not found");
       }
     }
-    const { name, bloodGroup, classId, ...studentFields } = dto;
+    const {
+      name,
+      email,
+      dateOfBirth,
+      address,
+      bloodGroup,
+      avatarUrl,
+      classId
+    } = dto;
+    const dob = dateOfBirth ? new Date(dateOfBirth) : void 0;
+    if (dateOfBirth && Number.isNaN(dob?.getTime())) {
+      throw new Error("Invalid dateOfBirth");
+    }
+    const userUpdate = {};
+    if (name) userUpdate.name = name;
+    if (email) userUpdate.email = email;
+    if (email) {
+      const existingUser = await db_default.user.findUnique({
+        where: { email }
+      });
+      if (existingUser && existingUser.id !== student.userId) {
+        throw new Error("Email already in use");
+      }
+    }
     const updatedStudent = await db_default.student.update({
       where: { id },
       data: {
-        //  normal fields
-        ...studentFields,
-        //  FIXED relation update
-        ...classId && {
-          class: {
-            connect: { id: classId }
-          }
-        },
-        // enum / custom field
-        ...bloodGroup !== void 0 && {
-          bloodGroup
-        },
-        //  nested update (user)
-        ...name && {
-          user: {
-            update: {
-              name
-            }
-          }
-        }
+        ...address !== void 0 && { address },
+        ...avatarUrl !== void 0 && { photo: avatarUrl },
+        ...bloodGroup !== void 0 && { bloodGroup },
+        ...dob && { dob },
+        ...classId && { class: { connect: { id: classId } } },
+        ...name && { name },
+        ...Object.keys(userUpdate).length > 0 && { user: { update: userUpdate } }
       },
       include: {
         user: {
@@ -17602,6 +17669,13 @@ import_cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 var cloudinary_default = import_cloudinary.v2;
+var uploadToCloudinary = (fileBuffer, folder) => new Promise((resolve, reject) => {
+  const stream = import_cloudinary.v2.uploader.upload_stream({ folder }, (error, result) => {
+    if (error || !result) return reject(error || new Error("Upload failed"));
+    resolve({ secure_url: result.secure_url });
+  });
+  stream.end(fileBuffer);
+});
 
 // src/modules/student/student.controllet.ts
 var studentService = new StudentService();
@@ -17962,23 +18036,33 @@ var createClass = async (dto) => {
   });
 };
 var getAllClasses = async () => {
-  return await db_default.class.findMany({
+  const classes = await db_default.class.findMany({
     include: {
       sections: {
         include: {
           classTeacher: true
         },
-        _count: {
-          select: {
-            students: true
-          },
-          orderBy: {
-            name: "asc"
-          }
+        orderBy: {
+          name: "asc"
+        }
+      },
+      students: {
+        select: {
+          id: true,
+          name: true
+        }
+      },
+      _count: {
+        select: {
+          students: true
         }
       }
     }
   });
+  return classes.map((cls) => ({
+    ...cls,
+    studentCount: cls._count?.students ?? 0
+  }));
 };
 var getClassById = async (id) => {
   const cls = await db_default.class.findUnique({
@@ -17990,13 +18074,19 @@ var getClassById = async (id) => {
         include: {
           classTeacher: true
         },
-        _count: {
-          select: {
-            students: true
-          },
-          orderBy: {
-            name: "asc"
-          }
+        orderBy: {
+          name: "asc"
+        }
+      },
+      students: {
+        select: {
+          id: true,
+          name: true
+        }
+      },
+      _count: {
+        select: {
+          students: true
         }
       }
     }
@@ -18004,7 +18094,10 @@ var getClassById = async (id) => {
   if (!cls) {
     throw new Error("Class not found");
   }
-  return cls;
+  return {
+    ...cls,
+    studentCount: cls._count?.students ?? 0
+  };
 };
 var updateClass = async (id, dto) => {
   await getClassById(id);
@@ -18020,6 +18113,7 @@ var updateClass = async (id, dto) => {
 };
 var deleteClass = async (id) => {
   await getClassById(id);
+  await db_default.section.deleteMany({ where: { classId: id } });
   return await db_default.class.delete({
     where: {
       id
@@ -18037,7 +18131,12 @@ var createSection = async (dto) => {
     throw new Error("Section with this name already exists in this class");
   }
   return await db_default.section.create({
-    data: dto,
+    data: {
+      name: dto.name,
+      classId: dto.classId,
+      classTeacherId: dto.classTeacherId,
+      maxCapacity: dto.maxCapacity
+    },
     include: {
       class: true
     }
@@ -18047,15 +18146,22 @@ var getSectionsByClass = async (classId) => {
   return await db_default.section.findMany({
     where: { classId },
     include: {
-      classTeacher: true,
-      _count: { select: { students: true } }
-    }
+      classTeacher: true
+    },
+    orderBy: { name: "asc" }
   });
 };
 var updateSection = async (id, dto) => {
   const section = await db_default.section.findUnique({ where: { id } });
   if (!section) throw { status: 404, message: "Section not found" };
-  return await db_default.section.update({ where: { id }, data: dto });
+  return await db_default.section.update({
+    where: { id },
+    data: {
+      name: dto.name,
+      classTeacherId: dto.classTeacherId,
+      maxCapacity: dto.maxCapacity
+    }
+  });
 };
 var deleteSection = async (id) => {
   const section = await db_default.section.findUnique({ where: { id } });
@@ -18168,7 +18274,10 @@ var ResultStatus = {
 
 // src/modules/exam/exam.service.ts
 var createExam = async (dto) => {
-  const examType = dto.type === "FINAL" ? "FINAL_EXAM" : dto.type;
+  const examType = dto.type ? dto.type === "FINAL" ? "FINAL_EXAM" : dto.type : "CLASS_TEST";
+  const rawDate = dto.startDate ?? dto.date;
+  const parsedDate = rawDate ? new Date(rawDate) : /* @__PURE__ */ new Date();
+  const createdAt = Number.isNaN(parsedDate.getTime()) ? /* @__PURE__ */ new Date() : parsedDate;
   const existing = await db_default.exam.findFirst({
     where: {
       name: dto.name,
@@ -18182,12 +18291,12 @@ var createExam = async (dto) => {
     data: {
       name: dto.name,
       type: examType,
-      createdAt: new Date(dto.startDate)
+      createdAt
     }
   });
 };
 var getAllExams = async (classId) => {
-  return await db_default.exam.findMany({
+  const exams = await db_default.exam.findMany({
     where: classId ? { schedules: { some: { classId } } } : void 0,
     include: {
       schedules: {
@@ -18200,6 +18309,18 @@ var getAllExams = async (classId) => {
     orderBy: {
       createdAt: "desc"
     }
+  });
+  return exams.map((exam) => {
+    const schedule = exam.schedules?.[0];
+    return {
+      ...exam,
+      subject: schedule?.subject,
+      subjectId: schedule?.subjectId,
+      class: schedule?.class,
+      classId: schedule?.classId,
+      date: schedule?.examDate,
+      totalMarks: schedule?.subject?.fullMarks
+    };
   });
 };
 var getExamById = async (id) => {
@@ -18599,7 +18720,7 @@ var exam_route_default = router5;
 var import_express6 = require("express");
 
 // src/modules/attendance/attendance.service.ts
-var takeAttendance = async (dto, teacherId) => {
+var takeAttendance = async (dto, requesterId, requesterRole) => {
   const attendanceDate = new Date(dto.date);
   attendanceDate.setHours(0, 0, 0, 0);
   const existing = await db_default.studentAttendance.findFirst({
@@ -18614,13 +18735,26 @@ var takeAttendance = async (dto, teacherId) => {
   if (existing) {
     throw new Error("Attendance for this class, section and date already exists");
   }
+  let resolvedTeacherId = dto.teacherId;
+  if (!resolvedTeacherId) {
+    if (requesterRole === "TEACHER") {
+      const teacher = await db_default.teacher.findFirst({
+        where: { userId: requesterId },
+        select: { id: true }
+      });
+      if (!teacher) throw new Error("Teacher profile not found");
+      resolvedTeacherId = teacher.id;
+    } else {
+      throw new Error("Teacher is required for attendance");
+    }
+  }
   const records = await db_default.$transaction(
     dto.entries.map((entry) => {
       return db_default.studentAttendance.create({
         data: {
           studentId: entry.studentId,
           sectionId: dto.sectionId,
-          teacherId,
+          teacherId: resolvedTeacherId,
           date: attendanceDate,
           status: entry.status
         }
@@ -18642,10 +18776,19 @@ var takeAttendance = async (dto, teacherId) => {
   return records;
 };
 var getAttendanceByDate = async (classId, sectionId, date) => {
+  if (!sectionId) throw new Error("sectionId is required");
+  if (classId) {
+    const section = await db_default.section.findUnique({
+      where: { id: sectionId },
+      select: { classId: true }
+    });
+    if (section && section.classId !== classId) {
+      throw new Error("Section does not belong to the selected class");
+    }
+  }
   const d = new Date(date);
   return await db_default.studentAttendance.findMany({
     where: {
-      classId,
       sectionId,
       date: {
         gte: new Date(d.setHours(0, 0, 0, 0)),
@@ -18740,7 +18883,7 @@ var getMonthlyReport = async (classId, sectionId, month, year) => {
 var takeAttendance2 = async (req, res, next) => {
   try {
     if (!req.user) throw { status: 401, message: "Unauthorized" };
-    const data = await takeAttendance(req.body, req.user.id);
+    const data = await takeAttendance(req.body, req.user.id, req.user.role);
     sendSuccess(res, data, "Attendance saved", 201);
   } catch (err) {
     next(err);
@@ -18813,6 +18956,7 @@ var import_express7 = require("express");
 
 // src/modules/teachers/teachers.service.ts
 var import_bcryptjs3 = __toESM(require("bcryptjs"));
+var import_node_crypto2 = require("crypto");
 
 // src/utils/pagination.util.ts
 var paginate2 = async (model, where, page, limit) => {
@@ -18840,7 +18984,8 @@ var TeachersService = {
     if (emailExists) throw new Error("Email already exists");
     const employeeExists = await db_default.teacher.findUnique({ where: { employeeId: dto.TeachersId } });
     if (employeeExists) throw new Error("Teacher ID already exists");
-    const hashedPassword = await import_bcryptjs3.default.hash(dto.password, 10);
+    const rawPassword = dto.password ?? (0, import_node_crypto2.randomBytes)(4).toString("hex");
+    const hashedPassword = await import_bcryptjs3.default.hash(rawPassword, 10);
     const teacherUser = await db_default.user.create({
       data: {
         name: dto.name,
@@ -18923,7 +19068,9 @@ var TeachersService = {
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
       }
     });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) {
+      throw { status: 404, message: "Teacher profile not found" };
+    }
     return teacher;
   },
   async update(id, dto) {
@@ -19010,7 +19157,7 @@ var TeachersService = {
       where: { teacherId: id },
       include: {
         subject: { select: { id: true, name: true } },
-        section: { select: { id: true, name: true } }
+        section: { select: { id: true, name: true, classId: true, class: { select: { name: true } } } }
       },
       orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
     });
@@ -19546,29 +19693,1259 @@ router8.get("/exam/:examId/failed", authenticate, authorizeRoles("ADMIN", "TEACH
 router8.patch("/marks/:id", authenticate, authorizeRoles("ADMIN", "TEACHER"), updateMark2);
 var result_router_default = router8;
 
+// src/modules/admission/admission.routes.ts
+var import_express9 = require("express");
+
+// src/modules/admission/admission.service.ts
+var import_bcryptjs4 = __toESM(require("bcryptjs"));
+var import_node_crypto3 = require("crypto");
+var AdmissionService = class {
+  async create(dto) {
+    const classExists = await db_default.class.findUnique({
+      where: { id: dto.targetClassId }
+    });
+    if (!classExists) throw new Error("Class not found");
+    const existing = await db_default.admissionApplication.findFirst({
+      where: { guardianEmail: dto.guardianEmail }
+    });
+    if (existing) {
+      throw new Error("\u098F\u0987 \u0987\u09AE\u09C7\u0987\u09B2 \u09A6\u09BF\u09AF\u09BC\u09C7 \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 \u098F\u0995\u099F\u09BF admission \u0986\u099B\u09C7");
+    }
+    return db_default.admissionApplication.create({
+      data: {
+        applicantName: dto.applicantName,
+        dob: new Date(dto.dob),
+        gender: dto.gender,
+        religion: dto.religion,
+        bloodGroup: dto.bloodGroup,
+        address: dto.address,
+        guardianName: dto.guardianName,
+        guardianPhone: dto.guardianPhone,
+        guardianEmail: dto.guardianEmail,
+        targetClassId: dto.targetClassId,
+        photoUrl: dto.photoUrl,
+        birthCertUrl: dto.birthCertUrl,
+        status: "PENDING",
+        paymentMethod: dto.paymentMethod,
+        paymentAmount: dto.paymentAmount,
+        transactionId: dto.transactionId,
+        paymentStatus: dto.paymentAmount ? "PAID" : "PENDING",
+        paymentDate: dto.paymentAmount ? /* @__PURE__ */ new Date() : void 0
+      },
+      include: {
+        targetClass: { select: { name: true, numericLevel: true } }
+      }
+    });
+  }
+  async findAll(query) {
+    const page = Number(query.page || 1);
+    const limit = Number(query.limit || 10);
+    const skip = (page - 1) * limit;
+    const where = {
+      ...query.status && { status: query.status },
+      ...query.classId && { targetClassId: query.classId },
+      ...query.search && {
+        OR: [
+          { applicantName: { contains: query.search, mode: "insensitive" } },
+          { guardianName: { contains: query.search, mode: "insensitive" } },
+          { guardianPhone: { contains: query.search, mode: "insensitive" } },
+          { guardianEmail: { contains: query.search, mode: "insensitive" } }
+        ]
+      }
+    };
+    const [data, total] = await Promise.all([
+      db_default.admissionApplication.findMany({
+        where,
+        skip,
+        take: limit,
+        include: { targetClass: { select: { name: true, numericLevel: true } } },
+        orderBy: { createdAt: "desc" }
+      }),
+      db_default.admissionApplication.count({ where })
+    ]);
+    return { data, meta: { page, limit, total } };
+  }
+  async findById(id) {
+    const admission = await db_default.admissionApplication.findUnique({
+      where: { id },
+      include: { targetClass: true }
+    });
+    if (!admission) throw new Error("Admission not found");
+    return admission;
+  }
+  async update(id, dto) {
+    await this._exists(id);
+    return db_default.admissionApplication.update({
+      where: { id },
+      data: {
+        applicantName: dto.applicantName,
+        ...dto.dob && { dob: new Date(dto.dob) },
+        gender: dto.gender,
+        religion: dto.religion,
+        bloodGroup: dto.bloodGroup,
+        address: dto.address,
+        guardianName: dto.guardianName,
+        guardianPhone: dto.guardianPhone,
+        guardianEmail: dto.guardianEmail,
+        targetClassId: dto.targetClassId,
+        photoUrl: dto.photoUrl,
+        birthCertUrl: dto.birthCertUrl
+      }
+    });
+  }
+  async updateStatus(id, dto) {
+    await this._exists(id);
+    const admission = await db_default.admissionApplication.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        rejectionReason: dto.rejectionReason,
+        reviewedAt: /* @__PURE__ */ new Date()
+      }
+    });
+    if (dto.status === "APPROVED" && !admission.studentId) {
+      await this.createStudentFromAdmission(admission.id);
+    }
+    return admission;
+  }
+  async convertToStudent(_dto) {
+    throw new Error("Convert to student is not implemented yet");
+  }
+  async delete(id) {
+    await this._exists(id);
+    return db_default.admissionApplication.delete({ where: { id } });
+  }
+  async getStats() {
+    const [total, pending, approved, rejected] = await Promise.all([
+      db_default.admissionApplication.count(),
+      db_default.admissionApplication.count({ where: { status: "PENDING" } }),
+      db_default.admissionApplication.count({ where: { status: "APPROVED" } }),
+      db_default.admissionApplication.count({ where: { status: "REJECTED" } })
+    ]);
+    return { total, pending, approved, rejected };
+  }
+  async getPublicClasses() {
+    return db_default.class.findMany({
+      select: { id: true, name: true, numericLevel: true },
+      orderBy: { numericLevel: "asc" }
+    });
+  }
+  async _exists(id) {
+    const admission = await db_default.admissionApplication.findUnique({ where: { id } });
+    if (!admission) throw new Error("Admission record not found");
+    return admission;
+  }
+  async createStudentFromAdmission(admissionId) {
+    const admission = await db_default.admissionApplication.findUnique({
+      where: { id: admissionId }
+    });
+    if (!admission) throw new Error("Admission record not found");
+    if (admission.studentId) return admission;
+    const section = await db_default.section.findFirst({
+      where: { classId: admission.targetClassId },
+      orderBy: { name: "asc" }
+    });
+    if (!section) throw new Error("Section not found for class");
+    const rollAggregate = await db_default.student.aggregate({
+      where: { sectionId: section.id },
+      _max: { rollNumber: true }
+    });
+    const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
+    const tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex");
+    const passwordHash = await import_bcryptjs4.default.hash(tempPassword, 10);
+    const studentEmail = `${admission.applicantName.replace(/\s+/g, ".").toLowerCase()}-${admission.id.slice(0, 6)}@school.local`;
+    const studentId = `STD-${(0, import_node_crypto3.randomBytes)(4).toString("hex").toUpperCase()}`;
+    const user = await db_default.user.create({
+      data: {
+        name: admission.applicantName,
+        email: studentEmail,
+        passwordHash,
+        role: "STUDENT",
+        studentProfile: {
+          create: {
+            studentId,
+            name: admission.applicantName,
+            dob: admission.dob,
+            gender: admission.gender,
+            bloodGroup: admission.bloodGroup,
+            religion: admission.religion,
+            address: admission.address,
+            photo: admission.photoUrl,
+            rollNumber: nextRoll,
+            classId: admission.targetClassId,
+            sectionId: section.id
+          }
+        }
+      },
+      select: { id: true, studentProfile: { select: { id: true } } }
+    });
+    if (user.studentProfile?.id) {
+      await db_default.admissionApplication.update({
+        where: { id: admission.id },
+        data: { studentId: user.studentProfile.id }
+      });
+    }
+    return admission;
+  }
+};
+
+// src/config/striPe.ts
+var import_stripe = __toESM(require("stripe"));
+var stripe = new import_stripe.default(process.env.STRIPE_SECRET_KEY, {});
+var striPe_default = stripe;
+
+// src/modules/admission/admission.controller.ts
+var admissionService = new AdmissionService();
+var AdmissionController = class {
+  /** Public — no auth required */
+  async apply(req, res, next) {
+    try {
+      const admission = await admissionService.create(req.body);
+      sendSuccess(res, admission, "Application submitted successfully", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAll(req, res, next) {
+    try {
+      const data = await admissionService.findAll(req.query);
+      sendSuccess(res, data, "Admissions fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findById(req, res, next) {
+    try {
+      const admission = await admissionService.findById(String(req.params.id));
+      sendSuccess(res, admission, "Admission fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async update(req, res, next) {
+    try {
+      const admission = await admissionService.update(String(req.params.id), req.body);
+      sendSuccess(res, admission, "Admission updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateStatus(req, res, next) {
+    try {
+      const admission = await admissionService.updateStatus(
+        String(req.params.id),
+        req.body
+      );
+      sendSuccess(res, admission, "Admission status updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async convertToStudent(req, res, next) {
+    try {
+      const student = await admissionService.convertToStudent(req.body);
+      sendSuccess(res, student, "Student account created from admission", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async delete(req, res, next) {
+    try {
+      await admissionService.delete(String(req.params.id));
+      sendSuccess(res, null, "Admission deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getStats(req, res, next) {
+    try {
+      const stats = await admissionService.getStats();
+      sendSuccess(res, stats, "Stats fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async uploadDocument(req, res, next) {
+    try {
+      if (!req.file) throw new Error("No file uploaded");
+      const result = await uploadToCloudinary(req.file.buffer, "admissions/documents");
+      sendSuccess(res, { url: result.secure_url }, "Document uploaded");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getPublicClasses(req, res, next) {
+    try {
+      const classes = await admissionService.getPublicClasses();
+      sendSuccess(res, classes, "Classes fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async createStripeCheckout(req, res, next) {
+    try {
+      const amount = Number(req.body?.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Invalid amount");
+      }
+      const currency = (process.env.STRIPE_CURRENCY || "usd").toLowerCase();
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const session = await striPe_default.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency,
+              unit_amount: Math.round(amount * 100),
+              product_data: {
+                name: "Admission Fee",
+                description: req.body?.targetClassId ? `Class: ${req.body.targetClassId}` : void 0
+              }
+            },
+            quantity: 1
+          }
+        ],
+        success_url: `${frontendUrl}/apply-for-admission?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/apply-for-admission?payment=cancel`,
+        metadata: {
+          applicantName: req.body?.applicantName ?? "",
+          targetClassId: req.body?.targetClassId ?? ""
+        }
+      });
+      sendSuccess(res, { url: session.url, sessionId: session.id }, "Stripe session created");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async verifyStripeSession(req, res, next) {
+    try {
+      const sessionId = String(req.query.session_id || "");
+      if (!sessionId) throw new Error("Missing session_id");
+      const session = await striPe_default.checkout.sessions.retrieve(sessionId);
+      const paid = session.payment_status === "paid";
+      sendSuccess(res, {
+        paid,
+        amountTotal: session.amount_total ? session.amount_total / 100 : null,
+        currency: session.currency,
+        sessionId: session.id
+      }, "Stripe session verified");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/admission/admission.routes.ts
+var router9 = (0, import_express9.Router)();
+var c = new AdmissionController();
+router9.post("/apply", c.apply.bind(c));
+router9.get("/classes", c.getPublicClasses.bind(c));
+router9.post("/stripe/checkout", c.createStripeCheckout.bind(c));
+router9.get("/stripe/verify", c.verifyStripeSession.bind(c));
+router9.post(
+  "/upload-document",
+  upload.single("document"),
+  c.uploadDocument.bind(c)
+);
+router9.use(authenticate, authorizeRoles("ADMIN"));
+router9.get("/stats", c.getStats.bind(c));
+router9.get("/", c.findAll.bind(c));
+router9.get("/:id", c.findById.bind(c));
+router9.patch("/:id", c.update.bind(c));
+router9.patch("/:id/status", c.updateStatus.bind(c));
+router9.post("/convert-to-student", c.convertToStudent.bind(c));
+router9.delete("/:id", c.delete.bind(c));
+var admission_routes_default = router9;
+
+// src/modules/fee/router.ts
+var import_express10 = require("express");
+
+// src/modules/fee/fee.service.ts
+var createfee = async (dto) => {
+  const student = await db_default.student.findUnique({
+    where: { id: dto.studentId }
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+  const { title, type, ...rest } = dto;
+  return await db_default.feeStructure.create({
+    data: {
+      ...rest,
+      dueDate: new Date(dto.dueDate),
+      status: "PENDING",
+      Paidamount: 0,
+      classId: dto.classId,
+      feeType: type,
+      dueDay: dto.dueDay
+    },
+    include: {
+      student: {
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
+        }
+      }
+    }
+  });
+};
+var bulkcreate = async (dto) => {
+  const students = await db_default.student.findMany({
+    where: { classId: dto.classId },
+    select: { id: true }
+  });
+  const fees = students.map((student) => ({
+    title: dto.title,
+    feeType: dto.type,
+    // Updated to use `feeType` as required by Prisma
+    amount: dto.amount,
+    dueDate: dto.dueDate,
+    dueDay: new Date(dto.dueDate).getDate(),
+    description: dto.description,
+    status: "PENDING",
+    paidAmount: 0,
+    studentId: student.id,
+    classId: dto.classId
+  }));
+  await db_default.feeStructure.createMany({ data: fees });
+  return { created: students.length };
+};
+var findAll = async (dto) => {
+  const { page = "1", limit = "10", studentId, classId, type, status, month } = dto;
+  const where = {
+    ...studentId && { studentId },
+    ...classId && { classId },
+    ...type && { feeType: type },
+    ...status && { status }
+  };
+  if (month) {
+    const start = /* @__PURE__ */ new Date(`${month}-01`);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    where.dueDate = {
+      gte: start,
+      lt: end
+    };
+  }
+  const { skip, take, meta } = await paginate2(
+    db_default.feeStructure,
+    where,
+    parseInt(page),
+    parseInt(limit)
+  );
+  const fees = await db_default.feeStructure.findMany({
+    where,
+    skip,
+    take,
+    include: {
+      student: {
+        select: {
+          id: true,
+          rollNumber: true,
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          },
+          class: {
+            select: {
+              name: true,
+              sections: true
+            }
+          }
+        }
+      },
+      payments: true
+    },
+    orderBy: { dueDate: "asc" }
+  });
+  return { data: fees, meta };
+};
+var findByid = async (id) => {
+  const fee = await db_default.feeStructure.findUnique({
+    where: { id },
+    include: {
+      student: {
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          },
+          class: {
+            select: {
+              name: true,
+              sections: true
+            }
+          }
+        }
+      },
+      payments: { orderBy: { createdAt: "desc" } }
+    }
+  });
+  if (!fee) {
+    throw new Error("Fee not found");
+  }
+  const payments = fee.payments ?? [];
+  return { ...fee, payments };
+};
+var updateFee = async (id, dto) => {
+  const existing = await db_default.feeStructure.findUnique({
+    where: { id }
+  });
+  if (!existing) {
+    throw new Error("Fee not found");
+  }
+  return await db_default.feeStructure.update({
+    where: { id },
+    data: {
+      ...dto,
+      ...dto.dueDate && { dueDate: new Date(dto.dueDate) }
+    },
+    include: {
+      payments: true
+    }
+  });
+};
+var deleteFee = async (id) => {
+  await db_default.feeStructure.delete({ where: { id } });
+};
+var recordPayment = async (dto) => {
+  const fee = await db_default.feeStructure.findUnique({
+    where: { id: dto.feeId }
+  });
+  if (!fee) {
+    throw new Error("Fee not found");
+  }
+  if (fee.status === "PAID") {
+    throw new Error("Fee is already paid");
+  }
+  const totalPaid = fee.Paidamount + dto.amountPaid;
+  if (totalPaid > fee.amount) {
+    throw new Error("Payment exceeds fee amount");
+  }
+  const student = await db_default.student.findUnique({
+    where: { id: fee.studentId ?? void 0 }
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+  const invoice = await db_default.invoice.findFirst({
+    where: { feeStructureId: fee.id }
+  });
+  if (!invoice) {
+    throw new Error("Invoice not found for the fee structure");
+  }
+  const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
+  const [payment] = await db_default.$transaction([
+    db_default.payment.create({
+      data: {
+        feeStructureId: dto.feeId,
+        amount: dto.amountPaid,
+        method: dto.method,
+        transactionId: dto.transactionId ?? void 0,
+        // Convert null to undefined
+        note: dto.note ?? void 0,
+        // Convert null to undefined
+        invoiceId: invoice.id,
+        // Required field
+        studentId: student.id
+        // Required field
+      }
+    }),
+    db_default.feeStructure.update({
+      where: { id: dto.feeId },
+      data: {
+        paidAmount: totalPaid,
+        status: newStatus
+      }
+    })
+  ]);
+  return payment;
+};
+var recordCashPayment = async (dto) => {
+  const student = await db_default.student.findUnique({
+    where: { id: dto.studentId },
+    select: { id: true, classId: true }
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+  const now = /* @__PURE__ */ new Date();
+  const dueDate = dto.dueDate ? new Date(dto.dueDate) : now;
+  if (Number.isNaN(dueDate.getTime())) {
+    throw new Error("Invalid dueDate");
+  }
+  const dueDay = dueDate.getDate();
+  const year = dueDate.getFullYear();
+  const month = dueDate.getMonth() + 1;
+  return db_default.$transaction(async (tx) => {
+    const fee = await tx.feeStructure.create({
+      data: {
+        studentId: student.id,
+        classId: student.classId,
+        feeType: dto.type,
+        amount: dto.amountPaid,
+        dueDate,
+        dueDay,
+        status: "PAID",
+        Paidamount: dto.amountPaid
+      }
+    });
+    const invoice = await tx.invoice.create({
+      data: {
+        studentId: student.id,
+        feeStructureId: fee.id,
+        amount: dto.amountPaid,
+        dueDate,
+        year,
+        month,
+        status: "PAID"
+      }
+    });
+    const payment = await tx.payment.create({
+      data: {
+        feeStructureId: fee.id,
+        invoiceId: invoice.id,
+        studentId: student.id,
+        amount: dto.amountPaid,
+        method: "CASH",
+        status: "PAID",
+        paidAt: now,
+        transactionId: dto.transactionId ?? void 0,
+        note: dto.note ?? void 0
+      }
+    });
+    return { fee, invoice, payment };
+  });
+};
+var getstudentFeeSummary = async (studentId) => {
+  const fees = await db_default.feeStructure.findMany({
+    where: { studentId },
+    include: {
+      payments: true
+    }
+  });
+  const totalFees = fees.reduce((sum, fee) => sum + fee.amount, 0);
+  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
+  const outstanding = totalFees - totalPaid;
+  const overDue = fees.filter((f) => f.status === "PENDING" && new Date(f.dueDate) < /* @__PURE__ */ new Date()).length;
+  return {
+    totalFees,
+    totalPaid,
+    outstanding,
+    overDue
+  };
+};
+var getCollectionReport = async (month, type) => {
+  const start = /* @__PURE__ */ new Date(`${month}-01`);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const payments = await db_default.payment.findMany({
+    where: {
+      createdAt: {
+        gte: start,
+        lt: end
+      },
+      ...type ? { feeStructure: { feeType: type } } : {}
+    },
+    include: {
+      feeStructure: {
+        select: {
+          feeType: true,
+          title: true
+        }
+      }
+    }
+  });
+  const totalCollected = payments.reduce((s, p) => s + p.amount, 0);
+  const byType = payments.reduce((acc, p) => {
+    const key = p.feeStructure?.feeType || "UNKNOWN";
+    acc[key] = (acc[key] || 0) + p.amount;
+    return acc;
+  }, {});
+  return { month, totalCollected, byType, totalTransactions: payments.length };
+};
+var getFeeSummary = async (month) => {
+  const where = {};
+  if (month) {
+    const start = /* @__PURE__ */ new Date(`${month}-01`);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    where.dueDate = { gte: start, lt: end };
+  }
+  const fees = await db_default.feeStructure.findMany({ where });
+  const totalAmount = fees.reduce((sum, fee) => sum + fee.amount, 0);
+  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
+  const outstanding = totalAmount - totalPaid;
+  const pendingCount = fees.filter((f) => f.status === "PENDING").length;
+  const overdueCount = fees.filter(
+    (f) => f.status === "PENDING" && new Date(f.dueDate) < /* @__PURE__ */ new Date()
+  ).length;
+  return { totalAmount, totalPaid, outstanding, pendingCount, overdueCount, overDue: overdueCount };
+};
+
+// src/modules/fee/fee.controller.ts
+var FeesController = class {
+  async create(req, res, next) {
+    try {
+      const fee = await createfee(req.body);
+      sendSuccess(res, fee, "Fee created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async bulkCreate(req, res, next) {
+    try {
+      const result = await bulkcreate(req.body);
+      sendSuccess(res, result, `Fees assigned to ${result.created} students`, 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAll(req, res, next) {
+    try {
+      const data = await findAll(req.query);
+      sendSuccess(res, data, "Fees fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findById(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const fee = await findByid(idStr);
+      sendSuccess(res, fee, "Fee fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async update(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const fee = await updateFee(idStr, req.body);
+      sendSuccess(res, fee, "Fee updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async delete(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      await deleteFee(idStr);
+      sendSuccess(res, null, "Fee deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async recordPayment(req, res, next) {
+    try {
+      const payment = await recordPayment(req.body);
+      sendSuccess(res, payment, "Payment recorded", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async recordCashPayment(req, res, next) {
+    try {
+      const payment = await recordCashPayment(req.body);
+      sendSuccess(res, payment, "Cash payment recorded", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getStudentSummary(req, res, next) {
+    try {
+      let { studentId } = req.params;
+      const studentIdStr = Array.isArray(studentId) ? studentId[0] : studentId;
+      if (!studentIdStr) throw new Error("studentId param required");
+      const data = await getstudentFeeSummary(studentIdStr);
+      sendSuccess(res, data, "Fee summary fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getCollectionReport(req, res, next) {
+    try {
+      let { month, type } = req.query;
+      const monthStr = Array.isArray(month) ? month[0] : month;
+      const typeStr = type ? Array.isArray(type) ? type[0] : type : void 0;
+      if (!monthStr) throw new Error("month query param required (e.g. 2024-09)");
+      const data = await getCollectionReport(monthStr, typeStr);
+      sendSuccess(res, data, "Collection report fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getSummary(req, res, next) {
+    try {
+      let { month } = req.query;
+      const monthStr = month ? Array.isArray(month) ? month[0] : month : void 0;
+      const data = await getFeeSummary(monthStr);
+      sendSuccess(res, data, "Fee summary fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/fee/router.ts
+var router10 = (0, import_express10.Router)();
+var c2 = new FeesController();
+router10.use(authenticate);
+router10.get("/report/collection", authorizeRoles("ADMIN"), c2.getCollectionReport.bind(c2));
+router10.get("/summary", authorizeRoles("ADMIN"), c2.getSummary.bind(c2));
+router10.get("/student/:studentId", authorizeRoles("ADMIN", "STUDENT"), c2.getStudentSummary.bind(c2));
+router10.post("/", authorizeRoles("ADMIN"), c2.create.bind(c2));
+router10.post("/bulk", authorizeRoles("ADMIN"), c2.bulkCreate.bind(c2));
+router10.get("/", authorizeRoles("ADMIN"), c2.findAll.bind(c2));
+router10.get("/:id", authorizeRoles("ADMIN", "STUDENT"), c2.findById.bind(c2));
+router10.patch("/:id", authorizeRoles("ADMIN"), c2.update.bind(c2));
+router10.delete("/:id", authorizeRoles("ADMIN"), c2.delete.bind(c2));
+router10.post("/pay", authorizeRoles("ADMIN"), c2.recordPayment.bind(c2));
+router10.post("/cash", authorizeRoles("ADMIN"), c2.recordCashPayment.bind(c2));
+var router_default = router10;
+
+// src/modules/teachingApplication/teachingApplication.routes.ts
+var import_express11 = require("express");
+
+// src/modules/teachingApplication/teachingApplication.service.ts
+var import_node_crypto4 = require("crypto");
+var applyForTeaching = async (dto) => {
+  const existing = await db_default.teachingApplication.findFirst({
+    where: {
+      email: dto.email,
+      status: "PENDING"
+    }
+  });
+  if (existing) {
+    throw new Error("An application with this email is already pending");
+  }
+  return db_default.teachingApplication.create({
+    data: {
+      name: dto.name,
+      email: dto.email,
+      phone: dto.phone,
+      gender: dto.gender,
+      dob: new Date(dto.dob),
+      address: dto.address,
+      designation: dto.designation,
+      department: dto.department,
+      qualification: dto.qualification,
+      experience: dto.experience,
+      subjectSpecialization: dto.subjectSpecialization,
+      expectedSalary: dto.expectedSalary,
+      resumeUrl: dto.resumeUrl,
+      coverLetter: dto.coverLetter
+    }
+  });
+};
+var listTeachingApplications = async () => {
+  return db_default.teachingApplication.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+};
+var getTeachingApplicationById = async (id) => {
+  const application = await db_default.teachingApplication.findUnique({
+    where: { id }
+  });
+  if (!application) throw { status: 404, message: "Application not found" };
+  return application;
+};
+var updateTeachingApplicationStatus = async (id, dto) => {
+  const application = await getTeachingApplicationById(id);
+  if (dto.status === "APPROVED" && application.status !== "APPROVED") {
+    const existingTeacher = await db_default.teacher.findFirst({
+      where: { email: application.email },
+      select: { id: true }
+    });
+    if (!existingTeacher) {
+      const generatedId = `TCH-${(0, import_node_crypto4.randomBytes)(3).toString("hex")}`.toUpperCase();
+      await TeachersService.create({
+        name: application.name,
+        email: application.email,
+        TeachersId: generatedId,
+        designation: application.designation,
+        department: application.department ?? void 0,
+        qualification: application.qualification,
+        experience: application.experience,
+        phone: application.phone,
+        address: application.address,
+        gender: application.gender,
+        dateOfBirth: application.dob.toISOString().split("T")[0],
+        dateOfJoining: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+        salary: application.expectedSalary ?? void 0
+      });
+    }
+  }
+  return db_default.teachingApplication.update({
+    where: { id },
+    data: {
+      status: dto.status,
+      rejectionReason: dto.rejectionReason,
+      reviewedAt: /* @__PURE__ */ new Date()
+    }
+  });
+};
+
+// src/modules/teachingApplication/teachingApplication.controller.ts
+var apply = async (req, res, next) => {
+  try {
+    const data = await applyForTeaching(req.body);
+    sendSuccess(res, data, "Teaching application submitted", 201);
+  } catch (err) {
+    next(err);
+  }
+};
+var list = async (_req, res, next) => {
+  try {
+    const data = await listTeachingApplications();
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+var getById = async (req, res, next) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const data = await getTeachingApplicationById(id);
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+var updateStatus = async (req, res, next) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const data = await updateTeachingApplicationStatus(id, req.body);
+    sendSuccess(res, data, "Teaching application updated");
+  } catch (err) {
+    next(err);
+  }
+};
+
+// src/modules/teachingApplication/teachingApplication.routes.ts
+var router11 = (0, import_express11.Router)();
+router11.post("/apply", apply);
+router11.get("/", authenticate, authorizeRoles("ADMIN"), list);
+router11.get("/:id", authenticate, authorizeRoles("ADMIN"), getById);
+router11.patch("/:id/status", authenticate, authorizeRoles("ADMIN"), updateStatus);
+var teachingApplication_routes_default = router11;
+
+// src/modules/notice/notice.route.ts
+var import_express12 = require("express");
+
+// src/modules/notice/notice.service.ts
+var audienceToRoles = {
+  ALL: ["ADMIN", "TEACHER", "STUDENT", "PARENT"],
+  TEACHERS: ["TEACHER"],
+  STUDENTS: ["STUDENT"],
+  PARENTS: ["PARENT"],
+  STAFF: ["ADMIN"]
+};
+var createNotice = async (dto, authorId) => {
+  const notice = await db_default.notice.create({
+    data: {
+      title: dto.title,
+      content: dto.content,
+      audience: dto.audience,
+      priority: dto.priority || "NORMAL",
+      publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : /* @__PURE__ */ new Date(),
+      authorId,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : void 0,
+      attachmentUrl: dto.attachmentUrl,
+      isActive: true
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      }
+    }
+  });
+  try {
+    const roles = audienceToRoles[dto.audience] ?? ["ADMIN"];
+    roles.forEach((role) => {
+      emitToRole(role, "notification:new", {
+        title: notice.title,
+        body: notice.content,
+        type: "NOTICE",
+        referenceId: notice.id,
+        createdAt: notice.createdAt
+      });
+    });
+  } catch (err) {
+    console.error("Failed to emit notice notification:", err);
+  }
+  return notice;
+};
+var findAll2 = async (query) => {
+  const { page = "1", limit = "10", search, audience, priority, isActive } = query;
+  const where = {
+    ...audience && { audience },
+    ...priority && { priority },
+    ...isActive !== void 0 && { isActive: isActive === "true" },
+    ...search && {
+      OR: [
+        { title: { contains: search, mode: "insensitive" } },
+        { content: { contains: search, mode: "insensitive" } }
+      ]
+    }
+  };
+  const { skip, take, meta } = await paginate2(
+    db_default.notice,
+    where,
+    parseInt(page, 10),
+    parseInt(limit, 10)
+  );
+  const notices = await db_default.notice.findMany({
+    where,
+    skip,
+    take,
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      }
+    },
+    orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
+  });
+  return {
+    data: notices,
+    meta
+  };
+};
+var findPublic = (role) => {
+  const now = /* @__PURE__ */ new Date();
+  return db_default.notice.findMany({
+    where: {
+      isActive: true,
+      publishedAt: { lte: now },
+      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      audience: { in: ["ALL", role] }
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      }
+    },
+    orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
+  });
+};
+var findById = async (id) => {
+  const notice = await db_default.notice.findUnique({
+    where: { id },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      }
+    }
+  });
+  if (!notice) {
+    throw new Error("Notice not found");
+  }
+  return notice;
+};
+var update = async (dto, id) => {
+  await findById(id);
+  return db_default.notice.update({
+    where: { id },
+    data: {
+      ...dto,
+      ...dto.publishedAt && { publishedAt: new Date(dto.publishedAt) },
+      ...dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      }
+    }
+  });
+};
+var deleteNotice = async (id) => {
+  await findById(id);
+  return db_default.notice.delete({
+    where: { id }
+  });
+};
+var toggleActive = async (id) => {
+  const notice = await findById(id);
+  return db_default.notice.update({
+    where: { id },
+    data: {
+      isActive: !notice.isActive
+    }
+  });
+};
+
+// src/modules/notice/notice.controller.ts
+var roleToAudience = {
+  STUDENT: "STUDENTS",
+  TEACHER: "TEACHERS",
+  PARENT: "PARENTS",
+  ADMIN: "ALL"
+};
+var NoticeController = class {
+  async create(req, res, next) {
+    try {
+      const notice = await createNotice(req.body, req.user.id);
+      sendSuccess(res, notice, "Notice created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAll(req, res, next) {
+    try {
+      const data = await findAll2(req.query);
+      sendSuccess(res, data, "Notices fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  /** Authenticated user sees only notices relevant to their role */
+  async findPublic(req, res, next) {
+    try {
+      const audience = roleToAudience[req.user.role] ?? "ALL";
+      const notices = await findPublic(audience);
+      sendSuccess(res, notices, "Notices fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findById(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const notice = await findById(idStr);
+      sendSuccess(res, notice, "Notice fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async update(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const notice = await update(req.body, idStr);
+      sendSuccess(res, notice, "Notice updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async delete(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      await deleteNotice(idStr);
+      sendSuccess(res, null, "Notice deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async toggleActive(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const notice = await toggleActive(idStr);
+      sendSuccess(res, notice, `Notice ${notice.isActive ? "activated" : "deactivated"}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/notice/notice.route.ts
+var router12 = (0, import_express12.Router)();
+var c3 = new NoticeController();
+router12.use(authenticate);
+router12.get("/feed", c3.findPublic.bind(c3));
+router12.post("/", authorizeRoles("ADMIN"), c3.create.bind(c3));
+router12.get("/", authorizeRoles("ADMIN"), c3.findAll.bind(c3));
+router12.get("/:id", authorizeRoles("ADMIN"), c3.findById.bind(c3));
+router12.patch("/:id", authorizeRoles("ADMIN"), c3.update.bind(c3));
+router12.delete("/:id", authorizeRoles("ADMIN"), c3.delete.bind(c3));
+router12.patch("/:id/toggle", authorizeRoles("ADMIN"), c3.toggleActive.bind(c3));
+var notice_route_default = router12;
+
 // src/routes/index.ts
-var router9 = import_express9.default.Router();
-router9.get("/health", (req, res) => {
+var router13 = import_express13.default.Router();
+router13.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router9.use("/auth", auth_route_default);
-router9.use("/students", students_route_default);
-router9.use("/subjects", subject_router_default);
-router9.use("/classes", class_route_default);
-router9.use("/exams", exam_route_default);
-router9.use("/attendance", attendacne_router_default);
-router9.use("/teachers", teacher_routes_default);
-router9.use("/results", result_router_default);
-var routes_default = router9;
+router13.use("/auth", auth_route_default);
+router13.use("/students", students_route_default);
+router13.use("/subjects", subject_router_default);
+router13.use("/classes", class_route_default);
+router13.use("/exams", exam_route_default);
+router13.use("/attendance", attendacne_router_default);
+router13.use("/teachers", teacher_routes_default);
+router13.use("/results", result_router_default);
+router13.use("/admission", admission_routes_default);
+router13.use("/fees", router_default);
+router13.use("/teaching", teachingApplication_routes_default);
+router13.use("/notices", notice_route_default);
+var routes_default = router13;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express10.default)();
+var app = (0, import_express14.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
-app.use((0, import_cors.default)({ origin: process.env.CLIENT_URL, credentials: true }));
-app.use(import_express10.default.json());
+var allowedOrigins = [
+  process.env.CLIENT_URL,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+].filter((origin) => Boolean(origin));
+app.use(
+  (0, import_cors.default)({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true
+  })
+);
+app.use(import_express14.default.json());
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
