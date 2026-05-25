@@ -1,23 +1,23 @@
 
 export interface CreateStudentDto {
     name: string;
-    email: string;
-     password: string;
+    email?: string;  // Optional for admin mode
+    password?: string;  // Optional for admin mode
 
-     //student specific fields
-     rollNumber: string;
-     classId: string;
-     dateOfBirth: Date;
-     gender:"Male" | "Female" | "Other"
-     bloodGroup:"A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
-     address: string;
-     phoneNumber: string;
-     avatarUrl?: string;
-     //guardian details
-        guardianName: string;
-        guardianEmail: string;
-        guardianPhone: string;
-        guradianRelation: string;
+    //student specific fields
+    rollNumber: string;
+    classId: string;
+    dateOfBirth: Date;
+    gender:"Male" | "Female" | "Other"
+    bloodGroup:"A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
+    address: string;
+    phoneNumber?: string;  // Optional
+    avatarUrl?: string;
+    //guardian details
+    guardianName?: string;  // Optional
+    guardianEmail?: string;  // Optional
+    guardianPhone?: string;  // Optional
+    guradianRelation?: string;  // Optional
     
    
 }

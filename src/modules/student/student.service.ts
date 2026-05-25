@@ -39,13 +39,16 @@ export class StudentService {
             throw new Error("Roll number must be a valid number");
         }
 
-        const emailExists = await prisma.user.findUnique({
-            where: {
-                email: dto.email
+        // Check email only if provided
+        if (dto.email) {
+            const emailExists = await prisma.user.findUnique({
+                where: {
+                    email: dto.email
+                }
+            });
+            if (emailExists) {
+                throw new Error("Email already exists");
             }
-        });
-        if (emailExists) {
-            throw new Error("Email already exists");
         }
         const rollexists = await prisma.student.findFirst({
             where: {
@@ -63,40 +66,98 @@ export class StudentService {
         if (!classExists) {
             throw new Error("Class not found");
         }
-        const hashedPassword = await bcrypt.hash(dto.password, 10);
+        // Hash password only if provided
+        const hashedPassword = dto.password ? await bcrypt.hash(dto.password, 10) : '';
+        
+        // Generate unique studentId
+        const studentId = `STU-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        
+        // Get a section from the class (assuming each class has at least one section)
+        const section = await prisma.section.findFirst({
+            where: {
+                classId: dto.classId
+            }
+        });
+        if (!section) {
+            throw new Error("No section found for this class");
+        }
 
+        // Create student with optional parent/guardian
+        const genderMap = { 'Male': 'MALE', 'Female': 'FEMALE', 'Other': 'OTHER' };
         const student = await prisma.user.create({
             data: {
                 name: dto.name,
-                email: dto.email,
+                email: dto.email || `student-${Date.now()}@school.local`, // Generate temp email if not provided
                 passwordHash: hashedPassword,
                 role: 'STUDENT',
-                student: {
+                studentProfile: {
                     create: {
+                        studentId,
                         rollNumber,
-            classId: dto.classId,
-            dateOfBirth: new Date(dto.dateOfBirth),
-            gender: dto.gender,
-            bloodGroup: dto.bloodGroup,
-            phone: dto.phoneNumber,
-            address: dto.address,
-            avatarUrl: dto.avatarUrl,
-            guardianName: dto.guardianName,
-            guardianPhone: dto.guardianPhone,
-            guardianEmail: dto.guardianEmail,
-            guardianRelation: dto.guradianRelation,
+                        sectionId: section.id,
+                        classId: dto.classId,
+                        dob: new Date(dto.dateOfBirth),
+                        gender: genderMap[dto.gender as keyof typeof genderMap] as any,
+                        bloodGroup: dto.bloodGroup as any,
+                        photo: dto.avatarUrl,
+                        address: dto.address,
+                        name: dto.name,
                     }
                 }
             },
             select: {
                 id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        student: true,
+                name: true,
+                email: true,
+                role: true,
+                createdAt: true,
+                studentProfile: {
+                    select: {
+                        id: true,
+                        studentId: true,
+                        rollNumber: true,
+                        classId: true,
+                        sectionId: true,
+                        dob: true,
+                        gender: true,
+                        bloodGroup: true,
+                        photo: true,
+                        address: true,
+                        name: true,
+                    }
+                },
             }
-        })
+        });
+        
+        // Create parent/guardian record if guardian info is provided
+        if (dto.guardianName && dto.guardianEmail) {
+            const parentUser = await prisma.user.create({
+                data: {
+                    name: dto.guardianName,
+                    email: dto.guardianEmail,
+                    passwordHash: await bcrypt.hash(Math.random().toString(36), 10), // Random password for guardian
+                    role: 'PARENT'
+                }
+            });
+            
+            const parentRecord = await prisma.parent.create({
+                data: {
+                    userId: parentUser.id,
+                    name: dto.guardianName,
+                    phone: dto.guardianPhone || '',
+                }
+            });
+            
+            // Link student to parent
+            if (student.studentProfile?.id) {
+                await prisma.student.update({
+                    where: { id: student.studentProfile.id },
+                    data: { 
+                        parentId: parentRecord.id
+                    }
+                });
+            }
+        }
         return student;
 
     }
@@ -109,7 +170,6 @@ export class StudentService {
             ...(search && {
                 OR: [
                     { name: { contains: search, mode: 'insensitive' } },
-                    { email: { contains: search, mode: 'insensitive' } },
                     ...(isNaN(Number(search)) ? [] : [{ rollNumber: Number(search) }])
                 ]
             })
