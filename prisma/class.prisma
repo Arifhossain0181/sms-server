@@ -6,6 +6,7 @@ model Class {
 
   sections      Section[]
   subjects      Subject[]
+  timetables    Timetable[]
   feeStructures FeeStructure[]
   examSchedules ExamSchedule[]
   admissions    AdmissionApplication[]

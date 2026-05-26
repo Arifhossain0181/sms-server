@@ -1,17 +1,24 @@
 // ─── TIMETABLE ─────────────────────────────────────────────
 
-model TimetableSlot {
+model Timetable {
   id        String    @id @default(uuid())
   sectionId String
-  section   Section   @relation(fields: [sectionId], references: [id])
+  section   Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
   subjectId String
   subject   Subject   @relation(fields: [subjectId], references: [id])
   teacherId String
   teacher   Teacher   @relation(fields: [teacherId], references: [id])
-  dayOfWeek DayOfWeek
+  dayOfWeek String
   startTime String
   endTime   String
+  roomNumber String?
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([teacherId, dayOfWeek, startTime])
+  @@index([classId])
+  @@index([sectionId])
+  @@index([subjectId])
 }

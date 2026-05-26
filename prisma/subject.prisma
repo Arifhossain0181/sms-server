@@ -12,7 +12,7 @@ model Subject {
 
   assignments    SubjectAssignment[]
   marks          Mark[]
-  timetableSlots TimetableSlot[]
+  timetables     Timetable[]
   examSchedules  ExamSchedule[]
   homeworks      Homework[]
 

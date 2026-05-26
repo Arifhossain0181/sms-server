@@ -5,6 +5,7 @@ export type BloodGroup = 'A_POS' | 'A_NEG' | 'B_POS' | 'B_NEG' | 'O_POS' | 'O_NE
 // ─── Apply for admission (public form) ──────────────────────────────
 export interface CreateAdmissionDto {
   applicantName: string;
+  studentEmail: string;
   dob: string; // ISO date string
   gender: Gender;
   religion?: string;
@@ -29,6 +30,7 @@ export interface UpdateAdmissionStatusDto {
 
 export interface UpdateAdmissionDto {
   applicantName?: string;
+  studentEmail?: string;
   dob?: string;
   gender?: Gender;
   religion?: string;

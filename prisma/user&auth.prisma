@@ -18,6 +18,7 @@ model User {
   studentProfile Student?
   parentProfile  Parent?
   notices        Notice[]
+  notifications  Notification[]
 }
 
 model RefreshToken {

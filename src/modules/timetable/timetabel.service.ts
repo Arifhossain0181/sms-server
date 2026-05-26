@@ -1,12 +1,33 @@
+import prisma from "../../config/db";
 import { BulkCreateTimetableDto, CreateTimetableSlotDto, TimetableQueryDto, UpdateTimetableSlotDto } from "./timetable.dto";
 
 
 export const createSlot = async(dto:CreateTimetableSlotDto) =>{
     const {classId, subjectId, teacherId, dayOfWeek, startTime, endTime, roomNumber} = dto;
+    
+    // Get the first section of the class
+    const section = await prisma.section.findFirst({
+        where: { classId },
+        orderBy: { name: 'asc' }
+    });
+    if (!section) {
+        throw new Error('No section found for this class');
+    }
+    
     return prisma.timetable.create({
-        data:dto,
+        data: {
+            classId,
+            sectionId: section.id,
+            subjectId,
+            teacherId,
+            dayOfWeek,
+            startTime,
+            endTime,
+            roomNumber
+        },
         include:{
             class:true,
+            section:true,
             subject:true,
             teacher:true
         }
@@ -18,25 +39,33 @@ export const bulkCretae = async(dto:BulkCreateTimetableDto)=>{
     if (!classExists) {
         throw new Error('Class not found');
     }
-    for(const slot of dto.slots){
-        await createSlot({ ...slot, classId: dto.classId });
-    }
-    const slots = await prisma.$transaction(async(tx) =>{
-        await tx.timetable.deleteMany({ where: { classId: dto.classId } });
-
-    })
-    const created = await Promise.all(
-        dto.slots.map(slot => 
-            tx.timetable.create({
-                data: { ...slot, classId: dto.classId },
-                include: {
-                    class: true,}
-            })
-       ) 
-       return created;
-    );
-    return slots;
     
+    // Get the first section of the class
+    const section = await prisma.section.findFirst({
+        where: { classId: dto.classId },
+        orderBy: { name: 'asc' }
+    });
+    if (!section) {
+        throw new Error('No section found for this class');
+    }
+    
+    const created = await prisma.$transaction(async(tx) =>{
+        await tx.timetable.deleteMany({ where: { classId: dto.classId } });
+        
+        return await Promise.all(
+            dto.slots.map(slot => 
+                tx.timetable.create({
+                    data: { ...slot, classId: dto.classId, sectionId: section.id },
+                    include: {
+                        class: true,
+                        subject: true,
+                        teacher: true
+                    }
+                })
+            )
+        );
+    });
+    return created;
 }
 
 export const finAll= async (query:TimetableQueryDto) =>{
@@ -141,7 +170,7 @@ export const update = async(id:string ,dto:UpdateTimetableSlotDto) =>{
         startTime: dto.startTime || existing.startTime,
         endTime: dto.endTime || existing.endTime,
     }
-    await  this.checkConflicts(merged, id);
+    await _checkConflicts(merged, id);
     return prisma.timetable.update({
         where:{id},
         data:dto,
@@ -153,9 +182,8 @@ export const update = async(id:string ,dto:UpdateTimetableSlotDto) =>{
     })
 }
 
-export const delete = async(id:string) =>{
+export const deleteSlot = async(id:string) =>{
     return prisma.timetable.delete({ where: { id } });
-     await prisma.timetable.delete({ where: { id } });
 }
 export const deleteClassSchefule = async(classId :string) =>{
     const classexits = await prisma.class.findUnique({ where: { id: classId } });
@@ -168,57 +196,56 @@ export const deleteClassSchefule = async(classId :string) =>{
 }
 
 
-  // ─── PRIVATE HELPERS ───────────────────────────────────────────────
- 
-  private _include() {
-    return {
-      class:   { select: { id: true, name: true, section: true } },
-      subject: { select: { id: true, name: true, code: true } },
-      teacher: {
-        select: {
-          id: true,
-          employeeId: true,
-          user: { select: { name: true } },
-        },
+// ─── PRIVATE HELPERS ───────────────────────────────────────────────
+
+function _include() {
+  return {
+    class:   { select: { id: true, name: true, section: true } },
+    subject: { select: { id: true, name: true, code: true } },
+    teacher: {
+      select: {
+        id: true,
+        employeeId: true,
+        user: { select: { name: true } },
       },
-    };
-  }
- 
-  private async _validateReferences(classId: string, subjectId: string, teacherId: string) {
-    const [cls, subject, teacher] = await Promise.all([
-      prisma.class.findUnique({ where: { id: classId } }),
-      prisma.subject.findUnique({ where: { id: subjectId } }),
-      prisma.teacher.findUnique({ where: { id: teacherId } }),
-    ]);
-    if (!cls) throw new Error('Class not found');
-    if (!subject) throw new Error('Subject not found');
-    if (!teacher) throw new Error('Teacher not found');
-  }
- 
-  /** Prevent same class OR same teacher being double-booked in overlapping slots */
-  private async _checkConflicts(
-    dto: { classId: string; teacherId: string; dayOfWeek: string; startTime: string; endTime: string },
-    excludeId?: string
-  ) {
-    const overlap = await prisma.timetable.findFirst({
-      where: {
-        id: excludeId ? { not: excludeId } : undefined,
-        dayOfWeek: dto.dayOfWeek as any,
-        OR: [
-          { classId: dto.classId },
-          { teacherId: dto.teacherId },
-        ],
-        AND: [
-          { startTime: { lt: dto.endTime } },
-          { endTime: { gt: dto.startTime } },
-        ],
-      },
-    });
- 
-    if (overlap) {
-      throw new Error(
-        'Schedule conflict: the class or teacher already has a slot during this time'
-      );
-    }
+    },
+  };
+}
+
+async function _validateReferences(classId: string, subjectId: string, teacherId: string) {
+  const [cls, subject, teacher] = await Promise.all([
+    prisma.class.findUnique({ where: { id: classId } }),
+    prisma.subject.findUnique({ where: { id: subjectId } }),
+    prisma.teacher.findUnique({ where: { id: teacherId } }),
+  ]);
+  if (!cls) throw new Error('Class not found');
+  if (!subject) throw new Error('Subject not found');
+  if (!teacher) throw new Error('Teacher not found');
+}
+
+/** Prevent same class OR same teacher being double-booked in overlapping slots */
+async function _checkConflicts(
+  dto: { classId: string; teacherId: string; dayOfWeek: string; startTime: string; endTime: string },
+  excludeId?: string
+) {
+  const overlap = await prisma.timetable.findFirst({
+    where: {
+      id: excludeId ? { not: excludeId } : undefined,
+      dayOfWeek: dto.dayOfWeek as any,
+      OR: [
+        { classId: dto.classId },
+        { teacherId: dto.teacherId },
+      ],
+      AND: [
+        { startTime: { lt: dto.endTime } },
+        { endTime: { gt: dto.startTime } },
+      ],
+    },
+  });
+
+  if (overlap) {
+    throw new Error(
+      'Schedule conflict: the class or teacher already has a slot during this time'
+    );
   }
 }

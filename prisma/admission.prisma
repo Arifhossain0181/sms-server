@@ -3,6 +3,7 @@
 model AdmissionApplication {
   id              String          @id @default(uuid())
   applicantName   String
+  studentEmail    String          @unique
   dob             DateTime        @db.Date
   gender          Gender
   religion        String?

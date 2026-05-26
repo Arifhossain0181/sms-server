@@ -271,7 +271,7 @@ export const TeachersService = {
     const teacher = await prisma.teacher.findUnique({ where: { id } });
     if (!teacher) throw new Error('Teacher not found');
 
-    return prisma.timetableSlot.findMany({
+    return prisma.timetable.findMany({
       where: { teacherId: id },
       include: {
         subject: { select: { id: true, name: true } },

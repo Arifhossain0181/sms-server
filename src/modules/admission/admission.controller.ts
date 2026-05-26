@@ -10,6 +10,15 @@ export class AdmissionController {
   /** Public — no auth required */
   async apply(req: Request, res: Response, next: NextFunction) {
     try {
+      // Validate required fields
+      const { applicantName, studentEmail, guardianName, guardianEmail, guardianPhone, targetClassId, address, gender, dob } = req.body;
+      
+      if (!studentEmail) {
+        const err = new Error("studentEmail is required for login after approval");
+        (err as any).status = 400;
+        throw err;
+      }
+
       const admission = await admissionService.create(req.body);
       sendSuccess(res, admission, 'Application submitted successfully', 201);
     } catch (err) { next(err); }

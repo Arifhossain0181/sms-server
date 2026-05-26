@@ -20,6 +20,6 @@ model Teacher {
   attendances        TeacherAttendance[]
   homeworks          Homework[]
   marks              Mark[]
-  timetableSlots     TimetableSlot[]
+  timetables         Timetable[]
   attendanceTaken    StudentAttendance[]
 }

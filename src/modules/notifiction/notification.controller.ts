@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { NotificationService } from './notification.service';
+import * as notificationService from './notification.service';
 import { sendSuccess } from '../../utils/response.util';
-
-const notificationService = new NotificationService();
 
 export class NotificationController {
   /** Admin: manually send to a single user */
@@ -38,7 +36,7 @@ export class NotificationController {
 
   async markRead(req: Request, res: Response, next: NextFunction) {
     try {
-      const notification = await notificationService.markRead(req.params.id, req.user!.id);
+      const notification = await notificationService.markRead(req.params.id as string, req.user!.id);
       sendSuccess(res, notification, 'Marked as read');
     } catch (err) { next(err); }
   }
@@ -52,7 +50,7 @@ export class NotificationController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await notificationService.delete(req.params.id, req.user!.id);
+      await notificationService.deleteNotification(req.params.id as string, req.user!.id);
       sendSuccess(res, null, 'Notification deleted');
     } catch (err) { next(err); }
   }

@@ -1,5 +1,6 @@
 import prisma from "../../config/db";
 import { AdmissionQueryDto, CreateAdmissionDto, UpdateAdmissionDto, UpdateAdmissionStatusDto, ConvertToStudentDto } from "./admission.dto";
+import { mailService } from "../../config/mail";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 
@@ -11,7 +12,12 @@ export class AdmissionService {
         if (!classExists) throw new Error("Class not found");
 
         const existing = await prisma.admissionApplication.findFirst({
-            where: { guardianEmail: dto.guardianEmail },
+            where: {
+                OR: [
+                    { guardianEmail: dto.guardianEmail },
+                    { studentEmail: dto.studentEmail },
+                ]
+            },
         });
         if (existing) {
             throw new Error("এই ইমেইল দিয়ে ইতিমধ্যে একটি admission আছে");
@@ -20,6 +26,7 @@ export class AdmissionService {
         return prisma.admissionApplication.create({
             data: {
                 applicantName: dto.applicantName,
+                studentEmail: dto.studentEmail,
                 dob: new Date(dto.dob),
                 gender: dto.gender,
                 religion: dto.religion,
@@ -91,6 +98,7 @@ export class AdmissionService {
             where: { id },
             data: {
                 applicantName: dto.applicantName,
+                ...(dto.studentEmail && { studentEmail: dto.studentEmail }),
                 ...(dto.dob && { dob: new Date(dto.dob) }),
                 gender: dto.gender,
                 religion: dto.religion,
@@ -119,6 +127,11 @@ export class AdmissionService {
 
         if (dto.status === "APPROVED" && !admission.studentId) {
             await this.createStudentFromAdmission(admission.id);
+            // Re-fetch the admission to get the updated studentId
+            const updatedAdmission = await prisma.admissionApplication.findUnique({
+                where: { id },
+            });
+            return updatedAdmission || admission;
         }
 
         return admission;
@@ -164,6 +177,14 @@ export class AdmissionService {
         if (!admission) throw new Error("Admission record not found");
         if (admission.studentId) return admission;
 
+        const studentEmail = admission.studentEmail;
+        if (!studentEmail) throw new Error("Student email is required to create account");
+        
+        // Check if user already exists with this email
+        let user = await prisma.user.findUnique({
+            where: { email: studentEmail },
+        });
+
         const section = await prisma.section.findFirst({
             where: { classId: admission.targetClassId },
             orderBy: { name: "asc" },
@@ -176,41 +197,75 @@ export class AdmissionService {
         });
         const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
 
-        const tempPassword = randomBytes(6).toString("hex");
-        const passwordHash = await bcrypt.hash(tempPassword, 10);
-
-        const studentEmail = `${admission.applicantName.replace(/\s+/g, ".").toLowerCase()}-${admission.id.slice(0, 6)}@school.local`;
         const studentId = `STD-${randomBytes(4).toString("hex").toUpperCase()}`;
+        
+        // If user doesn't exist, create new one with temp password
+        if (!user) {
+            const tempPassword = randomBytes(6).toString("hex").toUpperCase();
+            const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-        const user = await prisma.user.create({
-            data: {
-                name: admission.applicantName,
-                email: studentEmail,
-                passwordHash,
-                role: "STUDENT",
-                studentProfile: {
-                    create: {
-                        studentId,
-                        name: admission.applicantName,
-                        dob: admission.dob,
-                        gender: admission.gender,
-                        bloodGroup: admission.bloodGroup,
-                        religion: admission.religion,
-                        address: admission.address,
-                        photo: admission.photoUrl,
-                        rollNumber: nextRoll,
-                        classId: admission.targetClassId,
-                        sectionId: section.id,
-                    },
+            user = await prisma.user.create({
+                data: {
+                    name: admission.applicantName,
+                    email: studentEmail,
+                    passwordHash,
+                    role: "STUDENT",
                 },
-            },
-            select: { id: true, studentProfile: { select: { id: true } } },
+                select: { id: true, email: true },
+            });
+
+            if (!user?.id) throw new Error("Failed to create user account");
+
+            // Send welcome email with login credentials (non-blocking)
+            try {
+                const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+                await mailService.sendStudentCredentials(
+                    studentEmail,
+                    admission.applicantName,
+                    tempPassword,
+                    loginUrl
+                );
+            } catch (emailError) {
+                console.error(`Failed to send welcome email to ${studentEmail}:`, emailError);
+                // Don't throw - continue creating student profile even if email fails
+                // Student can still login with their credentials
+            }
+        }
+
+        if (!user?.id) throw new Error("User ID is required to create student profile");
+
+        // Create or update student profile
+        let studentProfile = await prisma.student.findFirst({
+            where: { userId: user.id },
         });
 
-        if (user.studentProfile?.id) {
+        if (!studentProfile) {
+            studentProfile = await prisma.student.create({
+                data: {
+                    studentId,
+                    name: admission.applicantName,
+                    dob: admission.dob,
+                    gender: admission.gender,
+                    bloodGroup: admission.bloodGroup,
+                    religion: admission.religion,
+                    address: admission.address,
+                    photo: admission.photoUrl,
+                    rollNumber: nextRoll,
+                    classId: admission.targetClassId,
+                    sectionId: section.id,
+                    userId: user.id,
+                },
+                select: { id: true },
+            });
+
+            if (!studentProfile?.id) throw new Error("Failed to create student profile");
+        }
+
+        // Link admission to student
+        if (studentProfile?.id) {
             await prisma.admissionApplication.update({
                 where: { id: admission.id },
-                data: { studentId: user.studentProfile.id },
+                data: { studentId: studentProfile.id },
             });
         }
 
