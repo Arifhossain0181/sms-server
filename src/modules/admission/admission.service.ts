@@ -164,6 +164,28 @@ export class AdmissionService {
         });
     }
 
+    async getApplicationsByEmail(email: string) {
+        return prisma.admissionApplication.findMany({
+            where: {
+                OR: [
+                    { studentEmail: email },
+                    { guardianEmail: email }
+                ]
+            },
+            select: {
+                id: true,
+                applicantName: true,
+                studentEmail: true,
+                status: true,
+                paymentStatus: true,
+                rejectionReason: true,
+                createdAt: true,
+                targetClass: { select: { id: true, name: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    }
+
     private async _exists(id: string) {
         const admission = await prisma.admissionApplication.findUnique({ where: { id } });
         if (!admission) throw new Error("Admission record not found");
@@ -171,36 +193,27 @@ export class AdmissionService {
     }
 
     private async createStudentFromAdmission(admissionId: string) {
+        console.log(`\n [APPROVAL] Processing admission: ${admissionId}`);
         const admission = await prisma.admissionApplication.findUnique({
             where: { id: admissionId },
         });
         if (!admission) throw new Error("Admission record not found");
-        if (admission.studentId) return admission;
+        if (admission.studentId) {
+            console.log(` Student already created`);
+            return admission;
+        }
 
         const studentEmail = admission.studentEmail;
+        console.log(` Email: ${studentEmail}`);
         if (!studentEmail) throw new Error("Student email is required to create account");
         
-        // Check if user already exists with this email
+        // Check if user already exists
         let user = await prisma.user.findUnique({
             where: { email: studentEmail },
         });
-
-        const section = await prisma.section.findFirst({
-            where: { classId: admission.targetClassId },
-            orderBy: { name: "asc" },
-        });
-        if (!section) throw new Error("Section not found for class");
-
-        const rollAggregate = await prisma.student.aggregate({
-            where: { sectionId: section.id },
-            _max: { rollNumber: true },
-        });
-        const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
-
-        const studentId = `STD-${randomBytes(4).toString("hex").toUpperCase()}`;
         
-        // If user doesn't exist, create new one with temp password
         if (!user) {
+            console.log(`👤 Creating new user account...`);
             const tempPassword = randomBytes(6).toString("hex").toUpperCase();
             const passwordHash = await bcrypt.hash(tempPassword, 10);
 
@@ -211,12 +224,11 @@ export class AdmissionService {
                     passwordHash,
                     role: "STUDENT",
                 },
-                select: { id: true, email: true },
             });
+            console.log(` User created: ${user.email}`);
+            console.log(` Temp password: ${tempPassword}`);
 
-            if (!user?.id) throw new Error("Failed to create user account");
-
-            // Send welcome email with login credentials (non-blocking)
+            // Send welcome email (non-blocking)
             try {
                 const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
                 await mailService.sendStudentCredentials(
@@ -225,21 +237,37 @@ export class AdmissionService {
                     tempPassword,
                     loginUrl
                 );
+                console.log(` Welcome email sent`);
             } catch (emailError) {
-                console.error(`Failed to send welcome email to ${studentEmail}:`, emailError);
-                // Don't throw - continue creating student profile even if email fails
-                // Student can still login with their credentials
+                console.warn(`  Email failed (but continuing):`, (emailError as any)?.message);
             }
+        } else {
+            console.log(`User already exists`);
         }
 
-        if (!user?.id) throw new Error("User ID is required to create student profile");
+        // Get section for class
+        const section = await prisma.section.findFirst({
+            where: { classId: admission.targetClassId },
+            orderBy: { name: "asc" },
+        });
+        if (!section) throw new Error("Section not found for class");
+        console.log(` Section: ${section.name}`);
 
-        // Create or update student profile
+        const rollAggregate = await prisma.student.aggregate({
+            where: { sectionId: section.id },
+            _max: { rollNumber: true },
+        });
+        const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
+
+        const studentId = `STD-${randomBytes(4).toString("hex").toUpperCase()}`;
+        
+        // Create student profile
         let studentProfile = await prisma.student.findFirst({
             where: { userId: user.id },
         });
 
         if (!studentProfile) {
+            console.log(` Creating student profile (roll #${nextRoll})...`);
             studentProfile = await prisma.student.create({
                 data: {
                     studentId,
@@ -255,10 +283,8 @@ export class AdmissionService {
                     sectionId: section.id,
                     userId: user.id,
                 },
-                select: { id: true },
             });
-
-            if (!studentProfile?.id) throw new Error("Failed to create student profile");
+            console.log(`Student profile created`);
         }
 
         // Link admission to student
@@ -267,7 +293,9 @@ export class AdmissionService {
                 where: { id: admission.id },
                 data: { studentId: studentProfile.id },
             });
+            console.log(`Admission linked to student`);
         }
+        console.log(`\n READY: Student ${studentEmail} can now login and access dashboard\n`);
 
         return admission;
     }

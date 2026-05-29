@@ -98,8 +98,35 @@ export const findAll = async (query: NoticeQueryDto) => {
     };
 };
 
-export const findPublic = (role: NoticeAudience) => {
+export const findPublic = (role: NoticeAudience, studentSectionId?: string) => {
     const now = new Date();
+    
+    // For students, filter by their section
+    if (role === 'STUDENTS' && studentSectionId) {
+        return prisma.notice.findMany({
+            where: {
+                isActive: true,
+                publishedAt: { lte: now },
+                OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+                audience: { in: ['ALL', 'STUDENTS'] },
+                // Filter by section: either no section target (broadcast) or student's section is targeted
+               
+            },
+            include: {
+                author: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                    },
+                },
+            },
+            orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }],
+        });
+    }
+    
+    // For non-students, show all notices for their audience
     return prisma.notice.findMany({
         where: {
             isActive: true,

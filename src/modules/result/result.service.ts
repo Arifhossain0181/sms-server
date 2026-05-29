@@ -204,19 +204,24 @@ export const submitBulkResult = async (
 export const getResultByStudent = async (
   studentId: string,
   examId?: string,
+  limit: number = 10,
 ) => {
   const marks = await prisma.mark.findMany({
     where: {
       studentId,
       ...(examId ? { examId } : {}),
     },
-    include: {
-      exam: true,
-      subject: true,
+    select: {
+      id: true,
+      marksObtained: true,
+      grade: true,
+      exam: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, fullMarks: true, passMarks: true } },
     },
     orderBy: {
       createdAt: "desc",
     },
+    take: limit,
   });
 
   const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);

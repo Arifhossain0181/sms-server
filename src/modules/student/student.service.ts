@@ -50,13 +50,15 @@ export class StudentService {
                 throw new Error("Email already exists");
             }
         }
+        // Check roll number uniqueness per section, not globally
         const rollexists = await prisma.student.findFirst({
             where: {
-                rollNumber
+                rollNumber,
+                classId: dto.classId
             }
         });
         if (rollexists) {
-            throw new Error("Roll number already exists");
+            throw new Error("Roll number already exists in this class");
         }
         const classExists = await prisma.class.findUnique({
             where: {
@@ -84,6 +86,17 @@ export class StudentService {
 
         // Create student with optional parent/guardian
         const genderMap = { 'Male': 'MALE', 'Female': 'FEMALE', 'Other': 'OTHER' };
+        const bloodGroupMap = {
+            'A+': 'A_POS',
+            'A-': 'A_NEG',
+            'B+': 'B_POS',
+            'B-': 'B_NEG',
+            'AB+': 'AB_POS',
+            'AB-': 'AB_NEG',
+            'O+': 'O_POS',
+            'O-': 'O_NEG'
+        };
+        
         const student = await prisma.user.create({
             data: {
                 name: dto.name,
@@ -98,7 +111,7 @@ export class StudentService {
                         classId: dto.classId,
                         dob: new Date(dto.dateOfBirth),
                         gender: genderMap[dto.gender as keyof typeof genderMap] as any,
-                        bloodGroup: dto.bloodGroup as any,
+                        bloodGroup: bloodGroupMap[dto.bloodGroup as keyof typeof bloodGroupMap] as any,
                         photo: dto.avatarUrl,
                         address: dto.address,
                         name: dto.name,
@@ -198,7 +211,8 @@ export class StudentService {
                 },
                 parent: {
                     select: {
-                        phone: true
+                        phone: true,
+                        name: true
                     }
                 },
                 class:{
@@ -210,7 +224,9 @@ export class StudentService {
                 },
                 admissionRecord: {
                     select: {
-                        guardianPhone: true
+                        guardianPhone: true,
+                        guardianEmail: true,
+                        guardianName: true
                     }
                 }
             },
@@ -218,11 +234,20 @@ export class StudentService {
                 createdAt:'desc'
             }
         })
-        const flattened = students.map((student) => ({
-            ...student,
-            email: student.user?.email,
-            phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
-        }));
+        const flattened = students.map((student) => {
+            // Try to get guardian email from admission record first, then from parent user email if exists
+            const guardianEmail = student.admissionRecord?.guardianEmail ?? 
+                                 (student.parent?.name 
+                                   ? `${student.parent.name.toLowerCase().replace(/\s+/g, '.')}@school.local` 
+                                   : null);
+            
+            return {
+                ...student,
+                email: student.user?.email,
+                guardianEmail: guardianEmail ?? "—",
+                phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
+            };
+        });
 
         return {
             data: flattened,
@@ -287,6 +312,7 @@ export class StudentService {
         return student;
     }
     async findStudentByUserId(userId:string) {
+        console.log(`\n [DASHBOARD] User accessing dashboard: ${userId}`);
         const student = await prisma.student.findUnique({
             where: {
                 userId
@@ -313,92 +339,305 @@ export class StudentService {
         });
 
         if (!student) {
+            console.log(` Student profile NOT FOUND for user: ${userId}`);
             throw this.notFound("Student not found");
         }
 
+        console.log(` Student found: ${student.user.email}`);
+        console.log(` Dashboard access granted\n`);
         return student;
     }
-    async update(id: string, dto: UpdateStudentDto) {
 
-  //  check student
-  const student = await prisma.student.findUnique({
-    where: { id }
-  });
-
-  if (!student) {
-    throw new Error("Student not found");
-  }
-
-  //  check class
-  if (dto.classId) {
-    const classExists = await prisma.class.findUnique({
-      where: { id: dto.classId }
-    });
-
-    if (!classExists) {
-      throw new Error("Class not found");
-    }
-  }
-
-    const {
-        name,
-        email,
-        dateOfBirth,
-        address,
-        bloodGroup,
-        avatarUrl,
-        classId,
-    } = dto as UpdateStudentDto & { email?: string; dateOfBirth?: string };
-
-    const dob = dateOfBirth ? new Date(dateOfBirth) : undefined;
-    if (dateOfBirth && Number.isNaN(dob?.getTime())) {
-        throw new Error('Invalid dateOfBirth');
-    }
-
-    const userUpdate: { name?: string; email?: string } = {};
-    if (name) userUpdate.name = name;
-    if (email) userUpdate.email = email;
-
-    if (email) {
-        const existingUser = await prisma.user.findUnique({
-            where: { email }
+    async getStudentForEdit(id: string) {
+        /**
+         * Get all student data for editing - returns all fields that can be edited
+         * This is used to auto-populate the edit form with current student information
+         */
+        const student = await prisma.student.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    }
+                },
+                class: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                section: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                parent: {
+                    select: {
+                        id: true,
+                        name: true,
+                        phone: true,
+                        relation: true,
+                        user: {
+                            select: {
+                                email: true
+                            }
+                        }
+                    }
+                }
+            }
         });
-        if (existingUser && existingUser.id !== student.userId) {
-            throw new Error("Email already in use");
+
+        if (!student) {
+            throw this.notFound("Student not found");
         }
+
+        // Return data formatted for edit form - matches UpdateStudentDto structure
+        return {
+            id: student.id,
+            studentId: student.studentId,
+            rollNumber: student.rollNumber,
+            // Personal Information
+            name: student.name,
+            email: student.user?.email,
+            phone: student.parent?.phone,
+            address: student.address,
+            dateOfBirth: student.dob ? student.dob.toISOString().split('T')[0] : null, // Format as YYYY-MM-DD
+            gender: student.gender,
+            bloodGroup: student.bloodGroup,
+            avatarUrl: student.photo,
+            religion: student.religion,
+            // Academic Information
+            classId: student.classId,
+            className: student.class?.name,
+            sectionId: student.sectionId,
+            sectionName: student.section?.name,
+            isActive: student.isActive,
+            // Guardian/Parent Information
+            guardianName: student.parent?.name,
+            guardianEmail: student.parent?.user?.email,
+            guardianPhone: student.parent?.phone,
+            guardianRelation: student.parent?.relation,
+            // Timestamps
+            createdAt: student.createdAt,
+            updatedAt: student.updatedAt
+        };
     }
 
-    const updatedStudent = await prisma.student.update({
-        where: { id },
-        data: {
-            ...(address !== undefined && { address }),
-            ...(avatarUrl !== undefined && { photo: avatarUrl }),
-            ...(bloodGroup !== undefined && { bloodGroup: bloodGroup as any }),
-            ...(dob && { dob }),
-            ...(classId && { class: { connect: { id: classId } } }),
-            ...(name && { name }),
-            ...(Object.keys(userUpdate).length > 0 && { user: { update: userUpdate } }),
-        },
+    async update(id: string, dto: UpdateStudentDto) {
+        // Fetch current student data first (so admin can see what exists)
+        const student = await prisma.student.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                        isActive: true,
+                    }
+                },
+                class: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                section: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                parent: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        name: true,
+                        phone: true
+                    }
+                }
+            }
+        });
 
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      section: {
-        select: {
-          id: true,
-          name: true,
-          class: true,
-        },
-      },
-    },
-  });
+        if (!student) {
+            throw new Error("Student not found");
+        }
 
-  return updatedStudent;
+        // Validate class if provided
+        if (dto.classId) {
+            const classExists = await prisma.class.findUnique({
+                where: { id: dto.classId }
+            });
+            if (!classExists) {
+                throw new Error("Class not found");
+            }
+        }
+
+        // Extract and validate fields
+        const {
+            name,
+            email,
+            dateOfBirth,
+            address,
+            bloodGroup,
+            avatarUrl,
+            classId,
+            phone,
+            guardianName,
+            guardianPhone,
+            guardianEmail,
+            guardianRelation
+        } = dto as UpdateStudentDto & { email?: string; dateOfBirth?: string };
+
+        // Validate dateOfBirth if provided
+        let dob: Date | undefined;
+        if (dateOfBirth) {
+            dob = new Date(dateOfBirth);
+            if (Number.isNaN(dob.getTime())) {
+                throw new Error('Invalid dateOfBirth format');
+            }
+        }
+
+        // Blood group mapping
+        const bloodGroupMap: Record<string, string> = {
+            'A+': 'A_POS',
+            'A-': 'A_NEG',
+            'B+': 'B_POS',
+            'B-': 'B_NEG',
+            'AB+': 'AB_POS',
+            'AB-': 'AB_NEG',
+            'O+': 'O_POS',
+            'O-': 'O_NEG'
+        };
+
+        // Validate email uniqueness if provided
+        if (email && email !== student.user.email) {
+            const existingUser = await prisma.user.findUnique({
+                where: { email }
+            });
+            if (existingUser) {
+                throw new Error("Email already in use by another user");
+            }
+        }
+
+        // Prepare user update data
+        const userUpdate: Record<string, any> = {};
+        if (name !== undefined) userUpdate.name = name;
+        if (email !== undefined) userUpdate.email = email;
+
+        // Map blood group if provided
+        const mappedBloodGroup = bloodGroup !== undefined 
+            ? bloodGroupMap[bloodGroup as keyof typeof bloodGroupMap] || bloodGroup
+            : undefined;
+
+        // Prepare student update data - only include fields that are explicitly provided
+        const studentUpdateData: Record<string, any> = {};
+        
+        if (name !== undefined) studentUpdateData.name = name;
+        if (address !== undefined) studentUpdateData.address = address;
+        if (avatarUrl !== undefined) studentUpdateData.photo = avatarUrl;
+        if (bloodGroup !== undefined) studentUpdateData.bloodGroup = mappedBloodGroup;
+        if (dob !== undefined) studentUpdateData.dob = dob;
+        if (classId !== undefined) {
+            // Use relation connect instead of foreign key
+            studentUpdateData.class = { connect: { id: classId } };
+        }
+        
+        // Update user if there are user field changes
+        if (Object.keys(userUpdate).length > 0) {
+            studentUpdateData.user = { update: userUpdate };
+        }
+
+        // Handle parent/guardian information separately if provided
+        let parentUpdated = false;
+        if (guardianName !== undefined || guardianPhone !== undefined || guardianEmail !== undefined || guardianRelation !== undefined) {
+            if (student.parent?.id) {
+                // Update existing parent
+                const parentUpdateData: Record<string, any> = {};
+                if (guardianName !== undefined) parentUpdateData.name = guardianName;
+                if (guardianPhone !== undefined) parentUpdateData.phone = guardianPhone;
+                
+                if (Object.keys(parentUpdateData).length > 0) {
+                    await prisma.parent.update({
+                        where: { id: student.parent.id },
+                        data: parentUpdateData
+                    });
+                    parentUpdated = true;
+                }
+
+                // Update parent user email if provided
+                if (guardianEmail !== undefined && student.parent.userId) {
+                    await prisma.user.update({
+                        where: { id: student.parent.userId },
+                        data: { email: guardianEmail }
+                    });
+                }
+            } else if (guardianName || guardianEmail) {
+                // Create parent record if guardian info is provided and no parent exists
+                const parentUser = await prisma.user.create({
+                    data: {
+                        name: guardianName || 'Guardian',
+                        email: guardianEmail || `guardian-${Date.now()}@school.local`,
+                        passwordHash: await bcrypt.hash(Math.random().toString(36), 10),
+                        role: 'PARENT'
+                    }
+                });
+
+                const parentRecord = await prisma.parent.create({
+                    data: {
+                        userId: parentUser.id,
+                        name: guardianName || 'Guardian',
+                        phone: guardianPhone || ''
+                    }
+                });
+
+                studentUpdateData.parentId = parentRecord.id;
+                parentUpdated = true;
+            }
+        }
+
+        // Update the student (only with provided fields)
+        const updatedStudent = await prisma.student.update({
+            where: { id },
+            data: studentUpdateData,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                        isActive: true,
+                    }
+                },
+                class: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                section: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                parent: {
+                    select: {
+                        id: true,
+                        name: true,
+                        phone: true
+                    }
+                }
+            }
+        });
+
+        return updatedStudent;
 }
   async delete(id:string){
         const student = await prisma.student.findUnique({

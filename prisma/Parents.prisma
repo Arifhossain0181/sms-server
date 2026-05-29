@@ -8,6 +8,7 @@ model Parent {
   phone            String
   address          String?
   occupation       String?
+  relation         String?  // Relationship to student (Father, Mother, Guardian, Uncle, Aunt, etc.)
   stripeCustomerId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

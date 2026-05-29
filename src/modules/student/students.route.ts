@@ -27,17 +27,23 @@ router.get(
 );
  
 router.get(
+  '/:id/edit',
+  authorizeRoles('ADMIN'),
+  studentController.getStudentForEdit.bind(studentController)
+);
+
+router.get(
   '/:id',
   authorizeRoles('ADMIN', 'TEACHER'),
   studentController.findById.bind(studentController)
 );
- 
-router.patch(
+
+router.put(
   '/:id',
   authorizeRoles('ADMIN'),
   studentController.update.bind(studentController)
 );
- 
+
 router.delete(
   '/:id',
   authorizeRoles('ADMIN'),

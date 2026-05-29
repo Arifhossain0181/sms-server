@@ -15,4 +15,6 @@ model Mark {
   updatedAt     DateTime @updatedAt
 
   @@unique([studentId, examId, subjectId])
+  @@index([studentId])
+  @@index([studentId, examId])
 }

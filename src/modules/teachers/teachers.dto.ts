@@ -18,6 +18,7 @@ export interface CreateTeacherDto {
   bloodGroup?: string;
   salary?: number;
   avatarUrl?: string;
+  subjectId?: string;        // Subject assignment (optional)
 }
  
 export interface UpdateTeacherDto {

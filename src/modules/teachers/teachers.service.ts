@@ -52,7 +52,7 @@ export const TeachersService = {
   const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
   // 4. Create
-  return await prisma.user.create({
+  const newTeacher = await prisma.user.create({
     data: {
       name: dto.name,
       email: dto.email,
@@ -65,6 +65,7 @@ export const TeachersService = {
           name: dto.name,
           email: dto.email,
           phone: dto.phone,
+          gender: dto.gender,
           subjectSpecialization: dto.department,
           joiningDate: new Date(dto.dateOfJoining),
           photo: dto.avatarUrl,
@@ -76,9 +77,41 @@ export const TeachersService = {
       name: true,
       email: true,
       role: true,
-      teacherProfile: true,
+      teacherProfile: {
+        include: {
+          subjectAssignments: {
+            include: { subject: true }
+          }
+        }
+      },
     },
   });
+
+  // 5. Assign subject if provided
+  if (dto.subjectId && newTeacher.teacherProfile?.id) {
+    try {
+      // Check if subject exists
+      const subjectExists = await prisma.subject.findUnique({
+        where: { id: dto.subjectId }
+      });
+
+      if (!subjectExists) {
+        throw new Error(`Subject with ID ${dto.subjectId} not found`);
+      }
+
+      // Create subject assignment
+      await prisma.subjectAssignment.create({
+        data: {
+          subjectId: dto.subjectId,
+          teacherId: newTeacher.teacherProfile.id
+        }
+      });
+    } catch (error) {
+      console.warn("Subject assignment failed:", (error as any)?.message);
+    }
+  }
+
+  return newTeacher;
   },
 
   async findAll(query: TeacherQueryDto) {
@@ -107,28 +140,37 @@ export const TeachersService = {
       },
       orderBy: { createdAt: 'desc' },
     });
-    
 
-    return { teachers, meta };
+    // Transform response to include gender and subject
+    const transformedTeachers = teachers.map(teacher => ({
+      id: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone,
+      gender: teacher.gender ?? '—',
+      createdAt: teacher.createdAt,
+      subject: teacher.subjectAssignments?.[0]?.subject?.name ?? '—',
+      subjectId: teacher.subjectAssignments?.[0]?.subjectId,
+      dateOfBirth: teacher.joiningDate,
+      joiningDate: teacher.joiningDate,
+   
+    }));
+
+    return { teachers: transformedTeachers, meta };
   },
 
  async findById(id: string) {
   const teacher = await prisma.teacher.findUnique({
     where: { id },
     include: {
-      user: true,
+      user: {
+        select: { id: true, name: true, email: true }
+      },
       subjectAssignments: {
-        include: { subject: true },
+        include: { subject: { select: { id: true, name: true } } },
       },
       sectionTeacher: {
-        include: { class: true },
-      },
-      timetableSlots: {
-        include: {
-          subject: true,
-          section: true,
-        },
-        take: 20,
+        include: { class: { select: { id: true, name: true } } },
       },
     },
   });
@@ -140,20 +182,31 @@ export const TeachersService = {
     name: teacher.name,
     email: teacher.email,
     phone: teacher.phone ?? "—",
-
-    // SUBJECT FIX
-    subject:
-      teacher.subjectAssignments?.[0]?.subject?.name ||
-      teacher.subjectSpecialization ||
-      "—",
-
-    //  GENDER FIX
     gender: teacher.gender ?? "—",
-
-    dateOfJoining: teacher.joiningDate,
+    dateOfBirth: teacher.joiningDate,  // Map to dateOfBirth if available
     employeeId: teacher.employeeId,
+    designation: "—",
+    department: teacher.subjectSpecialization ?? "—",
+    qualification: "—",
+    experience: 0,
+    address: "—",
+    joiningDate: teacher.joiningDate,
+    salary: 0,
+    
+    // Subject information
+    subject: teacher.subjectAssignments?.[0]?.subject?.name ?? "—",
+    subjectId: teacher.subjectAssignments?.[0]?.subjectId ?? null,
+    subjectAssignments: teacher.subjectAssignments?.map(sa => ({
+      id: sa.id,
+      subjectId: sa.subject.id,
+      subjectName: sa.subject.name
+    })) ?? [],
 
+    // Class assignments
     classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? [],
+    isActive: teacher.isActive,
+    createdAt: teacher.createdAt,
+    updatedAt: teacher.updatedAt,
   };
 },
 

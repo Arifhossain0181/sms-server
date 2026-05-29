@@ -15,4 +15,6 @@ model StudentAttendance {
   updatedAt DateTime         @updatedAt
 
   @@unique([studentId, date])
+  @@index([studentId])
+  @@index([studentId, date])
 }

@@ -24,6 +24,9 @@ router.post(
   c.uploadDocument.bind(c)
 );
 
+// ── Authenticated: get user's own applications ──────────────────────
+router.get('/my-applications', authenticate, c.getMyApplications.bind(c));
+
 // ── All routes below require Admin auth ────────────────────────────
 router.use(authenticate, authorizeRoles('ADMIN'));
 

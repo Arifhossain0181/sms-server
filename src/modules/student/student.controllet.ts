@@ -6,7 +6,7 @@ import cloudinary from '../../config/cloudinary';
 const studentService = new StudentService();
  
 export class StudentController {
-  async create(req: Request, res: Response, next: NextFunction) {
+  async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const student = await studentService.createStudent(req.body);
       sendSuccess(res, student, 'Student created successfully', 201);
@@ -15,7 +15,7 @@ export class StudentController {
     }
   }
  
-  async findAll(req: Request, res: Response, next: NextFunction) {
+  async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const data = await studentService.findAllStudents(req.query as any);
       sendSuccess(res, data, 'Students fetched');
@@ -24,7 +24,7 @@ export class StudentController {
     }
   }
  
-  async findById(req: Request, res: Response, next: NextFunction) {
+  async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const student = await studentService.findStudentById(String(req.params.id));
       sendSuccess(res, student, 'Student fetched');
@@ -32,8 +32,17 @@ export class StudentController {
       next(err);
     }
   }
+
+  async getStudentForEdit(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const student = await studentService.getStudentForEdit(String(req.params.id));
+      sendSuccess(res, student, 'Student data fetched for edit');
+    } catch (err) {
+      next(err);
+    }
+  }
  
-  async getMyProfile(req: Request, res: Response, next: NextFunction) {
+  async getMyProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const student = await studentService.findStudentByUserId(req.user!.id);
       sendSuccess(res, student, 'Student profile fetched');
@@ -42,7 +51,7 @@ export class StudentController {
     }
   }
  
-  async update(req: Request, res: Response, next: NextFunction) {
+  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const student = await studentService.update(String(req.params.id), req.body);
       sendSuccess(res, student, 'Student updated');
@@ -51,7 +60,7 @@ export class StudentController {
     }
   }
  
-  async delete(req: Request, res: Response, next: NextFunction) {
+  async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       await studentService.delete(String(req.params.id));
       sendSuccess(res, null, 'Student deleted');
@@ -60,7 +69,7 @@ export class StudentController {
     }
   }
  
-  async uploadAvatar(req: Request, res: Response, next: NextFunction) {
+  async uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) throw new Error('No file uploaded');
 
@@ -81,7 +90,7 @@ export class StudentController {
     }
   }
  
-  async getAttendanceSummary(req: Request, res: Response, next: NextFunction) {
+  async getAttendanceSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const data = await studentService.getAttendance(String(req.params.id));
       sendSuccess(res, data, 'Attendance summary fetched');
@@ -90,7 +99,7 @@ export class StudentController {
     }
   }
  
-  async getResultSummary(req: Request, res: Response, next: NextFunction) {
+  async getResultSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const data = await studentService.getResults(String(req.params.id));
       sendSuccess(res, data, 'Result summary fetched');

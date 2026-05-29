@@ -110,9 +110,15 @@ export const getStudentAttendance = async(student:string, month?:number, year?:n
     }
     const records = await prisma.studentAttendance.findMany({
         where,
+        select: {
+            id: true,
+            date: true,
+            status: true,
+        },
         orderBy:{
             date:'desc'
-        }
+        },
+        take: 50,
     })
     const total = records.length;
     const present = records.filter(r => r.status === 'PRESENT').length;

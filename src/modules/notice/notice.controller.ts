@@ -9,6 +9,7 @@ import {
   toggleActive,
 } from './notice.service';
 import { sendSuccess } from '../../utils/response.util';
+import prisma from '../../config/db';
 
 // Map DB role → NoticeAudience
 const roleToAudience: Record<string, any> = {
@@ -37,7 +38,18 @@ export class NoticeController {
   async findPublic(req: Request, res: Response, next: NextFunction) {
     try {
       const audience = roleToAudience[req.user!.role] ?? 'ALL';
-      const notices = await findPublic(audience);
+      let sectionId: string | undefined;
+      
+      // If student, fetch their section
+      if (req.user!.role === 'STUDENT') {
+        const student = await prisma.student.findUnique({
+          where: { userId: req.user!.id },
+          select: { sectionId: true },
+        });
+        sectionId = student?.sectionId;
+      }
+      
+      const notices = await findPublic(audience, sectionId);
       sendSuccess(res, notices, 'Notices fetched');
     } catch (err) { next(err); }
   }

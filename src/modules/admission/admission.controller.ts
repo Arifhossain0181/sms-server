@@ -145,4 +145,11 @@ export class AdmissionController {
       }, 'Stripe session verified');
     } catch (err) { next(err); }
   }
+
+  async getMyApplications(req: Request, res: Response, next: NextFunction) {
+    try {
+      const applications = await admissionService.getApplicationsByEmail(req.user!.email);
+      sendSuccess(res, applications, 'Your applications fetched');
+    } catch (err) { next(err); }
+  }
 }

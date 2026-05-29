@@ -17,7 +17,7 @@ export interface CreateStudentDto {
     guardianName?: string;  // Optional
     guardianEmail?: string;  // Optional
     guardianPhone?: string;  // Optional
-    guradianRelation?: string;  // Optional
+    guardianRelation?: string;  // Optional
     
    
 }

@@ -16851,13 +16851,13 @@ var sendEmail = async ({ to, subject, text }) => {
   if (!user || !pass) {
     throw new Error("SMTP credentials are not configured");
   }
-  const transporter = import_nodemailer.default.createTransport({
+  const transporter2 = import_nodemailer.default.createTransport({
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 587),
     secure: false,
     auth: { user, pass }
   });
-  await transporter.sendMail({
+  await transporter2.sendMail({
     from: process.env.SMTP_FROM || user,
     to,
     subject,
@@ -17284,13 +17284,15 @@ var StudentService = class {
     if (!Number.isInteger(rollNumber)) {
       throw new Error("Roll number must be a valid number");
     }
-    const emailExists = await db_default.user.findUnique({
-      where: {
-        email: dto.email
+    if (dto.email) {
+      const emailExists = await db_default.user.findUnique({
+        where: {
+          email: dto.email
+        }
+      });
+      if (emailExists) {
+        throw new Error("Email already exists");
       }
-    });
-    if (emailExists) {
-      throw new Error("Email already exists");
     }
     const rollexists = await db_default.student.findFirst({
       where: {
@@ -17308,27 +17310,36 @@ var StudentService = class {
     if (!classExists) {
       throw new Error("Class not found");
     }
-    const hashedPassword = await import_bcryptjs2.default.hash(dto.password, 10);
+    const hashedPassword = dto.password ? await import_bcryptjs2.default.hash(dto.password, 10) : "";
+    const studentId = `STU-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const section = await db_default.section.findFirst({
+      where: {
+        classId: dto.classId
+      }
+    });
+    if (!section) {
+      throw new Error("No section found for this class");
+    }
+    const genderMap = { "Male": "MALE", "Female": "FEMALE", "Other": "OTHER" };
     const student = await db_default.user.create({
       data: {
         name: dto.name,
-        email: dto.email,
+        email: dto.email || `student-${Date.now()}@school.local`,
+        // Generate temp email if not provided
         passwordHash: hashedPassword,
         role: "STUDENT",
-        student: {
+        studentProfile: {
           create: {
+            studentId,
             rollNumber,
+            sectionId: section.id,
             classId: dto.classId,
-            dateOfBirth: new Date(dto.dateOfBirth),
-            gender: dto.gender,
+            dob: new Date(dto.dateOfBirth),
+            gender: genderMap[dto.gender],
             bloodGroup: dto.bloodGroup,
-            phone: dto.phoneNumber,
+            photo: dto.avatarUrl,
             address: dto.address,
-            avatarUrl: dto.avatarUrl,
-            guardianName: dto.guardianName,
-            guardianPhone: dto.guardianPhone,
-            guardianEmail: dto.guardianEmail,
-            guardianRelation: dto.guradianRelation
+            name: dto.name
           }
         }
       },
@@ -17338,9 +17349,49 @@ var StudentService = class {
         email: true,
         role: true,
         createdAt: true,
-        student: true
+        studentProfile: {
+          select: {
+            id: true,
+            studentId: true,
+            rollNumber: true,
+            classId: true,
+            sectionId: true,
+            dob: true,
+            gender: true,
+            bloodGroup: true,
+            photo: true,
+            address: true,
+            name: true
+          }
+        }
       }
     });
+    if (dto.guardianName && dto.guardianEmail) {
+      const parentUser = await db_default.user.create({
+        data: {
+          name: dto.guardianName,
+          email: dto.guardianEmail,
+          passwordHash: await import_bcryptjs2.default.hash(Math.random().toString(36), 10),
+          // Random password for guardian
+          role: "PARENT"
+        }
+      });
+      const parentRecord = await db_default.parent.create({
+        data: {
+          userId: parentUser.id,
+          name: dto.guardianName,
+          phone: dto.guardianPhone || ""
+        }
+      });
+      if (student.studentProfile?.id) {
+        await db_default.student.update({
+          where: { id: student.studentProfile.id },
+          data: {
+            parentId: parentRecord.id
+          }
+        });
+      }
+    }
     return student;
   }
   async findAllStudents(query) {
@@ -17351,7 +17402,6 @@ var StudentService = class {
       ...search && {
         OR: [
           { name: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } },
           ...isNaN(Number(search)) ? [] : [{ rollNumber: Number(search) }]
         ]
       }
@@ -17470,6 +17520,8 @@ var StudentService = class {
     return student;
   }
   async findStudentByUserId(userId) {
+    console.log(`
+\u{1F4CC} [DASHBOARD] User accessing dashboard: ${userId}`);
     const student = await db_default.student.findUnique({
       where: {
         userId
@@ -17495,8 +17547,12 @@ var StudentService = class {
       }
     });
     if (!student) {
+      console.log(`\u274C Student profile NOT FOUND for user: ${userId}`);
       throw this.notFound("Student not found");
     }
+    console.log(`\u2713 Student found: ${student.user.email}`);
+    console.log(`\u2705 Dashboard access granted
+`);
     return student;
   }
   async update(id, dto) {
@@ -18291,7 +18347,27 @@ var createExam = async (dto) => {
     data: {
       name: dto.name,
       type: examType,
-      createdAt
+      createdAt,
+      schedules: {
+        create: [
+          {
+            classId: dto.classId,
+            subjectId: dto.subjectId,
+            examDate: createdAt,
+            startTime: dto.startTime,
+            endTime: dto.endTime
+          }
+        ]
+      },
+      totalMarks: dto.totalMarks
+    },
+    include: {
+      schedules: {
+        include: {
+          subject: true,
+          class: true
+        }
+      }
     }
   });
 };
@@ -18319,7 +18395,8 @@ var getAllExams = async (classId) => {
       class: schedule?.class,
       classId: schedule?.classId,
       date: schedule?.examDate,
-      totalMarks: schedule?.subject?.fullMarks
+      startTime: schedule?.startTime,
+      endTime: schedule?.endTime
     };
   });
 };
@@ -18810,9 +18887,15 @@ var getStudentAttendance = async (student, month, year) => {
   }
   const records = await db_default.studentAttendance.findMany({
     where,
+    select: {
+      id: true,
+      date: true,
+      status: true
+    },
     orderBy: {
       date: "desc"
-    }
+    },
+    take: 50
   });
   const total = records.length;
   const present = records.filter((r) => r.status === "PRESENT").length;
@@ -18980,13 +19063,34 @@ var paginate2 = async (model, where, page, limit) => {
 // src/modules/teachers/teachers.service.ts
 var TeachersService = {
   async create(dto) {
-    const emailExists = await db_default.user.findUnique({ where: { email: dto.email } });
-    if (emailExists) throw new Error("Email already exists");
-    const employeeExists = await db_default.teacher.findUnique({ where: { employeeId: dto.TeachersId } });
-    if (employeeExists) throw new Error("Teacher ID already exists");
+    const emailExists = await db_default.user.findUnique({
+      where: { email: dto.email }
+    });
+    if (emailExists) {
+      throw { status: 409, message: "Email already exists" };
+    }
+    let employeeId;
+    if (dto.TeachersId) {
+      employeeId = dto.TeachersId;
+      const exists = await db_default.teacher.findUnique({
+        where: { employeeId }
+      });
+      if (exists) {
+        throw { status: 409, message: "Teacher ID already exists" };
+      }
+    } else {
+      const lastTeacher = await db_default.teacher.findFirst({
+        orderBy: { createdAt: "desc" }
+      });
+      let next = 1;
+      if (lastTeacher?.employeeId) {
+        next = Number(lastTeacher.employeeId) + 1;
+      }
+      employeeId = String(next).padStart(2, "0");
+    }
     const rawPassword = dto.password ?? (0, import_node_crypto2.randomBytes)(4).toString("hex");
     const hashedPassword = await import_bcryptjs3.default.hash(rawPassword, 10);
-    const teacherUser = await db_default.user.create({
+    return await db_default.user.create({
       data: {
         name: dto.name,
         email: dto.email,
@@ -18994,11 +19098,12 @@ var TeachersService = {
         role: "TEACHER",
         teacherProfile: {
           create: {
-            employeeId: dto.TeachersId,
+            employeeId,
+            // FINAL VALUE (manual or auto)
             name: dto.name,
             email: dto.email,
             phone: dto.phone,
-            subjectSpecialization: dto.department ?? dto.designation,
+            subjectSpecialization: dto.department,
             joiningDate: new Date(dto.dateOfJoining),
             photo: dto.avatarUrl
           }
@@ -19009,11 +19114,9 @@ var TeachersService = {
         name: true,
         email: true,
         role: true,
-        createdAt: true,
         teacherProfile: true
       }
     });
-    return teacherUser;
   },
   async findAll(query) {
     const { page = "1", limit = "10", search } = query;
@@ -19044,20 +19147,36 @@ var TeachersService = {
     const teacher = await db_default.teacher.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, email: true } },
-        subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        user: true,
+        subjectAssignments: {
+          include: { subject: true }
+        },
+        sectionTeacher: {
+          include: { class: true }
+        },
         timetableSlots: {
           include: {
-            subject: { select: { id: true, name: true } },
-            section: { select: { id: true, name: true } }
+            subject: true,
+            section: true
           },
           take: 20
         }
       }
     });
     if (!teacher) throw new Error("Teacher not found");
-    return teacher;
+    return {
+      id: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone ?? "\u2014",
+      // SUBJECT FIX
+      subject: teacher.subjectAssignments?.[0]?.subject?.name || teacher.subjectSpecialization || "\u2014",
+      //  GENDER FIX
+      gender: teacher.gender ?? "\u2014",
+      dateOfJoining: teacher.joiningDate,
+      employeeId: teacher.employeeId,
+      classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? []
+    };
   },
   async findByUserId(userId) {
     const teacher = await db_default.teacher.findUnique({
@@ -19153,7 +19272,7 @@ var TeachersService = {
   async getTeacherSchedule(id) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
     if (!teacher) throw new Error("Teacher not found");
-    return db_default.timetableSlot.findMany({
+    return db_default.timetable.findMany({
       where: { teacherId: id },
       include: {
         subject: { select: { id: true, name: true } },
@@ -19407,14 +19526,37 @@ var recalculateAndSaveReportCard = async (studentId, examId) => {
       gpa
     }
   });
-  return { reportCard, totalObtained, totalFull, percentage, grade, gpa, isPassed: !failed };
+  return {
+    reportCard,
+    totalObtained,
+    totalFull,
+    percentage,
+    grade,
+    gpa,
+    isPassed: !failed
+  };
 };
-var submitResult = async (dto) => {
+var submitResult = async (dto, authUser) => {
+  if (!dto.examId) throw { status: 400, message: "examId is required" };
   const exam = await db_default.exam.findUnique({ where: { id: dto.examId } });
   if (!exam) throw { status: 404, message: "Exam not found" };
-  const student = await db_default.student.findUnique({ where: { id: dto.studentId }, select: { id: true } });
+  const student = await db_default.student.findUnique({
+    where: { id: dto.studentId },
+    select: { id: true }
+  });
   if (!student) throw { status: 404, message: "Student not found" };
-  if (!dto.marks.length) throw { status: 400, message: "At least one subject mark is required" };
+  if (!dto.marks.length)
+    throw { status: 400, message: "At least one subject mark is required" };
+  let currentTeacherId;
+  if (authUser?.role === "TEACHER") {
+    const teacher = await db_default.teacher.findUnique({
+      where: { userId: authUser.id },
+      select: { id: true }
+    });
+    if (!teacher)
+      throw { status: 403, message: "Teacher profile not found for this user" };
+    currentTeacherId = teacher.id;
+  }
   const subjects = await db_default.subject.findMany({
     where: { id: { in: dto.marks.map((m) => m.subjectId) } },
     include: {
@@ -19429,13 +19571,28 @@ var submitResult = async (dto) => {
   await db_default.$transaction(async (tx) => {
     for (const m of dto.marks) {
       const subject = subjectMap.get(m.subjectId);
-      if (!subject) throw { status: 404, message: `Subject not found: ${m.subjectId}` };
+      if (!subject)
+        throw { status: 404, message: `Subject not found: ${m.subjectId}` };
       if (m.marksObtained < 0 || m.marksObtained > subject.fullMarks) {
-        throw { status: 400, message: `Marks must be between 0 and ${subject.fullMarks} for ${subject.name}` };
+        throw {
+          status: 400,
+          message: `Marks must be between 0 and ${subject.fullMarks} for ${subject.name}`
+        };
       }
-      const assignedTeacher = subject.assignments[0];
+      let assignedTeacher = currentTeacherId ? subject.assignments.find((a) => a.teacherId === currentTeacherId) : void 0;
       if (!assignedTeacher) {
-        throw { status: 400, message: `No teacher assigned for subject ${subject.name}` };
+        assignedTeacher = subject.assignments[0];
+      }
+      if (!assignedTeacher) {
+        if (authUser?.role === "ADMIN") {
+          throw {
+            status: 400,
+            message: `No teacher assignment found for subject ${subject.name}. Please assign a teacher first.`
+          };
+        }
+        if (currentTeacherId) {
+          assignedTeacher = { teacherId: currentTeacherId };
+        }
       }
       const percentage = subject.fullMarks > 0 ? m.marksObtained / subject.fullMarks * 100 : 0;
       const { grade, gpa } = calculateGrade(percentage);
@@ -19477,24 +19634,28 @@ var submitResult = async (dto) => {
   } catch (_) {
   }
   return {
-    studentId: dto.studentId,
-    examId: dto.examId,
-    ...summary
+    success: true,
+    message: "result submitted successfll",
+    summary
   };
 };
-var getResultByStudent = async (studentId, examId) => {
+var getResultByStudent = async (studentId, examId, limit = 10) => {
   const marks = await db_default.mark.findMany({
     where: {
       studentId,
       ...examId ? { examId } : {}
     },
-    include: {
-      exam: true,
-      subject: true
+    select: {
+      id: true,
+      marksObtained: true,
+      grade: true,
+      exam: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, fullMarks: true, passMarks: true } }
     },
     orderBy: {
       createdAt: "desc"
-    }
+    },
+    take: limit
   });
   const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
   const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
@@ -19591,7 +19752,10 @@ var updateMark = async (id, dto) => {
       gpa
     }
   });
-  const summary = await recalculateAndSaveReportCard(updated.studentId, updated.examId);
+  const summary = await recalculateAndSaveReportCard(
+    updated.studentId,
+    updated.examId
+  );
   return { mark: updated, summary };
 };
 var getFailedStudents3 = async (examId) => {
@@ -19620,7 +19784,10 @@ var getFailedStudents3 = async (examId) => {
       passMarks: mark.subject.passMarks
     };
     if (!current) {
-      grouped.set(mark.studentId, { student: mark.student, marks: [markEntry] });
+      grouped.set(mark.studentId, {
+        student: mark.student,
+        marks: [markEntry]
+      });
       continue;
     }
     current.marks.push(markEntry);
@@ -19636,8 +19803,24 @@ var toSingleString = (value) => {
 };
 var submitResult2 = async (req, res, next) => {
   try {
-    const data = await submitResult(req.body);
+    const authUser = req.user;
+    if (!authUser) throw { status: 401, message: "Unauthorized" };
+    const examId = req.body.examId || toSingleString(req.query.examId);
+    const { studentId, marks } = req.body;
+    const data = await submitResult({ examId, studentId, marks }, authUser);
     sendSuccess(res, data, "Result submitted", 201);
+  } catch (err) {
+    next(err);
+  }
+};
+var submitBulkResult = async (req, res, next) => {
+  try {
+    const authUser = req.user;
+    if (!authUser) throw { status: 401, message: "Unauthorized" };
+    const examId = req.body.examId || toSingleString(req.query.examId);
+    const { studentId, marks } = req.body;
+    const data = await submitResult({ examId, studentId, marks }, authUser);
+    sendSuccess(res, data, "Results submitted", 201);
   } catch (err) {
     next(err);
   }
@@ -19687,6 +19870,7 @@ var getFailedStudents4 = async (req, res, next) => {
 // src/modules/result/result.router.ts
 var router8 = (0, import_express8.Router)();
 router8.post("/", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitResult2);
+router8.post("/bulk", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitBulkResult);
 router8.get("/student/:studentId", authenticate, getResultByStudent2);
 router8.get("/exam/:examId", authenticate, getResultByExam2);
 router8.get("/exam/:examId/failed", authenticate, authorizeRoles("ADMIN", "TEACHER"), getFailedStudents4);
@@ -19695,6 +19879,114 @@ var result_router_default = router8;
 
 // src/modules/admission/admission.routes.ts
 var import_express9 = require("express");
+
+// src/config/mail.ts
+var import_nodemailer2 = __toESM(require("nodemailer"));
+var transporter = import_nodemailer2.default.createTransport({
+  host: process.env.MAIL_HOST || "smtp.gmail.com",
+  port: Number(process.env.MAIL_PORT) || 587,
+  secure: process.env.MAIL_SECURE === "true",
+  // true for 465, false for other ports
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASSWORD
+  }
+});
+var mailService = {
+  async send(options) {
+    try {
+      const from = process.env.MAIL_FROM || process.env.MAIL_USER || "noreply@sms.local";
+      const info = await transporter.sendMail({
+        from,
+        ...options
+      });
+      console.log("Email sent:", info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error("Email send error:", error);
+      return { success: false, error };
+    }
+  },
+  // Send student account creation email with credentials
+  async sendStudentCredentials(email, studentName, tempPassword, loginUrl) {
+    const subject = "\u{1F393} Your Student Account Has Been Created";
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+            .header h2 { margin: 0; }
+            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
+            .credentials { background: white; padding: 15px; border-left: 4px solid #667eea; margin: 15px 0; border-radius: 4px; }
+            .field { margin: 10px 0; }
+            .label { font-weight: bold; color: #333; }
+            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
+            .button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
+            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>Welcome to School Management System \u{1F393}</h2>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${studentName}</strong>,</p>
+              
+              <p>Congratulations! Your admission has been <strong>approved</strong> \u2705</p>
+              
+              <p>Your student account has been created. Use the credentials below to log in:</p>
+              
+              <div class="credentials">
+                <div class="field">
+                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="value">${email}</div>
+                </div>
+                <div class="field">
+                  <div class="label">\u{1F510} Temporary Password:</div>
+                  <div class="value">${tempPassword}</div>
+                </div>
+              </div>
+              
+              <div class="warning">
+                <strong> Important:</strong> This is a temporary password. After logging in, you must change it immediately to a secure password of your choice.
+              </div>
+              
+              <p>
+                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
+              </p>
+              
+              <p><strong>Next Steps:</strong></p>
+              <ol>
+                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
+                <li>Log in with your email and temporary password</li>
+                <li>Change your password immediately</li>
+                <li>Start using your student dashboard!</li>
+              </ol>
+              
+              <p>If you have any issues, please contact the school administration.</p>
+              
+              <p>Best regards,<br><strong>School Management System</strong></p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    return this.send({
+      to: email,
+      subject,
+      html
+    });
+  }
+};
 
 // src/modules/admission/admission.service.ts
 var import_bcryptjs4 = __toESM(require("bcryptjs"));
@@ -19706,7 +19998,12 @@ var AdmissionService = class {
     });
     if (!classExists) throw new Error("Class not found");
     const existing = await db_default.admissionApplication.findFirst({
-      where: { guardianEmail: dto.guardianEmail }
+      where: {
+        OR: [
+          { guardianEmail: dto.guardianEmail },
+          { studentEmail: dto.studentEmail }
+        ]
+      }
     });
     if (existing) {
       throw new Error("\u098F\u0987 \u0987\u09AE\u09C7\u0987\u09B2 \u09A6\u09BF\u09AF\u09BC\u09C7 \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 \u098F\u0995\u099F\u09BF admission \u0986\u099B\u09C7");
@@ -19714,6 +20011,7 @@ var AdmissionService = class {
     return db_default.admissionApplication.create({
       data: {
         applicantName: dto.applicantName,
+        studentEmail: dto.studentEmail,
         dob: new Date(dto.dob),
         gender: dto.gender,
         religion: dto.religion,
@@ -19779,6 +20077,7 @@ var AdmissionService = class {
       where: { id },
       data: {
         applicantName: dto.applicantName,
+        ...dto.studentEmail && { studentEmail: dto.studentEmail },
         ...dto.dob && { dob: new Date(dto.dob) },
         gender: dto.gender,
         religion: dto.religion,
@@ -19805,6 +20104,10 @@ var AdmissionService = class {
     });
     if (dto.status === "APPROVED" && !admission.studentId) {
       await this.createStudentFromAdmission(admission.id);
+      const updatedAdmission = await db_default.admissionApplication.findUnique({
+        where: { id }
+      });
+      return updatedAdmission || admission;
     }
     return admission;
   }
@@ -19830,61 +20133,123 @@ var AdmissionService = class {
       orderBy: { numericLevel: "asc" }
     });
   }
+  async getApplicationsByEmail(email) {
+    return db_default.admissionApplication.findMany({
+      where: {
+        OR: [
+          { studentEmail: email },
+          { guardianEmail: email }
+        ]
+      },
+      select: {
+        id: true,
+        applicantName: true,
+        studentEmail: true,
+        status: true,
+        paymentStatus: true,
+        rejectionReason: true,
+        createdAt: true,
+        targetClass: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+  }
   async _exists(id) {
     const admission = await db_default.admissionApplication.findUnique({ where: { id } });
     if (!admission) throw new Error("Admission record not found");
     return admission;
   }
   async createStudentFromAdmission(admissionId) {
+    console.log(`
+ [APPROVAL] Processing admission: ${admissionId}`);
     const admission = await db_default.admissionApplication.findUnique({
       where: { id: admissionId }
     });
     if (!admission) throw new Error("Admission record not found");
-    if (admission.studentId) return admission;
+    if (admission.studentId) {
+      console.log(` Student already created`);
+      return admission;
+    }
+    const studentEmail = admission.studentEmail;
+    console.log(` Email: ${studentEmail}`);
+    if (!studentEmail) throw new Error("Student email is required to create account");
+    let user = await db_default.user.findUnique({
+      where: { email: studentEmail }
+    });
+    if (!user) {
+      console.log(`\u{1F464} Creating new user account...`);
+      const tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+      const passwordHash = await import_bcryptjs4.default.hash(tempPassword, 10);
+      user = await db_default.user.create({
+        data: {
+          name: admission.applicantName,
+          email: studentEmail,
+          passwordHash,
+          role: "STUDENT"
+        }
+      });
+      console.log(` User created: ${user.email}`);
+      console.log(` Temp password: ${tempPassword}`);
+      try {
+        const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
+        await mailService.sendStudentCredentials(
+          studentEmail,
+          admission.applicantName,
+          tempPassword,
+          loginUrl
+        );
+        console.log(` Welcome email sent`);
+      } catch (emailError) {
+        console.warn(`  Email failed (but continuing):`, emailError?.message);
+      }
+    } else {
+      console.log(`User already exists`);
+    }
     const section = await db_default.section.findFirst({
       where: { classId: admission.targetClassId },
       orderBy: { name: "asc" }
     });
     if (!section) throw new Error("Section not found for class");
+    console.log(` Section: ${section.name}`);
     const rollAggregate = await db_default.student.aggregate({
       where: { sectionId: section.id },
       _max: { rollNumber: true }
     });
     const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
-    const tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex");
-    const passwordHash = await import_bcryptjs4.default.hash(tempPassword, 10);
-    const studentEmail = `${admission.applicantName.replace(/\s+/g, ".").toLowerCase()}-${admission.id.slice(0, 6)}@school.local`;
     const studentId = `STD-${(0, import_node_crypto3.randomBytes)(4).toString("hex").toUpperCase()}`;
-    const user = await db_default.user.create({
-      data: {
-        name: admission.applicantName,
-        email: studentEmail,
-        passwordHash,
-        role: "STUDENT",
-        studentProfile: {
-          create: {
-            studentId,
-            name: admission.applicantName,
-            dob: admission.dob,
-            gender: admission.gender,
-            bloodGroup: admission.bloodGroup,
-            religion: admission.religion,
-            address: admission.address,
-            photo: admission.photoUrl,
-            rollNumber: nextRoll,
-            classId: admission.targetClassId,
-            sectionId: section.id
-          }
-        }
-      },
-      select: { id: true, studentProfile: { select: { id: true } } }
+    let studentProfile = await db_default.student.findFirst({
+      where: { userId: user.id }
     });
-    if (user.studentProfile?.id) {
+    if (!studentProfile) {
+      console.log(` Creating student profile (roll #${nextRoll})...`);
+      studentProfile = await db_default.student.create({
+        data: {
+          studentId,
+          name: admission.applicantName,
+          dob: admission.dob,
+          gender: admission.gender,
+          bloodGroup: admission.bloodGroup,
+          religion: admission.religion,
+          address: admission.address,
+          photo: admission.photoUrl,
+          rollNumber: nextRoll,
+          classId: admission.targetClassId,
+          sectionId: section.id,
+          userId: user.id
+        }
+      });
+      console.log(`Student profile created`);
+    }
+    if (studentProfile?.id) {
       await db_default.admissionApplication.update({
         where: { id: admission.id },
-        data: { studentId: user.studentProfile.id }
+        data: { studentId: studentProfile.id }
       });
+      console.log(`Admission linked to student`);
     }
+    console.log(`
+ READY: Student ${studentEmail} can now login and access dashboard
+`);
     return admission;
   }
 };
@@ -19900,6 +20265,12 @@ var AdmissionController = class {
   /** Public — no auth required */
   async apply(req, res, next) {
     try {
+      const { applicantName, studentEmail, guardianName, guardianEmail, guardianPhone, targetClassId, address, gender, dob } = req.body;
+      if (!studentEmail) {
+        const err = new Error("studentEmail is required for login after approval");
+        err.status = 400;
+        throw err;
+      }
       const admission = await admissionService.create(req.body);
       sendSuccess(res, admission, "Application submitted successfully", 201);
     } catch (err) {
@@ -20034,6 +20405,14 @@ var AdmissionController = class {
       next(err);
     }
   }
+  async getMyApplications(req, res, next) {
+    try {
+      const applications = await admissionService.getApplicationsByEmail(req.user.email);
+      sendSuccess(res, applications, "Your applications fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/modules/admission/admission.routes.ts
@@ -20048,6 +20427,7 @@ router9.post(
   upload.single("document"),
   c.uploadDocument.bind(c)
 );
+router9.get("/my-applications", authenticate, c.getMyApplications.bind(c));
 router9.use(authenticate, authorizeRoles("ADMIN"));
 router9.get("/stats", c.getStats.bind(c));
 router9.get("/", c.findAll.bind(c));
@@ -20733,8 +21113,30 @@ var findAll2 = async (query) => {
     meta
   };
 };
-var findPublic = (role) => {
+var findPublic = (role, studentSectionId) => {
   const now = /* @__PURE__ */ new Date();
+  if (role === "STUDENTS" && studentSectionId) {
+    return db_default.notice.findMany({
+      where: {
+        isActive: true,
+        publishedAt: { lte: now },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        audience: { in: ["ALL", "STUDENTS"] }
+        // Filter by section: either no section target (broadcast) or student's section is targeted
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
+    });
+  }
   return db_default.notice.findMany({
     where: {
       isActive: true,
@@ -20839,7 +21241,15 @@ var NoticeController = class {
   async findPublic(req, res, next) {
     try {
       const audience = roleToAudience[req.user.role] ?? "ALL";
-      const notices = await findPublic(audience);
+      let sectionId;
+      if (req.user.role === "STUDENT") {
+        const student = await db_default.student.findUnique({
+          where: { userId: req.user.id },
+          select: { sectionId: true }
+        });
+        sectionId = student?.sectionId;
+      }
+      const notices = await findPublic(audience, sectionId);
       sendSuccess(res, notices, "Notices fetched");
     } catch (err) {
       next(err);
@@ -20955,9 +21365,11 @@ app.get("/", (req, res) => {
 });
 app.use("/api/v1", routes_default);
 app.use(errorMiddleware);
-var PORT = process.env.PORT || 5e3;
+var PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`
+ Server running on port ${PORT}
+`);
 });
 /*! Bundled license information:
 
