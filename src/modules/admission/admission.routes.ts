@@ -31,11 +31,12 @@ router.get('/my-applications', authenticate, c.getMyApplications.bind(c));
 router.use(authenticate, authorizeRoles('ADMIN'));
 
 router.get('/stats',                  c.getStats.bind(c));
+router.post('/convert-to-student',    c.convertToStudent.bind(c));
+router.patch('/:id/status',           c.updateStatus.bind(c));
 router.get('/',                       c.findAll.bind(c));
+router.post('/',                      c.apply.bind(c));
 router.get('/:id',                    c.findById.bind(c));
 router.patch('/:id',                  c.update.bind(c));
-router.patch('/:id/status',           c.updateStatus.bind(c));
-router.post('/convert-to-student',    c.convertToStudent.bind(c));
 router.delete('/:id',                 c.delete.bind(c));
 
 export default router;

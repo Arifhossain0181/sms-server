@@ -149,7 +149,7 @@ export const TeachersService = {
       phone: teacher.phone,
       gender: teacher.gender ?? '—',
       createdAt: teacher.createdAt,
-      subject: teacher.subjectAssignments?.[0]?.subject?.name ?? '—',
+      subject: teacher.subjectAssignments?.[0]?.subject?.name ?? teacher.subjectSpecialization ?? '—',
       subjectId: teacher.subjectAssignments?.[0]?.subjectId,
       dateOfBirth: teacher.joiningDate,
       joiningDate: teacher.joiningDate,

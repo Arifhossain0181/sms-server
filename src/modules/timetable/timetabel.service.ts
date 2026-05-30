@@ -83,10 +83,10 @@ export const finAll= async (query:TimetableQueryDto) =>{
             subject:true,
             teacher:true
         },
-        orderBy:{
-            dayOfWeek:'asc',
-            startTime:'asc'
-        }
+        orderBy:[
+            { dayOfWeek:'asc' },
+            { startTime:'asc' }
+        ]
     });
 }
 
@@ -101,10 +101,10 @@ export const getClassWeeklyView = async(classId:string) =>{
           subject: true,
             teacher: true,
         },
-        orderBy: {
-          dayOfWeek: 'asc',
-          startTime: 'asc'
-        }
+        orderBy: [
+          { dayOfWeek: 'asc' },
+          { startTime: 'asc' }
+        ]
 
       }) // Group by dayOfWeek
       const week: Record<string, typeof slots> = {};
@@ -128,9 +128,10 @@ export const getTeacherWeeklyView = async(teacherId:string) =>{
             subject:true,
             teacher:true
         },
-        orderBy:{
-            dayOfWeek:'asc',
-            startTime:'asc'}
+        orderBy:[
+            { dayOfWeek:'asc' },
+            { startTime:'asc' }
+        ]
     })
     const week: Record<string, typeof slots> = {};
     for (const slot of slots) {

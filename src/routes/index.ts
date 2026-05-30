@@ -11,6 +11,7 @@ import admissionRoutes from '../modules/admission/admission.routes';
 import feeRoutes from '../modules/fee/router';
 import teachingApplicationRoutes from '../modules/teachingApplication/teachingApplication.routes';
 import noticeRoutes from '../modules/notice/notice.route';
+import timetableRoutes from '../modules/timetable/timetable.routes';
 
 const router = express.Router();
 
@@ -31,5 +32,6 @@ router.use('/admission', admissionRoutes);
 router.use('/fees', feeRoutes);
 router.use('/teaching', teachingApplicationRoutes);
 router.use('/notices', noticeRoutes);
+router.use('/timetable', timetableRoutes);
 
 export default router;
