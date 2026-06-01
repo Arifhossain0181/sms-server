@@ -117,23 +117,31 @@ export const submitResult = async (
         };
       }
 
-      let assignedTeacher = currentTeacherId
-        ? subject.assignments.find((a) => a.teacherId === currentTeacherId)
-        : undefined;
+      // Determine which teacher to use
+      let teacherToAssign: string | undefined;
 
-      if (!assignedTeacher) {
-        assignedTeacher = subject.assignments[0];
-      }
-
-      if (!assignedTeacher) {
-        if (authUser?.role === "ADMIN") {
+      // For TEACHER: Must be assigned to this subject
+      if (currentTeacherId) {
+        const isAssignedToSubject = subject.assignments.some(
+          (a) => a.teacherId === currentTeacherId
+        );
+        if (!isAssignedToSubject) {
           throw {
-            status: 400,
-            message: `No teacher assignment found for subject ${subject.name}. Please assign a teacher first.`,
+            status: 403,
+            message: `You are not assigned to teach ${subject.name}. Please use an assigned subject.`,
           };
         }
-        if (currentTeacherId) {
-          assignedTeacher = { teacherId: currentTeacherId };
+        teacherToAssign = currentTeacherId;
+      } else {
+        // For ADMIN: Use first assigned teacher, or allow any teacher if multiple
+        if (subject.assignments.length > 0) {
+          teacherToAssign = subject.assignments[0].teacherId;
+        } else {
+          // No teacher assigned to this subject - ADMIN must assign one first
+          throw {
+            status: 400,
+            message: `No teacher assigned to subject "${subject.name}". Please assign a teacher to this subject first.`,
+          };
         }
       }
 
@@ -153,13 +161,13 @@ export const submitResult = async (
           studentId: dto.studentId,
           examId: dto.examId,
           subjectId: m.subjectId,
-          teacherId: assignedTeacher.teacherId,
+          teacherId: teacherToAssign,
           marksObtained: m.marksObtained,
           grade,
           gpa,
         },
         update: {
-          teacherId: assignedTeacher.teacherId,
+          teacherId: teacherToAssign,
           marksObtained: m.marksObtained,
           grade,
           gpa,
@@ -192,13 +200,31 @@ export const submitBulkResult = async (
   dtos: SubmitResultDto[],
   authUser?: { id: string; role: string },
 ) => {
-  const results = [];
-  for (const dto of dtos) {
-    const result = await submitResult(dto, authUser);
-    results.push(result);
+  if (!dtos || dtos.length === 0) {
+    throw { status: 400, message: "No result entries provided" };
   }
-  const exam = await prisma.exam.findUnique({ where: { id: dtos[0].examId } });
-  return results;
+
+  const results = [];
+  for (let i = 0; i < dtos.length; i++) {
+    try {
+      const result = await submitResult(dtos[i], authUser);
+      results.push(result);
+    } catch (error: any) {
+      // Re-throw with context about which student failed
+      const errorMessage = error.message || 'Unknown error';
+      throw {
+        status: error.status || 400,
+        message: `Student ${i + 1}: ${errorMessage}`,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    message: `Marks submitted for ${results.length} student(s)`,
+    totalProcessed: results.length,
+    results,
+  };
 };
 
 export const getResultByStudent = async (
