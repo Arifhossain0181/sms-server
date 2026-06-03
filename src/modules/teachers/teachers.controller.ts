@@ -102,18 +102,67 @@ export class TeacherController {
  
   async getSchedule(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await teacherService.getTeacherSchedule(String(req.params.id));
-      sendSuccess(res, data, 'Schedule fetched');
+      let teacherId = String(req.params.id);
+      console.log('getSchedule: Starting with ID:', teacherId);
+      
+      // First, check if the ID is a user ID and try to find the teacher
+      try {
+        const teacherByUserId = await teacherService.getTeacherIdByUserId(teacherId);
+        console.log('getSchedule: Teacher lookup result:', teacherByUserId);
+        if (teacherByUserId) {
+          teacherId = teacherByUserId;
+        }
+      } catch (err) {
+        // If lookup fails, assume it's already a teacher ID
+        console.error('getSchedule: Teacher ID lookup failed:', err);
+      }
+      
+      console.log('getSchedule: Using teacher ID:', teacherId);
+      try {
+        const data = await teacherService.getTeacherSchedule(teacherId);
+        sendSuccess(res, data, 'Schedule fetched');
+      } catch (scheduleErr) {
+        console.warn('getSchedule: Teacher not found, returning empty array');
+        sendSuccess(res, [], 'Schedule fetched');
+      }
     } catch (err) {
+      console.error('getSchedule: Error:', err);
       next(err);
     }
   }
  
   async getDashboardStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await teacherService.getDashboardStats(String(req.params.id));
-      sendSuccess(res, data, 'Dashboard stats fetched');
+      let teacherId = String(req.params.id);
+      console.log('getDashboardStats: Starting with ID:', teacherId);
+      
+      // First, check if the ID is a user ID and try to find the teacher
+      try {
+        const teacherByUserId = await teacherService.getTeacherIdByUserId(teacherId);
+        console.log('getDashboardStats: Teacher lookup result:', teacherByUserId);
+        if (teacherByUserId) {
+          teacherId = teacherByUserId;
+        }
+      } catch (err) {
+        // If lookup fails, assume it's already a teacher ID
+        console.error('getDashboardStats: Teacher ID lookup failed:', err);
+      }
+      
+      console.log('getDashboardStats: Using teacher ID:', teacherId);
+      try {
+        const data = await teacherService.getDashboardStats(teacherId);
+        sendSuccess(res, data, 'Dashboard stats fetched');
+      } catch (statsErr) {
+        console.warn('getDashboardStats: Teacher not found, returning zero stats');
+        sendSuccess(res, {
+          totalStudents: 0,
+          totalClasses: 0,
+          totalSubjects: 0,
+          upcomingExams: 0,
+        }, 'Dashboard stats fetched');
+      }
     } catch (err) {
+      console.error('getDashboardStats: Error:', err);
       next(err);
     }
   }

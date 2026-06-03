@@ -5,6 +5,14 @@ import { randomBytes } from 'node:crypto';
 import { paginate } from "../../utils/pagination.util";
 
 export const TeachersService = {
+  async getTeacherIdByUserId(userId: string) {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return teacher?.id ?? null;
+  },
+
   async create(dto: CreateTeacherDto) {
      // 1. Email check
   const emailExists = await prisma.user.findUnique({
@@ -322,7 +330,10 @@ export const TeachersService = {
 
   async getTeacherSchedule(id: string) {
     const teacher = await prisma.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error('Teacher not found');
+    if (!teacher) {
+      console.warn(`Teacher with ID ${id} not found`);
+      throw new Error('Teacher not found');
+    }
 
     return prisma.timetable.findMany({
       where: { teacherId: id },
@@ -347,6 +358,20 @@ export const TeachersService = {
 
     const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
 
+    // If no classes assigned, return zero stats
+    if (classIds.length === 0) {
+      return {
+        totalStudents: 0,
+        totalClasses: 0,
+        totalSubjects: teacher.subjectAssignments.length,
+        upcomingExams: 0,
+      };
+    }
+
+    // Get today's date at midnight for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const [totalStudents, totalClasses, totalSubjects, upcomingExams] = await Promise.all([
       prisma.student.count({
         where: {
@@ -365,7 +390,7 @@ export const TeachersService = {
             in: classIds,
           },
           examDate: {
-            gte: new Date(),
+            gte: today,
           },
         },
       }),

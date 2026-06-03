@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as timetableService from './timetabel.service';
 import { sendSuccess } from '../../utils/response.util';
+import { TeachersService } from '../teachers/teachers.service';
 
 export class TimetableController {
   async createSlot(req: Request, res: Response, next: NextFunction) {
@@ -19,28 +20,92 @@ export class TimetableController {
 
   async findAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await timetableService.finAll(req.query as any);
+      const query = { ...req.query } as any;
+      const userRole = (req.user as any)?.role;
+      
+      // Teachers can only see their own timetable
+      if (userRole === 'TEACHER') {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
+        query.teacherId = myTeacherId;
+      }
+      
+      const data = await timetableService.finAll(query);
       sendSuccess(res, data, 'Timetable fetched');
     } catch (err) { next(err); }
   }
 
   async getClassWeeklyView(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await timetableService.getClassWeeklyView(req.params.classId as string);
+      const classId = req.params.classId as string;
+      const userRole = (req.user as any)?.role;
+      
+      // Teachers can only view classes they teach
+      if (userRole === 'TEACHER') {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
+        
+        // Check if this teacher has any classes assigned to this classId
+        const prisma = require('../../config/db').default;
+        const hasAccess = await prisma.timetable.findFirst({
+          where: {
+            classId,
+            teacherId: myTeacherId
+          }
+        });
+        
+        if (!hasAccess) {
+          return res.status(403).json({ 
+            success: false, 
+            message: 'You can only view classes you teach' 
+          });
+        }
+      }
+      
+      const data = await timetableService.getClassWeeklyView(classId);
       sendSuccess(res, data, 'Class weekly timetable fetched');
     } catch (err) { next(err); }
   }
 
   async getTeacherWeeklyView(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await timetableService.getTeacherWeeklyView(req.params.teacherId as string);
+      const requestedTeacherId = req.params.teacherId as string;
+      const userRole = (req.user as any)?.role;
+      
+      // Teachers can only view their own timetable
+      if (userRole === 'TEACHER') {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
+        
+        if (!myTeacherId || myTeacherId !== requestedTeacherId) {
+          return res.status(403).json({ 
+            success: false, 
+            message: 'You can only view your own timetable' 
+          });
+        }
+      }
+      
+      const data = await timetableService.getTeacherWeeklyView(requestedTeacherId);
       sendSuccess(res, data, 'Teacher weekly timetable fetched');
     } catch (err) { next(err); }
   }
 
   async findById(req: Request, res: Response, next: NextFunction) {
     try {
-      const slot = await timetableService.findById(req.params.id as string);
+      const slotId = req.params.id as string;
+      const userRole = (req.user as any)?.role;
+      
+      const slot = await timetableService.findById(slotId);
+      
+      // Teachers can only view their own slots
+      if (userRole === 'TEACHER') {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
+        
+        if (slot.teacherId !== myTeacherId) {
+          return res.status(403).json({ 
+            success: false, 
+            message: 'You can only view your own timetable slots' 
+          });
+        }
+      }
+      
       sendSuccess(res, slot, 'Slot fetched');
     } catch (err) { next(err); }
   }

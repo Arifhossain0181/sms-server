@@ -9,10 +9,10 @@ const router = Router();
 router.post('/',              authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.takeAttendance);
 
 // Date wise attendance 
-router.get('/',               authenticate, attendanceController.getAttendanceByDate);
+router.get('/',               authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.getAttendanceByDate);
 
 // Student attendance history
-router.get('/student/:studentId', authenticate, attendanceController.getStudentAttendance);
+router.get('/student/:studentId', authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.getStudentAttendance);
 
 // Monthly report
 router.get('/monthly-report', authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.getMonthlyReport);
