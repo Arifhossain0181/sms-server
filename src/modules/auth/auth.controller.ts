@@ -36,6 +36,23 @@ async   login(req:Request,res:Response ,next:NextFunction) {
             });
         }
 },
+
+async studentLogin(req:Request,res:Response ,next:NextFunction) {
+    try{
+      const data = await authService.studentLogin(req.body);
+      res.status(200).json({
+          success:true,
+          data,
+          message:"Student Login Successful"
+      });
+    }
+      catch (error) {
+          next({
+              status:400,
+              message:error instanceof Error ? error.message : "Student Login Failed"
+          });
+      }
+},
 async  refreshToken(req:Request,res:Response ,next:NextFunction) {
     try{
         const data = await authService.refreshToken(req.body);

@@ -13,6 +13,12 @@ router.use(authenticate);
 // Student: view own profile
 router.get('/me', authorizeRoles('STUDENT'), studentController.getMyProfile.bind(studentController));
  
+// Student: view own dashboard (all data combined)
+router.get('/dashboard/my-dashboard', authorizeRoles('STUDENT'), studentController.getDashboard.bind(studentController));
+
+// Student: view own class routine
+router.get('/routine/my-routine', authorizeRoles('STUDENT'), studentController.getClassRoutine.bind(studentController));
+ 
 // Admin / Teacher access
 router.post(
   '/',

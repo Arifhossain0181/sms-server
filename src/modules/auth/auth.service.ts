@@ -281,5 +281,93 @@ export class AuthService {
         }
         return user;
     }
+
+    async studentLogin(dto: LoginDto) {
+        // Find user by email
+        const user = await prisma.user.findUnique({
+            where: {
+                email: dto.email
+            },
+            include: {
+                studentProfile: {
+                    include: {
+                        admissionRecord: true
+                    }
+                }
+            }
+        });
+
+        if (!user) {
+            throw new Error("Invalid email or password");
+        }
+
+        // Check if user is a student
+        if (user.role !== 'STUDENT') {
+            throw new Error("This account is not a student account");
+        }
+
+        // Check if user is active
+        if (!user.isActive) {
+            throw new Error("Your account has been deactivated");
+        }
+
+        // Check if student profile exists
+        if (!user.studentProfile) {
+            throw new Error("Student profile not found");
+        }
+
+        // Check admission verification status
+        const admission = user.studentProfile.admissionRecord;
+        if (!admission || admission.status !== 'APPROVED') {
+            throw new Error("Your admission is not verified yet. Please wait for admin approval.");
+        }
+
+        // Verify password
+        const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
+        if (!isMatch) {
+            throw new Error("Invalid email or password");
+        }
+
+        // Generate tokens
+        const accessToken = generateAccessToken({
+            id: user.id,
+            email: user.email,
+            role: user.role
+        });
+        const refreshToken = generateRefreshToken({
+            id: user.id,
+            email: user.email,
+            role: user.role
+        });
+
+        // Store refresh token
+        await prisma.$transaction([
+            prisma.refreshToken.deleteMany({
+                where: {
+                    userId: user.id
+                }
+            }),
+            prisma.refreshToken.create({
+                data: {
+                    token: refreshToken,
+                    userId: user.id,
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                }
+            })
+        ]);
+
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                studentId: user.studentProfile.studentId,
+                studentClass: user.studentProfile.classId
+            }
+        };
+    }
     
 }

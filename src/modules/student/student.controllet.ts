@@ -107,5 +107,25 @@ export class StudentController {
       next(err);
     }
   }
+
+  async getClassRoutine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Get student ID from user ID
+      const student = await (studentService as any).findStudentByUserId(req.user!.id);
+      const data = await studentService.getClassRoutine(student.id);
+      sendSuccess(res, data, 'Class routine fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const data = await studentService.getStudentDashboard(req.user!.id);
+      sendSuccess(res, data, 'Student dashboard data fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
  

@@ -737,4 +737,100 @@ export class StudentService {
     return { results, totalObtained, totalPossible, percentage };
   }
 
+  async getClassRoutine(studentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: { sectionId: true, classId: true }
+    });
+
+    if (!student) {
+      throw this.notFound("Student not found");
+    }
+
+    const routines = await prisma.timetable.findMany({
+      where: {
+        sectionId: student.sectionId,
+        classId: student.classId
+      },
+      include: {
+        subject: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        teacher: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      },
+      orderBy: [
+        { dayOfWeek: 'asc' },
+        { startTime: 'asc' }
+      ]
+    });
+
+    return routines;
+  }
+
+  async getStudentDashboard(userId: string) {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        class: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        section: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    if (!student) {
+      throw this.notFound("Student not found");
+    }
+
+    const [attendance, results, routine] = await Promise.all([
+      this.getAttendance(student.id),
+      this.getResults(student.id),
+      this.getClassRoutine(student.id)
+    ]);
+
+    return {
+      profile: {
+        id: student.id,
+        userId: student.userId,
+        studentId: student.studentId,
+        name: student.name,
+        email: student.user.email,
+        dob: student.dob,
+        gender: student.gender,
+        bloodGroup: student.bloodGroup,
+        photo: student.photo,
+        address: student.address,
+        rollNumber: student.rollNumber,
+        class: student.class,
+        section: student.section
+      },
+      attendance,
+      results,
+      routine
+    };
+  }
+
 }
