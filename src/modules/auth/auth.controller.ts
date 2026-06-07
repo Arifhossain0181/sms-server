@@ -23,6 +23,22 @@ export const AuthController ={
 async   login(req:Request,res:Response ,next:NextFunction) {
       try{
         const data = await authService.login(req.body);
+        
+        // Set cookies for better auth handling
+        res.cookie("accessToken", data.accessToken, {
+          httpOnly: false,
+          sameSite: "lax",
+          maxAge: 24 * 60 * 60 * 1000,
+        });
+        res.cookie("refreshToken", data.refreshToken, {
+          httpOnly: false,
+          sameSite: "lax",
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+        
+        console.log(`[AUTH-CONTROLLER] ✅ Login successful for ${req.body.email}`);
+        console.log(`[AUTH-CONTROLLER] 🍪 Cookies set: accessToken, refreshToken`);
+        
         res.status(200).json({
             success:true,
             data,
@@ -30,6 +46,7 @@ async   login(req:Request,res:Response ,next:NextFunction) {
         });
       }
         catch (error) {
+            console.log(`[AUTH-CONTROLLER] ❌ Login failed:`, error instanceof Error ? error.message : "Unknown error");
             next({
                 status:400,
                 message:error instanceof Error ? error.message : "Login Failed"
@@ -40,6 +57,22 @@ async   login(req:Request,res:Response ,next:NextFunction) {
 async studentLogin(req:Request,res:Response ,next:NextFunction) {
     try{
       const data = await authService.studentLogin(req.body);
+      
+      // Set cookies for better auth handling
+      res.cookie("accessToken", data.accessToken, {
+        httpOnly: false,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+      res.cookie("refreshToken", data.refreshToken, {
+        httpOnly: false,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+      
+      console.log(`[AUTH-CONTROLLER] ✅ Student login successful for ${req.body.email}`);
+      console.log(`[AUTH-CONTROLLER] 🍪 Cookies set: accessToken, refreshToken`);
+      
       res.status(200).json({
           success:true,
           data,
@@ -47,6 +80,7 @@ async studentLogin(req:Request,res:Response ,next:NextFunction) {
       });
     }
       catch (error) {
+          console.log(`[AUTH-CONTROLLER] ❌ Student login failed:`, error instanceof Error ? error.message : "Unknown error");
           next({
               status:400,
               message:error instanceof Error ? error.message : "Student Login Failed"

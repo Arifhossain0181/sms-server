@@ -37,21 +37,29 @@ export class NoticeController {
   /** Authenticated user sees only notices relevant to their role */
   async findPublic(req: Request, res: Response, next: NextFunction) {
     try {
-      const audience = roleToAudience[req.user!.role] ?? 'ALL';
+      const userRole = req.user!.role;
+      const audience = roleToAudience[userRole] ?? 'ALL';
+      console.log(`\n[NOTICE] User role: ${userRole}, Audience filter: ${audience}`);
+      
       let sectionId: string | undefined;
       
       // If student, fetch their section
-      if (req.user!.role === 'STUDENT') {
+      if (userRole === 'STUDENT') {
         const student = await prisma.student.findUnique({
           where: { userId: req.user!.id },
           select: { sectionId: true },
         });
         sectionId = student?.sectionId;
+        console.log(`[NOTICE] Student section ID: ${sectionId}`);
       }
       
       const notices = await findPublic(audience, sectionId);
+      console.log(`[NOTICE] ✅ Found ${notices.length} notices for ${userRole}`);
       sendSuccess(res, notices, 'Notices fetched');
-    } catch (err) { next(err); }
+    } catch (err) { 
+      console.error(`[NOTICE] ❌ Error:`, (err as any)?.message);
+      next(err); 
+    }
   }
 
   async findById(req: Request, res: Response, next: NextFunction) {

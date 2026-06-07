@@ -8,6 +8,9 @@ const c = new FeesController();
 
 router.use(authenticate);
 
+// ── Student routes (must come before :id params) ─────────────────────
+router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
+
 // ── Reports (before :id to avoid param clash) ──────────────────────
 router.get('/report/collection',  authorizeRoles('ADMIN'),            c.getCollectionReport.bind(c));
 router.get('/summary',            authorizeRoles('ADMIN'),            c.getSummary.bind(c));

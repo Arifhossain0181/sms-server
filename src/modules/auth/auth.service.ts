@@ -67,6 +67,9 @@ export class AuthService {
         const user = await prisma.user.findUnique({
             where: {
                 email: dto.email
+            },
+            include: {
+                studentProfile: true
             }
         })
         if (!user) {
@@ -76,16 +79,19 @@ export class AuthService {
         if (!isMatch) {
             throw new Error("Invalid email or password");
         }
-        const accessToken = generateAccessToken({
+        const tokenPayload: any = {
             id: user.id,
             email: user.email,
             role: user.role
-        });
-        const refreshToken = generateRefreshToken({
-            id: user.id,
-            email: user.email,
-            role: user.role
-        });
+        };
+
+        // যদি student হয় তাহলে studentId ও add করুন
+        if (user.role === 'STUDENT' && user.studentProfile?.id) {
+            tokenPayload.studentId = user.studentProfile.id;
+        }
+
+        const accessToken = generateAccessToken(tokenPayload);
+        const refreshToken = generateRefreshToken(tokenPayload);
         // Rotate refresh token so each user keeps only one active token record.
         await prisma.$transaction([
             prisma.refreshToken.deleteMany({
@@ -122,7 +128,10 @@ export class AuthService {
         const user = await prisma.user.findUnique({
             where: {
                 id: payload.id
-    }
+            },
+            include: {
+                studentProfile: true
+            }
         })
         const storedToken = await prisma.refreshToken.findFirst({
             where: {
@@ -139,16 +148,19 @@ export class AuthService {
             (err as any).status = 401;
             throw err;
         }
-        const accessToken = generateAccessToken({
+        const tokenPayload: any = {
             id: user.id,
             email: user.email,
             role: user.role
-        })
-        const newRefreshToken = generateRefreshToken({
-            id: user.id,
-            email: user.email,
-            role: user.role
-        })
+        };
+
+        // যদি student হয় তাহলে studentId ও add করুন
+        if (user.role === 'STUDENT' && user.studentProfile?.id) {
+            tokenPayload.studentId = user.studentProfile.id;
+        }
+
+        const accessToken = generateAccessToken(tokenPayload);
+        const newRefreshToken = generateRefreshToken(tokenPayload);
         await prisma.$transaction([
             prisma.refreshToken.deleteMany({
                 where: {

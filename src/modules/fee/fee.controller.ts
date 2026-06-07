@@ -112,4 +112,15 @@ export class FeesController {
       sendSuccess(res, data, 'Fee summary fetched');
     } catch (err) { next(err); }
   }
+
+  async getMyFees(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.studentId) {
+        throw new Error('Student ID not found in token');
+      }
+      console.log(`[FEE] getMyFees called - Student ID: ${req.user.studentId}`);
+      const data = await getstudentFeeSummary(req.user.studentId);
+      sendSuccess(res, data, 'Your fees fetched');
+    } catch (err) { next(err); }
+  }
 }

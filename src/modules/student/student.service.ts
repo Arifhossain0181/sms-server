@@ -312,40 +312,54 @@ export class StudentService {
         return student;
     }
     async findStudentByUserId(userId:string) {
-        console.log(`\n [DASHBOARD] User accessing dashboard: ${userId}`);
-        const student = await prisma.student.findUnique({
-            where: {
-                userId
-            },
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        role: true,
-                        isActive: true,
-                        createdAt: true
-                    }
+        try {
+            console.log(`\n [DASHBOARD] User accessing dashboard: ${userId}`);
+            const student = await prisma.student.findUnique({
+                where: {
+                    userId
                 },
-                section: {
-                    select: {
-                        id: true,
-                        name: true,
-                        class: true
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            role: true,
+                            isActive: true,
+                            createdAt: true
+                        }
+                    },
+                    section: {
+                        select: {
+                            id: true,
+                            name: true,
+                            class: true
+                        }
+                    },
+                    admissionRecord: {
+                        select: {
+                            id: true,
+                            status: true,
+                            paymentStatus: true
+                        }
                     }
                 }
+            });
+
+            if (!student) {
+                console.log(` Student profile NOT FOUND for user: ${userId}`);
+                throw this.notFound("Student not found");
             }
-        });
 
-        if (!student) {
-            console.log(` Student profile NOT FOUND for user: ${userId}`);
-            throw this.notFound("Student not found");
+            console.log(` Student found: ${student.user.email}`);
+            const admissionStatus = student.admissionRecord?.status || "UNKNOWN";
+            console.log(` Admission status: ${admissionStatus}`);
+            console.log(` Dashboard access granted\n`);
+            return student;
+        } catch (error) {
+            console.error(`[ERROR] findStudentByUserId failed for user ${userId}:`, error);
+            throw error;
         }
-
-        console.log(` Student found: ${student.user.email}`);
-        console.log(` Dashboard access granted\n`);
-        return student;
     }
 
     async getStudentForEdit(id: string) {

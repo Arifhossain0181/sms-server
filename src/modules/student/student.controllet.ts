@@ -44,9 +44,35 @@ export class StudentController {
  
   async getMyProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      console.log(`\n[STUDENT] getMyProfile called - User ID: ${req.user?.id}`);
       const student = await studentService.findStudentByUserId(req.user!.id);
+      
+      // Check if admission is approved
+      const admissionStatus = student.admissionRecord?.status;
+      if (admissionStatus && admissionStatus !== "APPROVED") {
+        console.log(`[STUDENT] ⚠️ Admission not approved - Status: ${admissionStatus}`);
+        return sendSuccess(res, { 
+          id: student.id, 
+          pending: true,
+          admissionStatus,
+          message: `Your admission is ${admissionStatus.toLowerCase()}. Waiting for admin approval.`
+        }, 'Student profile pending approval');
+      }
+      
+      console.log(`[STUDENT] ✅ Profile found and returned - Admission: APPROVED`);
       sendSuccess(res, student, 'Student profile fetched');
     } catch (err) {
+      console.log(`[STUDENT] Error fetching profile:`, (err as any)?.message);
+      // যদি student profile না থাকে তাহলে basic user info return করুন
+      if ((err as any)?.message?.includes('not found')) {
+        console.log(`[STUDENT] ⚠️ Student profile not found for user: ${req.user!.id}, but user exists`);
+        // Return user ID so frontend knows who they are
+        return sendSuccess(res, { 
+          id: req.user!.id, 
+          pending: true,
+          message: 'Student profile is pending. Please complete your admission application.'
+        }, 'Student profile pending approval');
+      }
       next(err);
     }
   }
