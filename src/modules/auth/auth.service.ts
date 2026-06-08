@@ -341,16 +341,17 @@ export class AuthService {
         }
 
         // Generate tokens
-        const accessToken = generateAccessToken({
+        const tokenPayload: any = {
             id: user.id,
             email: user.email,
             role: user.role
-        });
-        const refreshToken = generateRefreshToken({
-            id: user.id,
-            email: user.email,
-            role: user.role
-        });
+        };
+        if (user.studentProfile?.id) {
+            tokenPayload.studentId = user.studentProfile.id;
+        }
+
+        const accessToken = generateAccessToken(tokenPayload);
+        const refreshToken = generateRefreshToken(tokenPayload);
 
         // Store refresh token
         await prisma.$transaction([

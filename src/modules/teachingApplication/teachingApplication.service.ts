@@ -58,26 +58,61 @@ export const updateTeachingApplicationStatus = async (
   if (dto.status === "APPROVED" && application.status !== "APPROVED") {
     const existingTeacher = await prisma.teacher.findFirst({
       where: { email: application.email },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
 
     if (!existingTeacher) {
       const generatedId = `TCH-${randomBytes(3).toString("hex")}`.toUpperCase();
-      await TeachersService.create({
-        name: application.name,
-        email: application.email,
-        TeachersId: generatedId,
-        designation: application.designation,
-        department: application.department ?? undefined,
-        qualification: application.qualification,
-        experience: application.experience,
-        phone: application.phone,
-        address: application.address,
-        gender: application.gender,
-        dateOfBirth: application.dob.toISOString().split("T")[0],
-        dateOfJoining: new Date().toISOString().split("T")[0],
-        salary: application.expectedSalary ?? undefined,
+      const existingUser = await prisma.user.findUnique({
+        where: { email: application.email },
+        select: { id: true, role: true },
       });
+
+      if (existingUser) {
+        const teacherProfile = await prisma.teacher.findFirst({
+          where: { userId: existingUser.id },
+          select: { id: true },
+        });
+
+        if (!teacherProfile) {
+          await prisma.teacher.create({
+            data: {
+              userId: existingUser.id,
+              employeeId: generatedId,
+              name: application.name,
+              email: application.email,
+              phone: application.phone,
+              gender: application.gender,
+              subjectSpecialization: application.department ?? null,
+              joiningDate: new Date(),
+              isActive: true,
+            },
+          });
+        }
+
+        if (existingUser.role !== "TEACHER") {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { role: "TEACHER" },
+          });
+        }
+      } else {
+        await TeachersService.create({
+          name: application.name,
+          email: application.email,
+          TeachersId: generatedId,
+          designation: application.designation,
+          department: application.department ?? undefined,
+          qualification: application.qualification,
+          experience: application.experience,
+          phone: application.phone,
+          address: application.address,
+          gender: application.gender,
+          dateOfBirth: application.dob.toISOString().split("T")[0],
+          dateOfJoining: new Date().toISOString().split("T")[0],
+          salary: application.expectedSalary ?? undefined,
+        });
+      }
     }
   }
 

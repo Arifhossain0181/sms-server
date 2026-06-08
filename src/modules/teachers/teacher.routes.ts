@@ -18,7 +18,7 @@ router.post('/', authorizeRoles('ADMIN'), teacherController.create.bind(teacherC
 
 router.get(
   '/',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('ADMIN', 'TEACHER'),
   teacherController.findAll.bind(teacherController)
 );
 
