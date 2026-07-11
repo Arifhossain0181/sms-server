@@ -8,6 +8,7 @@ import http from 'http';
 
 import { initSocket } from './config/socket';
 import { errorMiddleware } from './middleware/error.middle';
+import logger from './utils/logger';
 import router from './routes';
 
 dotenv.config();
@@ -21,6 +22,7 @@ initSocket(server);
 // Middlewares
 app.use(helmet());
 
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:3000',
@@ -29,49 +31,38 @@ const allowedOrigins = [
   'http://127.0.0.1:3001',
 ].filter((origin): origin is string => Boolean(origin));
 
-console.log(`\n[SERVER] Allowed CORS origins:`, allowedOrigins);
+const allowedOriginSet = new Set(allowedOrigins);
+const isLocalhost = (origin: string) =>
+  origin.includes('localhost') || origin.includes('127.0.0.1');
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log(`[CORS] Request from origin: ${origin || 'no-origin'}`);
-      
       // Allow requests with no origin (like curl requests)
       if (!origin) {
-        console.log(`[CORS] ✅ Allowed - No origin`);
-        return callback(null, true);
-      }
-      
-      // Check if origin is allowed
-      if (allowedOrigins.includes(origin)) {
-        console.log(`[CORS] ✅ Allowed - Origin in whitelist`);
         return callback(null, true);
       }
 
-      // Development mode - allow all localhost
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        console.log(`[CORS] ✅ Allowed - Localhost`);
+      if (allowedOriginSet.has(origin) || isLocalhost(origin)) {
         return callback(null, true);
       }
 
-      console.log(`[CORS] ❌ Blocked - Origin not allowed`);
+      logger.warn(`CORS blocked for origin: ${origin}`);
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
   })
 );
 
-// Add request logging middleware
-app.use((req, res, next) => {
-  console.log(`\n[REQUEST] ${req.method} ${req.path}`);
-  console.log(`[REQUEST] Headers:`, { 
-    'content-type': req.headers['content-type'],
-    'authorization': req.headers['authorization'] ? '***' : 'none'
+// Request logging (skipped in production to avoid per-request I/O overhead)
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    logger.info(`[REQUEST] ${req.method} ${req.path}`);
+    next();
   });
-  next();
-});
+}
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -87,7 +78,7 @@ app.use('/api/v1', router);
 // Error handler 
 app.use(errorMiddleware);
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\n Server running on port ${PORT}\n`);
 });

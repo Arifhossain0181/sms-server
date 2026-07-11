@@ -1,30 +1,8 @@
 import { CreateStudentDto, StudentQueryDto, UpdateStudentDto } from './student.dto';
 import prisma from '../../config/db';
 import bcrypt from 'bcryptjs';
-
-const paginate = async (
-    model: { count: (args: { where: any }) => Promise<number> },
-    where: any,
-    page: number,
-    limit: number
-) => {
-    const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
-    const safeLimit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
-    const skip = (safePage - 1) * safeLimit;
-    const take = safeLimit;
-    const total = await model.count({ where });
-
-    return {
-        skip,
-        take,
-        meta: {
-            page: safePage,
-            limit: safeLimit,
-            total,
-            totalPages: Math.ceil(total / safeLimit)
-        }
-    };
-};
+import { paginate } from '../../utils/pagination.util';
+import logger from '../../utils/logger';
 
 
 export class StudentService {
@@ -313,7 +291,7 @@ export class StudentService {
     }
     async findStudentByUserId(userId:string) {
         try {
-            console.log(`\n [DASHBOARD] User accessing dashboard: ${userId}`);
+            logger.debug(`[DASHBOARD] User accessing dashboard: ${userId}`);
             const student = await prisma.student.findUnique({
                 where: {
                     userId
@@ -347,17 +325,14 @@ export class StudentService {
             });
 
             if (!student) {
-                console.log(` Student profile NOT FOUND for user: ${userId}`);
+                logger.debug(`Student profile NOT FOUND for user: ${userId}`);
                 throw this.notFound("Student not found");
             }
 
-            console.log(` Student found: ${student.user.email}`);
-            const admissionStatus = student.admissionRecord?.status || "UNKNOWN";
-            console.log(` Admission status: ${admissionStatus}`);
-            console.log(` Dashboard access granted\n`);
+            logger.debug(`Student found: ${student.user.email}, admission: ${student.admissionRecord?.status || 'UNKNOWN'}`);
             return student;
         } catch (error) {
-            console.error(`[ERROR] findStudentByUserId failed for user ${userId}:`, error);
+            logger.error(`findStudentByUserId failed for user ${userId}:`, error);
             throw error;
         }
     }

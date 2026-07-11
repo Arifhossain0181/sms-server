@@ -21,4 +21,6 @@ model Timetable {
   @@index([classId])
   @@index([sectionId])
   @@index([subjectId])
+   @@index([teacherId, dayOfWeek])   
+  @@index([classId, dayOfWeek])  
 }

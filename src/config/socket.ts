@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
 import http from 'http';
+import logger from '../utils/logger';
 
 let io: Server;
 
@@ -13,7 +14,7 @@ export const initSocket = (server: http.Server) => {
   });
 
   io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+    logger.debug('Client connected:', socket.id);
 
     // User using own  room  join  (userId)
     socket.on('join', (payload: string | { userId?: string; role?: string }) => {
@@ -26,7 +27,7 @@ export const initSocket = (server: http.Server) => {
     });
 
     socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
+      logger.debug('Client disconnected:', socket.id);
     });
   });
 };
