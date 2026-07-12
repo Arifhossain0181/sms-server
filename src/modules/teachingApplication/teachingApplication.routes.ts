@@ -1,16 +1,18 @@
-import { Router } from "express";
-import * as controller from "./teachingApplication.controller";
-import { authenticate } from "../../middleware/auth.middleware";
-import { authorizeRoles } from "../../middleware/role.middleware";
+import { Router } from 'express';
+import { TeachingApplicationController } from './teachingApplication.controller';
+import { authenticate } from '../../middleware/auth.middleware';
+import { authorizeRoles } from '../../middleware/role.middleware';
 
 const router = Router();
+const c = new TeachingApplicationController();
 
-// Public: submit teaching application
-router.post("/apply", controller.apply);
+// ── PUBLIC: anyone can apply, no login needed
+router.post('/apply', c.apply.bind(c));
 
-// Admin: review applications
-router.get("/", authenticate, authorizeRoles("ADMIN"), controller.list);
-router.get("/:id", authenticate, authorizeRoles("ADMIN"), controller.getById);
-router.patch("/:id/status", authenticate, authorizeRoles("ADMIN"), controller.updateStatus);
+// ── HR / ADMIN: review pipeline 
+router.use(authenticate);
+router.get('/',             authorizeRoles('ADMIN', 'HR'), c.findAll.bind(c));
+router.get('/:id',          authorizeRoles('ADMIN', 'HR'), c.findById.bind(c));
+router.patch('/:id/status', authorizeRoles('ADMIN', 'HR'), c.updateStatus.bind(c));
 
 export default router;

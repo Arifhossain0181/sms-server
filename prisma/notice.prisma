@@ -14,7 +14,8 @@ model Notice {
   updatedAt     DateTime       @updatedAt
 
   sectionTargets NoticeSectionTarget[]
-  recipients     NoticeRecipient[]
+  recipients     NoticeRecipient[] 
+  @@index([audience, isActive, publishedAt])
 }
 
 model NoticeSectionTarget {
@@ -25,6 +26,7 @@ model NoticeSectionTarget {
   section   Section @relation(fields: [sectionId], references: [id])
 
   @@unique([noticeId, sectionId])
+  
 }
 
 model NoticeRecipient {
@@ -35,7 +37,16 @@ model NoticeRecipient {
   student   Student?  @relation(fields: [studentId], references: [id])
   parentId  String?
   parent    Parent?   @relation(fields: [parentId], references: [id])
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id])
   isRead    Boolean   @default(false)
   readAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@unique([noticeId, studentId])
+  @@unique([noticeId, parentId])
+  @@unique([noticeId, userId])
+  @@index([studentId, isRead])
+  @@index([parentId, isRead])
+  @@index([userId, isRead])
 }

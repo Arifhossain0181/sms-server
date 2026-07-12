@@ -34,16 +34,16 @@ router.get('/parent/child/:studentId',        authorizeRoles('PARENT'), c.getChi
 router.get('/parent/child/:studentId/today',  authorizeRoles('PARENT'), c.getChildTodayRoutine.bind(c));
 
 // ── ADMIN / TEACHER: staff-facing browse & filter ────────────────────
-router.get('/',                         authorizeRoles('ADMIN', 'TEACHER'), c.findAll.bind(c));
-router.get('/class/:classId',           authorizeRoles('ADMIN', 'TEACHER'), c.getClassWeeklyView.bind(c));
-router.get('/teacher/:teacherId',       authorizeRoles('ADMIN', 'TEACHER'), c.getTeacherWeeklyView.bind(c));
-router.get('/:id',                      authorizeRoles('ADMIN', 'TEACHER'), c.findById.bind(c));
+router.get('/',                         authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.findAll.bind(c));
+router.get('/class/:classId',           authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getClassWeeklyView.bind(c));
+router.get('/teacher/:teacherId',       authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getTeacherWeeklyView.bind(c));
+router.get('/:id',                      authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.findById.bind(c));
 
 // ── Write: Admin only ─────────────────────────────────────────────
-router.post('/',                        authorizeRoles('ADMIN'), c.createSlot.bind(c));
-router.post('/bulk',                    authorizeRoles('ADMIN'), c.bulkCreate.bind(c));
-router.patch('/:id',                    authorizeRoles('ADMIN'), c.update.bind(c));
-router.delete('/class/:classId',        authorizeRoles('ADMIN'), c.deleteClassSchedule.bind(c));
-router.delete('/:id',                   authorizeRoles('ADMIN'), c.delete.bind(c));
+router.post('/',                        authorizeRoles('SCHOOL_ADMIN'), c.createSlot.bind(c));
+router.post('/bulk',                    authorizeRoles('SCHOOL_ADMIN'), c.bulkCreate.bind(c));
+router.patch('/:id',                    authorizeRoles('SCHOOL_ADMIN'), c.update.bind(c));
+router.delete('/class/:classId',        authorizeRoles('SCHOOL_ADMIN'), c.deleteClassSchedule.bind(c));
+router.delete('/:id',                   authorizeRoles('SCHOOL_ADMIN'), c.delete.bind(c));
 
 export default router;

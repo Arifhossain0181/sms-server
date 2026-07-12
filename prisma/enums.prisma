@@ -103,6 +103,16 @@ enum NoticePriority {
   HIGH
   URGENT
 }
+enum NotificationType {
+  ADMISSION
+  FEE
+  EXAM
+  RESULT
+  ATTENDANCE
+  NOTICE
+  TIMETABLE
+  GENERAL
+}
 
 enum TeachingApplicationStatus {
   PENDING

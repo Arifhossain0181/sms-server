@@ -1,25 +1,35 @@
 // ─── TEACHER ───────────────────────────────────────────────
 
 model Teacher {
-  id                    String   @id @default(uuid())
-  userId                String   @unique
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employeeId            String   @unique
+  id                    String              @id @default(uuid())
+  userId                String              @unique
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId            String              @unique
   name                  String
   email                 String
   phone                 String?
   subjectSpecialization String?
   joiningDate           DateTime
   photo                 String?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  gender    Gender?
-  sectionTeacher     Section[]
-  subjectAssignments SubjectAssignment[]
-  attendances        TeacherAttendance[]
-  homeworks          Homework[]
-  marks              Mark[]
-  timetables         Timetable[]
-  attendanceTaken    StudentAttendance[]
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  gender                Gender?
+  sectionTeacher        Section[]
+  subjectAssignments    SubjectAssignment[]
+  attendances           TeacherAttendance[]
+  homeworks             Homework[]
+  marks                 Mark[]
+  timetables            Timetable[]
+  attendanceTaken       StudentAttendance[]
+  designation           String?
+  department            String?
+  qualification         String?
+  experience            Int?
+  address               String?
+  dateOfBirth           DateTime?
+  bloodGroup            String?
+  salary                Float?
+
+  @@index([employeeId])
 }

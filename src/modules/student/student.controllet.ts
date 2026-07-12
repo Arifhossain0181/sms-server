@@ -51,12 +51,13 @@ export class StudentController {
       const admissionStatus = student.admissionRecord?.status;
       if (admissionStatus && admissionStatus !== "APPROVED") {
         console.log(`[STUDENT] ⚠️ Admission not approved - Status: ${admissionStatus}`);
-        return sendSuccess(res, { 
+        sendSuccess(res, { 
           id: student.id, 
           pending: true,
           admissionStatus,
           message: `Your admission is ${admissionStatus.toLowerCase()}. Waiting for admin approval.`
         }, 'Student profile pending approval');
+        return;
       }
       
       console.log(`[STUDENT] ✅ Profile found and returned - Admission: APPROVED`);
@@ -67,11 +68,12 @@ export class StudentController {
       if ((err as any)?.message?.includes('not found')) {
         console.log(`[STUDENT] ⚠️ Student profile not found for user: ${req.user!.id}, but user exists`);
         // Return user ID so frontend knows who they are
-        return sendSuccess(res, { 
+        sendSuccess(res, { 
           id: req.user!.id, 
           pending: true,
           message: 'Student profile is pending. Please complete your admission application.'
         }, 'Student profile pending approval');
+        return;
       }
       next(err);
     }

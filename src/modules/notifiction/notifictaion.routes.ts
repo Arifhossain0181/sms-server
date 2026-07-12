@@ -9,8 +9,8 @@ const c = new NotificationController();
 router.use(authenticate);
 
 // ── Admin: send & broadcast ────────────────────────────────────────
-router.post('/',          authorizeRoles('ADMIN'), c.send.bind(c));
-router.post('/broadcast', authorizeRoles('ADMIN'), c.broadcast.bind(c));
+router.post('/',          authorizeRoles('SCHOOL_ADMIN'), c.send.bind(c));
+router.post('/broadcast', authorizeRoles('SCHOOL_ADMIN'), c.broadcast.bind(c));
 
 // ── Any authenticated user: own notifications ─────────────────────
 router.get('/',                   c.findAll.bind(c));

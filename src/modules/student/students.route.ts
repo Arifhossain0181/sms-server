@@ -22,56 +22,56 @@ router.get('/routine/my-routine', authorizeRoles('STUDENT'), studentController.g
 // Admin / Teacher access
 router.post(
   '/',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN'),
   studentController.create.bind(studentController)
 );
  
 router.get(
   '/',
-  authorizeRoles('ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
   studentController.findAll.bind(studentController)
 );
  
 router.get(
   '/:id/edit',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN'),
   studentController.getStudentForEdit.bind(studentController)
 );
 
 router.get(
   '/:id',
-  authorizeRoles('ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
   studentController.findById.bind(studentController)
 );
 
 router.put(
   '/:id',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN'),
   studentController.update.bind(studentController)
 );
 
 router.delete(
   '/:id',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN'),
   studentController.delete.bind(studentController)
 );
  
 router.patch(
   '/:id/avatar',
-  authorizeRoles('ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN'),
   upload.single('avatar'),
   studentController.uploadAvatar.bind(studentController)
 );
  
 router.get(
   '/:id/attendance',
-  authorizeRoles('ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
   studentController.getAttendanceSummary.bind(studentController)
 );
  
 router.get(
   '/:id/results',
-  authorizeRoles('ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
   studentController.getResultSummary.bind(studentController)
 );
  

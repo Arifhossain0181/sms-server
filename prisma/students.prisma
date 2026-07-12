@@ -40,4 +40,6 @@ model Student {
   feeStructures   FeeStructure[]
 
   @@unique([sectionId, rollNumber])
+  @@index([classId])   // NEW
+  @@index([parentId])  // NEW
 }

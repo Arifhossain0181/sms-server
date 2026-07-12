@@ -19,5 +19,13 @@ export interface CreateTeachingApplicationDto {
 
 export interface UpdateTeachingApplicationStatusDto {
   status: TeachingApplicationStatus;
-  rejectionReason?: string;
+  rejectionReason?: string; // required by the service when status === REJECTED
+}
+
+// ─── HR: list / filter applications (job-posting applicant tracking) ──
+export interface ListTeachingApplicationsQueryDto {
+  status?: TeachingApplicationStatus;
+  search?: string; // matches name or email
+  page?: number;
+  pageSize?: number;
 }

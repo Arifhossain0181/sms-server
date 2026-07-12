@@ -3,7 +3,7 @@ export interface CreateTeacherDto {
   name: string;
   email: string;
   password?: string;
- 
+
   // Teacher profile
   TeachersId: string;
   designation: string;
@@ -20,7 +20,7 @@ export interface CreateTeacherDto {
   avatarUrl?: string;
   subjectId?: string;        // Subject assignment (optional)
 }
- 
+
 export interface UpdateTeacherDto {
   name?: string;
   designation?: string;
@@ -29,19 +29,23 @@ export interface UpdateTeacherDto {
   experience?: number;
   phone?: string;
   address?: string;
+  // NEW: schema now has a real dateOfBirth column (see
+  // schema-teacher.prisma) — there was previously no way to correct it
+  // after creation.
+  dateOfBirth?: string;
   bloodGroup?: string;
   salary?: number;
   avatarUrl?: string;
 }
- 
+
 export interface AssignSubjectDto {
   subjectIds: string[];
 }
- 
+
 export interface AssignClassDto {
   classIds: string[];
 }
- 
+
 export interface TeacherQueryDto {
   page?: string;
   limit?: string;
@@ -49,4 +53,3 @@ export interface TeacherQueryDto {
   department?: string;
   designation?: string;
 }
- 

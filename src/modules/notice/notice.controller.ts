@@ -3,10 +3,10 @@ import {
   createNotice,
   findAll,
   getFeedForUser,
-  findById,
+  findById as findNoticeById,
   update as updateNotice,
   deleteNotice,
-  toggleActive,
+  toggleActive as toggleNoticeActive,
   markAsRead,
 } from './notice.service';
 import { sendSuccess } from '../../utils/response.util';
@@ -26,7 +26,12 @@ export class NoticeController {
     } catch (err) { next(err); }
   }
 
-  /** Authenticated user sees only notices targeted at their role */
+  /**
+   * Authenticated user sees only the notices actually created for them —
+   * backed by their own NoticeRecipient rows now, not a broad role match.
+   * FIX: this used to call a getFeedForUser that didn't exist in
+   * notice.service.ts at all; that function is added there now.
+   */
   async feed(req: Request, res: Response, next: NextFunction) {
     try {
       const notices = await getFeedForUser({ role: req.user!.role, userId: req.user!.id });
@@ -34,7 +39,9 @@ export class NoticeController {
     } catch (err) { next(err); }
   }
 
-  /** Mark a student/parent's personal notice recipient row as read */
+  /** Mark any actor's personal notice recipient row as read — ownership
+   * is enforced inside markAsRead (student/parent/staff userId all
+   * checked there), so no role restriction is needed at the route level. */
   async markRead(req: Request, res: Response, next: NextFunction) {
     try {
       const { recipientId } = req.params as { recipientId: string };
@@ -48,7 +55,7 @@ export class NoticeController {
       let { id } = req.params as { id: string | string[] };
       const idStr = Array.isArray(id) ? id[0] : id;
       if (!idStr) throw new Error('id param required');
-      const notice = await findById(idStr);
+      const notice = await findNoticeById(idStr);
       sendSuccess(res, notice, 'Notice fetched');
     } catch (err) { next(err); }
   }
@@ -78,7 +85,7 @@ export class NoticeController {
       let { id } = req.params as { id: string | string[] };
       const idStr = Array.isArray(id) ? id[0] : id;
       if (!idStr) throw new Error('id param required');
-      const notice = await toggleActive(idStr);
+      const notice = await toggleNoticeActive(idStr);
       sendSuccess(res, notice, `Notice ${notice.isActive ? 'activated' : 'deactivated'}`);
     } catch (err) { next(err); }
   }

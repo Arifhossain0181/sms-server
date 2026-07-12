@@ -15,8 +15,9 @@ model Subject {
   timetables     Timetable[]
   examSchedules  ExamSchedule[]
   homeworks      Homework[]
-
-  @@unique([name, classId])
+code String
+  @@unique([name, classId]) 
+  @@unique([code, classId])
 }
 
 model SubjectAssignment {

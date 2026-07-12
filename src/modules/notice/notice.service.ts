@@ -1,33 +1,67 @@
 import { CreateNoticeDto, NoticeAudience, NoticeQueryDto, UpdateNoticeDto } from './notice.dto';
 import prisma from '../../config/db';
 import { paginate } from '../../utils/pagination.util';
+import { Role } from '@prisma/client';
 
+const ALL_STAFF_ROLES: Role[] = [
+    Role.SUPER_ADMIN,
+    Role.SCHOOL_ADMIN,
+    Role.ACCOUNTANT,
+    Role.LIBRARIAN,
+    Role.RECEPTIONIST,
+    Role.EXAM_CONTROLLER,
+    Role.HR,
+    Role.TEACHER,
+];
 
+// Maps a notice audience to the User roles that should receive it. Student
+// and parent audiences are handled separately via the Student/Parent tables,
+// so only the role-based audiences live here.
+const audienceToUserRoles: Partial<Record<NoticeAudience, Role[]>> = {
+    TEACHERS: [Role.TEACHER],
+    STAFF: ALL_STAFF_ROLES,
+};
+
+/**
+ * Resolves exactly who a notice should reach: student/parent rows for
+ * STUDENTS/PARENTS/ALL (honoring an optional section narrowing), and
+ * generic User rows for every staff-type audience via their role.
+ */
 async function resolveRecipients(audience: NoticeAudience, sectionIds?: string[]) {
     const studentWhere = sectionIds?.length ? { sectionId: { in: sectionIds } } : {};
 
-    const needsStudents = audience === 'STUDENT' || audience === 'ALL';
-    const needsParents = audience === 'PARENT' || audience === 'ALL';
+    let studentIds: string[] = [];
+    let parentIds: string[] = [];
+    let userIds: string[] = [];
 
-    if (!needsStudents && !needsParents) {
-        return { studentIds: [] as string[], parentIds: [] as string[] };
+    if (audience === 'STUDENTS' || audience === 'PARENTS' || audience === 'ALL') {
+        const students = await prisma.student.findMany({
+            where: studentWhere,
+            select: { id: true, parentId: true },
+        });
+
+        if (audience === 'STUDENTS' || audience === 'ALL') {
+            studentIds = students.map((s) => s.id);
+        }
+        if (audience === 'PARENTS' || audience === 'ALL') {
+            parentIds = [...new Set(students.map((s) => s.parentId).filter((id): id is string => !!id))];
+        }
     }
 
-    const students = await prisma.student.findMany({
-        where: studentWhere,
-        select: { id: true, parentId: true },
-    });
+    const roleTargets = audience === 'ALL' ? ALL_STAFF_ROLES : audienceToUserRoles[audience];
+    if (roleTargets?.length) {
+        const users = await prisma.user.findMany({
+            where: { role: { in: roleTargets } },
+            select: { id: true },
+        });
+        userIds = users.map((u) => u.id);
+    }
 
-    const studentIds = needsStudents ? students.map((s) => s.id) : [];
-    const parentIds = needsParents
-        ? [...new Set(students.map((s) => s.parentId).filter((id): id is string => !!id))]
-        : [];
-
-    return { studentIds, parentIds };
+    return { studentIds, parentIds, userIds };
 }
 
 export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
-    const { studentIds, parentIds } = await resolveRecipients(dto.audience, dto.sectionIds);
+    const { studentIds, parentIds, userIds } = await resolveRecipients(dto.audience, dto.sectionIds);
 
     const notice = await prisma.$transaction(async (tx) => {
         const created = await tx.notice.create({
@@ -43,9 +77,7 @@ export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
                 isActive: true,
             },
             include: {
-                author: {
-                    select: { id: true, name: true, email: true, role: true },
-                },
+                author: { select: { id: true, name: true, email: true, role: true } },
             },
         });
 
@@ -56,12 +88,14 @@ export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
             });
         }
 
-        if (studentIds.length || parentIds.length) {
+        if (studentIds.length || parentIds.length || userIds.length) {
             await tx.noticeRecipient.createMany({
                 data: [
                     ...studentIds.map((studentId) => ({ noticeId: created.id, studentId })),
                     ...parentIds.map((parentId) => ({ noticeId: created.id, parentId })),
+                    ...userIds.map((userId) => ({ noticeId: created.id, userId })),
                 ],
+                skipDuplicates: true,
             });
         }
 
@@ -71,6 +105,8 @@ export const createNotice = async (dto: CreateNoticeDto, authorId: string) => {
     return notice;
 };
 
+// Admin-facing listing across all notices — unchanged from before, still
+// useful for "manage notices" screens regardless of who they targeted.
 export const findAll = async (query: NoticeQueryDto) => {
     const { page = '1', limit = '10', search, audience, priority, isActive } = query;
     const where: any = {
@@ -97,9 +133,7 @@ export const findAll = async (query: NoticeQueryDto) => {
         skip,
         take,
         include: {
-            author: {
-                select: { id: true, name: true, email: true, role: true },
-            },
+            author: { select: { id: true, name: true, email: true, role: true } },
         },
         orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }],
     });
@@ -107,20 +141,11 @@ export const findAll = async (query: NoticeQueryDto) => {
     return { data: notices, meta };
 };
 
-/**
- * Dashboard feed for a single logged-in student or parent.
- *
- * FIX: this used to run a generic audience/role query with a section
- * filter that was commented out but never implemented — a STUDENTS
- * notice targeted at Section 5A was showing up for every student in
- * every section. It now reads directly off NoticeRecipient, which is
- * exactly the set of people the notice was actually created for
- * (see resolveRecipients above), and surfaces isRead/readAt so the
- * dashboard can show an unread badge.
- */
-export const findMyNotices = async (opts: { studentId?: string; parentId?: string }) => {
-    if (!opts.studentId && !opts.parentId) {
-        throw new Error('studentId or parentId is required');
+
+ 
+export const findMyNotices = async (opts: { studentId?: string; parentId?: string; userId?: string }) => {
+    if (!opts.studentId && !opts.parentId && !opts.userId) {
+        throw new Error('studentId, parentId, or userId is required');
     }
 
     const now = new Date();
@@ -129,6 +154,7 @@ export const findMyNotices = async (opts: { studentId?: string; parentId?: strin
         where: {
             ...(opts.studentId && { studentId: opts.studentId }),
             ...(opts.parentId && { parentId: opts.parentId }),
+            ...(opts.userId && { userId: opts.userId }),
             notice: {
                 isActive: true,
                 publishedAt: { lte: now },
@@ -153,78 +179,14 @@ export const findMyNotices = async (opts: { studentId?: string; parentId?: strin
     }));
 };
 
-/**
- * Role/audience match feed for TEACHER and the staff roles (ACCOUNTANT,
- * EXAM_CONTROLLER, HR, LIBRARIAN, RECEPTIONIST). These have no
- * NoticeRecipient rows (schema has no staffId/teacherId column), so they
- * read by audience == their own role (or ALL) instead of a personal row.
- */
-export const findPublic = (role: NoticeAudience) => {
-    const now = new Date();
-
-    return prisma.notice.findMany({
-        where: {
-            isActive: true,
-            publishedAt: { lte: now },
-            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-            audience: { in: ['ALL', role] },
-        },
-        include: {
-            author: { select: { id: true, name: true, email: true, role: true } },
-        },
-        orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }],
-    });
-};
-
-/**
- * Single entry point for any logged-in user's dashboard feed.
- * Routes to the correct source based on the caller's role:
- *   - STUDENT / PARENT  → per-person NoticeRecipient rows (respects section
- *     targeting and exposes isRead/readAt for the unread badge)
- *   - SUPER_ADMIN / SCHOOL_ADMIN → every active notice (admins see all)
- *   - every other role  → notices where audience is ALL or that role
- */
-export const getFeedForUser = async (opts: { role: string; userId: string }) => {
-    const { role, userId } = opts;
-
-    if (role === 'STUDENT') {
-        const student = await prisma.student.findUnique({
-            where: { userId },
-            select: { id: true },
-        });
-        return student ? findMyNotices({ studentId: student.id }) : [];
-    }
-
-    if (role === 'PARENT') {
-        const parent = await prisma.parent.findUnique({
-            where: { userId },
-            select: { id: true },
-        });
-        return parent ? findMyNotices({ parentId: parent.id }) : [];
-    }
-
-    if (role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN') {
-        const now = new Date();
-        return prisma.notice.findMany({
-            where: {
-                isActive: true,
-                publishedAt: { lte: now },
-                OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-            },
-            include: { author: { select: { id: true, name: true, email: true, role: true } } },
-            orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }],
-        });
-    }
-
-    return findPublic(role as NoticeAudience);
-};
-
-// NEW: wires up the isRead/readAt columns that already existed on
-// NoticeRecipient but nothing ever set.
+// Ownership now checks all three ID columns, since a recipient row can
+// belong to a student, a parent, or any staff-type user.
 export const markAsRead = async (recipientId: string, ownerId: string) => {
     const recipient = await prisma.noticeRecipient.findUnique({ where: { id: recipientId } });
     if (!recipient) throw new Error('Notice recipient record not found');
-    if (recipient.studentId !== ownerId && recipient.parentId !== ownerId) {
+
+    const isOwner = recipient.studentId === ownerId || recipient.parentId === ownerId || recipient.userId === ownerId;
+    if (!isOwner) {
         throw { status: 403, message: 'Not your notice' };
     }
 
@@ -275,4 +237,42 @@ export const toggleActive = async (id: string) => {
         where: { id },
         data: { isActive: !notice.isActive },
     });
+};
+
+/**
+ * Fetch notices for an authenticated user based on their role and userId.
+ * Maps the user to their appropriate recipient ID (studentId, parentId, or userId).
+ */
+export const getFeedForUser = async (opts: { role: string; userId: string }) => {
+    const { role, userId } = opts;
+
+    // For staff roles, use the userId directly
+    if (ALL_STAFF_ROLES.includes(role as Role)) {
+        return findMyNotices({ userId });
+    }
+
+    // For students, look up their Student record
+    if (role === Role.STUDENT || role === 'STUDENT') {
+        const student = await prisma.student.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        if (student) {
+            return findMyNotices({ studentId: student.id });
+        }
+    }
+
+    // For parents, look up their Parent record
+    if (role === Role.PARENT || role === 'PARENT') {
+        const parent = await prisma.parent.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        if (parent) {
+            return findMyNotices({ parentId: parent.id });
+        }
+    }
+
+    // Fallback: return empty array if no matching recipient ID
+    return [];
 };

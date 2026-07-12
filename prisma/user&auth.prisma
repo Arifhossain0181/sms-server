@@ -19,6 +19,7 @@ model User {
   parentProfile  Parent?
   notices        Notice[]
   notifications  Notification[]
+  noticeRecipients NoticeRecipient[]
 }
 
 model RefreshToken {

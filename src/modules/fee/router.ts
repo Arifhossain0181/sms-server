@@ -25,22 +25,22 @@ router.use(authenticate);
 router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
 
 // ── Reports (before :id to avoid param clash) ──────────────────────
-router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'ADMIN'), c.getCollectionReport.bind(c));
-router.get('/report/overdue',     authorizeRoles('ACCOUNTANT', 'ADMIN'), c.getOverdueFees.bind(c));
-router.get('/summary',            authorizeRoles('ACCOUNTANT', 'ADMIN'), c.getSummary.bind(c));
+router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getCollectionReport.bind(c));
+router.get('/report/overdue',     authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getOverdueFees.bind(c));
+router.get('/summary',            authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getSummary.bind(c));
 
 
 // the controller now verifies req.user.studentId === :studentId before
 // returning data — the role check alone was letting a student read any
 // student's summary by changing the URL.
-router.get('/student/:studentId', authorizeRoles('ACCOUNTANT', 'ADMIN', 'STUDENT'), c.getStudentSummary.bind(c));
+router.get('/student/:studentId', authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'STUDENT'), c.getStudentSummary.bind(c));
 
 // ── Core CRUD 
 router.post('/',       authorizeRoles('ACCOUNTANT'), c.create.bind(c));
 router.post('/bulk',   authorizeRoles('ACCOUNTANT'), c.bulkCreate.bind(c));
-router.get('/',        authorizeRoles('ACCOUNTANT', 'ADMIN'), c.findAll.bind(c));
+router.get('/',        authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.findAll.bind(c));
 
-router.get('/:id',     authorizeRoles('ACCOUNTANT', 'ADMIN', 'STUDENT'), c.findById.bind(c));
+router.get('/:id',     authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'STUDENT'), c.findById.bind(c));
 
 router.patch('/:id',   authorizeRoles('ACCOUNTANT'), c.update.bind(c));
 router.delete('/:id',  authorizeRoles('ACCOUNTANT'), c.delete.bind(c));

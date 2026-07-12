@@ -1,21 +1,13 @@
-// Mirrors the prisma NoticeAudience enum — one value per actor/role
-// plus ALL. A notice created for a given role surfaces only on that
-// role's dashboard (ALL reaches every role).
+
 export type NoticeAudience =
   | 'ALL'
-  | 'SUPER_ADMIN'
-  | 'SCHOOL_ADMIN'
-  | 'ACCOUNTANT'
-  | 'TEACHER'
-  | 'STUDENT'
-  | 'PARENT'
-  | 'EXAM_CONTROLLER'
-  | 'HR'
-  | 'LIBRARIAN'
-  | 'RECEPTIONIST';
+  | 'STUDENTS'
+  | 'PARENTS'
+  | 'TEACHERS'
+  | 'STAFF';
 export type NoticePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
-// ─── Create / Update 
+// ─── Create / Update ────────────────────────────────────────────────
 export interface CreateNoticeDto {
   title: string;
   content: string;
@@ -39,7 +31,7 @@ export interface UpdateNoticeDto {
   isActive?: boolean;
 }
 
-// ─── Query / filter 
+// ─── Query / filter ─────────────────────────────────────────────────
 export interface NoticeQueryDto {
   page?: string;
   limit?: string;
