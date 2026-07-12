@@ -1,20 +1,28 @@
 model FeeStructure {
-  id         String   @id @default(uuid())
-  classId    String
-  class      Class    @relation(fields: [classId], references: [id])
-  feeType    FeeType
-  amount     Float
-  dueDay     Int
-  dueDate    DateTime
-  studentId  String?
-  student    Student? @relation(fields: [studentId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  status     String
-  Paidamount Float    @default(0)
+  id          String   @id @default(uuid())
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id])
+  feeType     FeeType
+  amount      Float
+  dueDay      Int
+  dueDate     DateTime
+  studentId   String?
+  student     Student? @relation(fields: [studentId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+ status FeeStatus @default(PENDING)
+  Paidamount  Float    @default(0)
+  title       String?
+  description String?
+  year        Int
+  month       Int
 
   invoices Invoice[]
   payments Payment[]
-
+@@unique([classId, feeType, studentId, year, month])
   @@unique([classId, feeType, studentId])
+  @@index([studentId, status])
+@@index([classId, status])
+@@index([status, dueDate])
+@@index([dueDate])
 }

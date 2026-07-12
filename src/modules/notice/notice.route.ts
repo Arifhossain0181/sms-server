@@ -9,7 +9,10 @@ const c = new NoticeController();
 router.use(authenticate);
 
 // ── Every logged-in user sees notices for their role ───────────────
-router.get('/feed', c.findPublic.bind(c));
+router.get('/feed', c.feed.bind(c));
+
+// ── Student/Parent: mark a personal notice as read ──────────────────
+router.patch('/read/:recipientId', c.markRead.bind(c));
 
 // ── Admin: full management ─────────────────────────────────────────
 router.post('/',              authorizeRoles('ADMIN'), c.create.bind(c));

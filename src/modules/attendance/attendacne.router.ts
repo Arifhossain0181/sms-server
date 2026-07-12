@@ -1,31 +1,23 @@
 import { Router } from 'express';
-import * as attendanceController from './attendance.controller';
+import { AttendanceController } from './attendance.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { authorizeRoles } from '../../middleware/role.middleware';
-import { authorizeRolesOrSelf } from '../../middleware/conditionalAuth.middleware';
 
 const router = Router();
+const c = new AttendanceController();
 
-// Debug middleware to log decoded token fields for student attendance requests
-const logDecodedToken = (req: any, res: any, next: any) => {
-	console.log('[ATTENDANCE-AUTH-DEBUG] Request params:', req.params);
-	console.log('[ATTENDANCE-AUTH-DEBUG] Decoded token payload:', req.user);
-	next();
-};
+router.use(authenticate); // every attendance route requires login
 
-// Teacher attendance 
-router.post('/',              authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.takeAttendance);
+// ── Teacher / School Admin: record & review attendance ─────────────
+router.post('/take', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.take.bind(c));
+router.get('/by-date', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.byDate.bind(c));
+router.get('/monthly-report', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.monthlyReport.bind(c));
+router.patch('/:id', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.update.bind(c));
 
-// Date wise attendance 
-router.get('/',               authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.getAttendanceByDate);
+// ── Student: own attendance only ────────────────────────────────────
+router.get('/my-attendance', authorizeRoles('STUDENT'), c.myAttendance.bind(c));
 
-// Student attendance history - ADMIN/TEACHER দেখতে পারবে সবাইর, STUDENT দেখতে পারবে শুধু নিজের
-router.get('/student/:studentId', authenticate, logDecodedToken, authorizeRolesOrSelf(['ADMIN', 'TEACHER'], 'studentId'), attendanceController.getStudentAttendance);
-
-// Monthly report
-router.get('/monthly-report', authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.getMonthlyReport);
-
-// Attendance update (24hr rule)
-router.patch('/:id',          authenticate, authorizeRoles('ADMIN', 'TEACHER'), attendanceController.updateAttendance);
+// ── Parent: a linked child's attendance only ────────────────────────
+router.get('/child/:studentId', authorizeRoles('PARENT'), c.childAttendance.bind(c));
 
 export default router;

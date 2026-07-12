@@ -1,7 +1,21 @@
-export type NoticeAudience = 'ALL' | 'STUDENTS' | 'TEACHERS' | 'PARENTS' | 'STAFF';
+// Mirrors the prisma NoticeAudience enum — one value per actor/role
+// plus ALL. A notice created for a given role surfaces only on that
+// role's dashboard (ALL reaches every role).
+export type NoticeAudience =
+  | 'ALL'
+  | 'SUPER_ADMIN'
+  | 'SCHOOL_ADMIN'
+  | 'ACCOUNTANT'
+  | 'TEACHER'
+  | 'STUDENT'
+  | 'PARENT'
+  | 'EXAM_CONTROLLER'
+  | 'HR'
+  | 'LIBRARIAN'
+  | 'RECEPTIONIST';
 export type NoticePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
-// ─── Create / Update ────────────────────────────────────────────────
+// ─── Create / Update 
 export interface CreateNoticeDto {
   title: string;
   content: string;
@@ -10,6 +24,8 @@ export interface CreateNoticeDto {
   publishedAt?: string;          // schedule for future, default: now
   expiresAt?: string;            // auto-expire date (optional)
   attachmentUrl?: string;
+
+  sectionIds?: string[];
 }
 
 export interface UpdateNoticeDto {
@@ -23,7 +39,7 @@ export interface UpdateNoticeDto {
   isActive?: boolean;
 }
 
-// ─── Query / filter ─────────────────────────────────────────────────
+// ─── Query / filter 
 export interface NoticeQueryDto {
   page?: string;
   limit?: string;

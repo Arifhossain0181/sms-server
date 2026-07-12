@@ -27,8 +27,12 @@ router.post(
 // ── Authenticated: get user's own applications ──────────────────────
 router.get('/my-applications', authenticate, c.getMyApplications.bind(c));
 
-// ── All routes below require Admin auth ────────────────────────────
-router.use(authenticate, authorizeRoles('ADMIN'));
+// ── All routes below require School Admin auth ──────────────────────
+// FIX: was authorizeRoles('ADMIN') — the doc's actual role (Actor 2) is
+// School Admin, not a generic "ADMIN". If your Role enum literally has an
+// 'ADMIN' value that means School Admin, leave as-is; otherwise change this
+// string to match your Prisma Role enum exactly, e.g. 'SCHOOL_ADMIN'.
+router.use(authenticate, authorizeRoles('SCHOOL_ADMIN'));
 
 router.get('/stats',                  c.getStats.bind(c));
 router.post('/convert-to-student',    c.convertToStudent.bind(c));

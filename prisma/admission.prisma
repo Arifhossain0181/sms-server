@@ -29,4 +29,9 @@ model AdmissionApplication {
 
   studentId String?  @unique
   student   Student? @relation(fields: [studentId], references: [id])
+  @@index([status])
+@@index([targetClassId])
+@@index([guardianEmail])
+@@index([createdAt])
+@@index([status, targetClassId])
 }

@@ -1,10 +1,16 @@
 // ─── ENUMS ─────────────────────────────────────────────────
 
 enum Role {
-  ADMIN
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  ACCOUNTANT
   TEACHER
   STUDENT
   PARENT
+  EXAM_CONTROLLER
+  HR
+  LIBRARIAN
+  RECEPTIONIST
 }
 
 enum Gender {

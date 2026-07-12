@@ -6,15 +6,21 @@ import stripe from '../../config/striPe';
 
 const admissionService = new AdmissionService();
 
+// FIX: apply() only checked studentEmail. Every other field is required by
+// CreateAdmissionDto — missing ones (e.g. dob, targetClassId) previously
+// fell through to Prisma and came back as an ugly 500 instead of a clean 400.
+const REQUIRED_APPLY_FIELDS = [
+  'applicantName', 'studentEmail', 'dob', 'gender', 'address',
+  'guardianName', 'guardianPhone', 'guardianEmail', 'targetClassId',
+];
+
 export class AdmissionController {
   /** Public — no auth required */
   async apply(req: Request, res: Response, next: NextFunction) {
     try {
-      // Validate required fields
-      const { applicantName, studentEmail, guardianName, guardianEmail, guardianPhone, targetClassId, address, gender, dob } = req.body;
-      
-      if (!studentEmail) {
-        const err = new Error("studentEmail is required for login after approval");
+      const missing = REQUIRED_APPLY_FIELDS.filter((f) => !req.body?.[f]);
+      if (missing.length) {
+        const err = new Error(`Missing required field(s): ${missing.join(', ')}`);
         (err as any).status = 400;
         throw err;
       }
@@ -47,9 +53,13 @@ export class AdmissionController {
 
   async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
+      // FIX: service now requires actorUserId for the audit log —
+      // pull it from the authenticated admin, not the request body
+      // (body-supplied actor id would let anyone forge the log entry).
       const admission = await admissionService.updateStatus(
         String(req.params.id),
-        req.body
+        req.body,
+        req.user!.id
       );
       sendSuccess(res, admission, 'Admission status updated');
     } catch (err) { next(err); }
@@ -64,7 +74,8 @@ export class AdmissionController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await admissionService.delete(String(req.params.id));
+      // FIX: same actorUserId requirement as updateStatus, for the audit log.
+      await admissionService.delete(String(req.params.id), req.user!.id);
       sendSuccess(res, null, 'Admission deleted');
     } catch (err) { next(err); }
   }
@@ -148,7 +159,7 @@ export class AdmissionController {
 
   async getMyApplications(req: Request, res: Response, next: NextFunction) {
     try {
-      const applications = await admissionService.getApplicationsByEmail(req.user!.email);
+      const applications = await admissionService.getApplicationsByEmail(req.user!.email as string);
       sendSuccess(res, applications, 'Your applications fetched');
     } catch (err) { next(err); }
   }

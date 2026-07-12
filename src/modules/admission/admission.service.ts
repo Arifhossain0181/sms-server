@@ -4,6 +4,8 @@ import { mailService } from "../../config/mail";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 
+const MAX_PAGE_LIMIT = 100;
+
 export class AdmissionService {
     async create(dto: CreateAdmissionDto) {
         const classExists = await prisma.class.findUnique({
@@ -11,16 +13,13 @@ export class AdmissionService {
         });
         if (!classExists) throw new Error("Class not found");
 
+        // FIX: only studentEmail should block duplicates — guardianEmail is
+        // shared across siblings (Parent Req 1.2: multi-child accounts must work)
         const existing = await prisma.admissionApplication.findFirst({
-            where: {
-                OR: [
-                    { guardianEmail: dto.guardianEmail },
-                    { studentEmail: dto.studentEmail },
-                ]
-            },
+            where: { studentEmail: dto.studentEmail },
         });
         if (existing) {
-            throw new Error("এই ইমেইল দিয়ে ইতিমধ্যে একটি admission আছে");
+            throw new Error("An application with this student email already exists");
         }
 
         return prisma.admissionApplication.create({
@@ -52,8 +51,9 @@ export class AdmissionService {
     }
 
     async findAll(query: AdmissionQueryDto) {
-        const page = Number(query.page || 1);
-        const limit = Number(query.limit || 10);
+        const page = Math.max(Number(query.page) || 1, 1);
+        // FIX: cap limit so nobody can request the whole table in one call
+        const limit = Math.min(Number(query.limit) || 10, MAX_PAGE_LIMIT);
         const skip = (page - 1) * limit;
 
         const where: any = {
@@ -80,7 +80,7 @@ export class AdmissionService {
             prisma.admissionApplication.count({ where }),
         ]);
 
-        return { data, meta: { page, limit, total } };
+        return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
     }
 
     async findById(id: string) {
@@ -114,8 +114,9 @@ export class AdmissionService {
         });
     }
 
-    async updateStatus(id: string, dto: UpdateAdmissionStatusDto) {
-        await this._exists(id);
+    async updateStatus(id: string, dto: UpdateAdmissionStatusDto, actorUserId: string) {
+        const before = await this._exists(id);
+
         const admission = await prisma.admissionApplication.update({
             where: { id },
             data: {
@@ -125,13 +126,18 @@ export class AdmissionService {
             },
         });
 
+        // NFR - Auditability: log every status change with who/when/what.
+        // Assumes an AuditLog model exists in the foundation schema.
+        await this._audit(actorUserId, "ADMISSION_STATUS_CHANGE", id, {
+            from: before.status,
+            to: dto.status,
+            rejectionReason: dto.rejectionReason,
+        });
+
         if (dto.status === "APPROVED" && !admission.studentId) {
-            await this.createStudentFromAdmission(admission.id);
-            // Re-fetch the admission to get the updated studentId
-            const updatedAdmission = await prisma.admissionApplication.findUnique({
-                where: { id },
-            });
-            return updatedAdmission || admission;
+            const studentProfile = await this.createStudentFromAdmission(admission.id);
+            const updatedAdmission = await prisma.admissionApplication.findUnique({ where: { id } });
+            return updatedAdmission || { ...admission, studentId: studentProfile?.id };
         }
 
         return admission;
@@ -141,9 +147,11 @@ export class AdmissionService {
         throw new Error("Convert to student is not implemented yet");
     }
 
-    async delete(id: string) {
+    async delete(id: string, actorUserId: string) {
         await this._exists(id);
-        return prisma.admissionApplication.delete({ where: { id } });
+        const deleted = await prisma.admissionApplication.delete({ where: { id } });
+        await this._audit(actorUserId, "ADMISSION_DELETE", id, {});
+        return deleted;
     }
 
     async getStats() {
@@ -167,10 +175,7 @@ export class AdmissionService {
     async getApplicationsByEmail(email: string) {
         return prisma.admissionApplication.findMany({
             where: {
-                OR: [
-                    { studentEmail: email },
-                    { guardianEmail: email }
-                ]
+                OR: [{ studentEmail: email }, { guardianEmail: email }],
             },
             select: {
                 id: true,
@@ -180,9 +185,9 @@ export class AdmissionService {
                 paymentStatus: true,
                 rejectionReason: true,
                 createdAt: true,
-                targetClass: { select: { id: true, name: true } }
+                targetClass: { select: { id: true, name: true } },
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: "desc" },
         });
     }
 
@@ -192,111 +197,104 @@ export class AdmissionService {
         return admission;
     }
 
+    private async _audit(userId: string, action: string, targetId: string, meta: Record<string, unknown>) {
+        try {
+            await prisma.auditLog.create({
+                data: { userId, action, targetId, meta: meta as any, timestamp: new Date() },
+            });
+        } catch (err) {
+            // Audit logging must never break the main flow — just log locally.
+            console.warn("Audit log failed:", (err as any)?.message);
+        }
+    }
+
+   
     private async createStudentFromAdmission(admissionId: string) {
-        console.log(`\n [APPROVAL] Processing admission: ${admissionId}`);
-        const admission = await prisma.admissionApplication.findUnique({
-            where: { id: admissionId },
-        });
-        if (!admission) throw new Error("Admission record not found");
-        if (admission.studentId) {
-            console.log(` Student already created`);
-            return admission;
-        }
+        return prisma.$transaction(
+            async (tx) => {
+                const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
+                if (!admission) throw new Error("Admission record not found");
+                if (admission.studentId) return admission;
 
-        const studentEmail = admission.studentEmail;
-        console.log(` Email: ${studentEmail}`);
-        if (!studentEmail) throw new Error("Student email is required to create account");
-        
-        // Check if user already exists
-        let user = await prisma.user.findUnique({
-            where: { email: studentEmail },
-        });
-        
-        if (!user) {
-            console.log(`👤 Creating new user account...`);
-            const tempPassword = randomBytes(6).toString("hex").toUpperCase();
-            const passwordHash = await bcrypt.hash(tempPassword, 10);
+                const studentEmail = admission.studentEmail;
+                if (!studentEmail) throw new Error("Student email is required to create account");
 
-            user = await prisma.user.create({
-                data: {
-                    name: admission.applicantName,
-                    email: studentEmail,
-                    passwordHash,
-                    role: "STUDENT",
-                },
-            });
-            console.log(` User created: ${user.email}`);
-            console.log(` Temp password: ${tempPassword}`);
+                let user = await tx.user.findUnique({ where: { email: studentEmail } });
+                let tempPassword: string | null = null;
 
-            // Send welcome email (non-blocking)
-            try {
-                const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-                await mailService.sendStudentCredentials(
-                    studentEmail,
-                    admission.applicantName,
-                    tempPassword,
-                    loginUrl
-                );
-                console.log(` Welcome email sent`);
-            } catch (emailError) {
-                console.warn(`  Email failed (but continuing):`, (emailError as any)?.message);
+                if (!user) {
+                    tempPassword = randomBytes(6).toString("hex").toUpperCase();
+                    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+                    user = await tx.user.create({
+                        data: {
+                            name: admission.applicantName,
+                            email: studentEmail,
+                            passwordHash,
+                            role: "STUDENT",
+                        },
+                    });
+                }
+
+                //  pick the section that still has room, not just the
+                // alphabetically-first one (Req 1.5 — capacity limits).
+                const sections = await tx.section.findMany({
+                    where: { classId: admission.targetClassId },
+                    include: { _count: { select: { students: true } } },
+                    orderBy: { name: "asc" },
+                });
+                const section = sections.find((s) => s._count.students < s.maxCapacity);
+                    if (!section) throw new Error("No available section with capacity for this class");
+
+                const rollAggregate = await tx.student.aggregate({
+                    where: { sectionId: section.id },
+                    _max: { rollNumber: true },
+                });
+                const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
+
+                const studentId = `STD-${randomBytes(4).toString("hex").toUpperCase()}`;
+
+                let studentProfile = await tx.student.findFirst({ where: { userId: user.id } });
+                if (!studentProfile) {
+                    studentProfile = await tx.student.create({
+                        data: {
+                            studentId,
+                            name: admission.applicantName,
+                            dob: admission.dob,
+                            gender: admission.gender,
+                            bloodGroup: admission.bloodGroup,
+                            religion: admission.religion,
+                            address: admission.address,
+                            photo: admission.photoUrl,
+                            rollNumber: nextRoll,
+                            classId: admission.targetClassId,
+                            sectionId: section.id,
+                            userId: user.id,
+                        },
+                    });
+                }
+
+                await tx.admissionApplication.update({
+                    where: { id: admission.id },
+                    data: { studentId: studentProfile.id },
+                });
+
+                // Return tempPassword only inside the tx scope so the caller
+                // can send the welcome email AFTER commit — see below.
+                return { ...studentProfile, __tempPassword: tempPassword, __email: studentEmail };
+            },
+            { isolationLevel: "Serializable" }
+        ).then(async (result: any) => {
+            // FIX: email is fired after the transaction commits, and is
+            // non-blocking — approval should not wait on SMTP (NFR: 3s page loads).
+            // FIX: temp password is no longer console.logged (security leak).
+            if (result.__tempPassword) {
+                const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
+                mailService
+                    .sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl)
+                    .catch((err) => console.warn("Welcome email failed:", err?.message));
             }
-        } else {
-            console.log(`User already exists`);
-        }
-
-        // Get section for class
-        const section = await prisma.section.findFirst({
-            where: { classId: admission.targetClassId },
-            orderBy: { name: "asc" },
+            return result;
         });
-        if (!section) throw new Error("Section not found for class");
-        console.log(` Section: ${section.name}`);
-
-        const rollAggregate = await prisma.student.aggregate({
-            where: { sectionId: section.id },
-            _max: { rollNumber: true },
-        });
-        const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
-
-        const studentId = `STD-${randomBytes(4).toString("hex").toUpperCase()}`;
-        
-        // Create student profile
-        let studentProfile = await prisma.student.findFirst({
-            where: { userId: user.id },
-        });
-
-        if (!studentProfile) {
-            console.log(` Creating student profile (roll #${nextRoll})...`);
-            studentProfile = await prisma.student.create({
-                data: {
-                    studentId,
-                    name: admission.applicantName,
-                    dob: admission.dob,
-                    gender: admission.gender,
-                    bloodGroup: admission.bloodGroup,
-                    religion: admission.religion,
-                    address: admission.address,
-                    photo: admission.photoUrl,
-                    rollNumber: nextRoll,
-                    classId: admission.targetClassId,
-                    sectionId: section.id,
-                    userId: user.id,
-                },
-            });
-            console.log(`Student profile created`);
-        }
-
-        // Link admission to student
-        if (studentProfile?.id) {
-            await prisma.admissionApplication.update({
-                where: { id: admission.id },
-                data: { studentId: studentProfile.id },
-            });
-            console.log(`Admission linked to student`);
-        }
-        console.log(`\n READY: Student ${studentEmail} can now login and access dashboard\n`);
-
-        return admission;
     }
 }

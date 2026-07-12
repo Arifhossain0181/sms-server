@@ -17,4 +17,5 @@ model StudentAttendance {
   @@unique([studentId, date])
   @@index([studentId])
   @@index([studentId, date])
+  @@index([sectionId, date])   // NEW
 }

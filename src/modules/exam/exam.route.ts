@@ -5,21 +5,39 @@ import { authorizeRoles } from '../../middleware/role.middleware';
 
 const router = Router();
 
-router.post('/',                        authenticate, authorizeRoles('ADMIN'), examController.createExam);
-router.get('/',                         authenticate, examController.getAllExams);
-router.get('/:id',                      authenticate, examController.getExamById);
-router.put('/:id',                      authenticate, authorizeRoles('ADMIN'), examController.updateExam);
-router.delete('/:id',                   authenticate, authorizeRoles('ADMIN'), examController.deleteExam);
-router.patch('/:id/publish',            authenticate, authorizeRoles('ADMIN'), examController.publishExam);
-router.patch('/:id/unpublish',          authenticate, authorizeRoles('ADMIN'), examController.unpublishExam);
+//  Exam creation/scheduling/publishing is
 
-// Schedule
-router.post('/schedules',               authenticate, authorizeRoles('ADMIN'), examController.createSchedule);
-router.get('/:examId/schedules',        authenticate, examController.getScheduleByExam);
-router.delete('/schedules/:id',         authenticate, authorizeRoles('ADMIN'), examController.deleteSchedule);
+const EXAM_STAFF = ['EXAM_CONTROLLER', 'SCHOOL_ADMIN'] as const;
+// Staff who may see the full exam/reportCard payload (may include
+// unpublished results) — teachers included since they submit marks and
+// need to review, but STUDENT/PARENT must never hit these routes.
+const EXAM_VIEWERS = ['EXAM_CONTROLLER', 'SCHOOL_ADMIN', 'TEACHER'] as const;
 
-// Marks & Result
-router.post('/:examId/marks',            authenticate, authorizeRoles('ADMIN', 'TEACHER'), examController.submitExamMarks);
-router.get('/:examId/failed-students',   authenticate, authorizeRoles('ADMIN', 'TEACHER'), examController.getFailedStudents);
+router.use(authenticate);
+
+router.post('/',                        authorizeRoles(...EXAM_STAFF), examController.createExam);
+router.get('/',                         authorizeRoles(...EXAM_VIEWERS), examController.getAllExams);
+router.get('/:id',                      authorizeRoles(...EXAM_VIEWERS), examController.getExamById);
+router.put('/:id',                      authorizeRoles(...EXAM_STAFF), examController.updateExam);
+router.delete('/:id',                   authorizeRoles(...EXAM_STAFF), examController.deleteExam);
+router.patch('/:id/publish',            authorizeRoles(...EXAM_STAFF), examController.publishExam);
+router.patch('/:id/unpublish',          authorizeRoles(...EXAM_STAFF), examController.unpublishExam);
+
+// Schedule (staff management)
+router.post('/schedules',               authorizeRoles(...EXAM_STAFF), examController.createSchedule);
+router.get('/:examId/schedules',        authorizeRoles(...EXAM_VIEWERS), examController.getScheduleByExam);
+router.delete('/schedules/:id',         authorizeRoles(...EXAM_STAFF), examController.deleteSchedule);
+
+// Marks & Result (teacher entry, staff review)
+router.post('/:examId/marks',            authorizeRoles('TEACHER', ...EXAM_STAFF), examController.submitExamMarks);
+router.get('/:examId/failed-students',   authorizeRoles('TEACHER', ...EXAM_STAFF), examController.getFailedStudents);
+
+// ── Student dashboard: own class schedule + own published results ───
+router.get('/my/schedule',               authorizeRoles('STUDENT'), examController.getMyExamSchedule);
+router.get('/my/results',                authorizeRoles('STUDENT'), examController.getMyResults);
+
+// ── Parent dashboard: a linked child's schedule + results ───────────
+router.get('/child/:studentId/schedule', authorizeRoles('PARENT'), examController.getChildExamSchedule);
+router.get('/child/:studentId/results',  authorizeRoles('PARENT'), examController.getChildResults);
 
 export default router;

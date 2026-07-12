@@ -2,22 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import {
   createNotice,
   findAll,
-  findPublic,
+  getFeedForUser,
   findById,
   update as updateNotice,
   deleteNotice,
   toggleActive,
+  markAsRead,
 } from './notice.service';
 import { sendSuccess } from '../../utils/response.util';
-import prisma from '../../config/db';
-
-// Map DB role → NoticeAudience
-const roleToAudience: Record<string, any> = {
-  STUDENT: 'STUDENTS',
-  TEACHER: 'TEACHERS',
-  PARENT: 'PARENTS',
-  ADMIN: 'ALL',
-};
 
 export class NoticeController {
   async create(req: Request, res: Response, next: NextFunction) {
@@ -34,32 +26,21 @@ export class NoticeController {
     } catch (err) { next(err); }
   }
 
-  /** Authenticated user sees only notices relevant to their role */
-  async findPublic(req: Request, res: Response, next: NextFunction) {
+  /** Authenticated user sees only notices targeted at their role */
+  async feed(req: Request, res: Response, next: NextFunction) {
     try {
-      const userRole = req.user!.role;
-      const audience = roleToAudience[userRole] ?? 'ALL';
-      console.log(`\n[NOTICE] User role: ${userRole}, Audience filter: ${audience}`);
-      
-      let sectionId: string | undefined;
-      
-      // If student, fetch their section
-      if (userRole === 'STUDENT') {
-        const student = await prisma.student.findUnique({
-          where: { userId: req.user!.id },
-          select: { sectionId: true },
-        });
-        sectionId = student?.sectionId;
-        console.log(`[NOTICE] Student section ID: ${sectionId}`);
-      }
-      
-      const notices = await findPublic(audience, sectionId);
-      console.log(`[NOTICE] ✅ Found ${notices.length} notices for ${userRole}`);
+      const notices = await getFeedForUser({ role: req.user!.role, userId: req.user!.id });
       sendSuccess(res, notices, 'Notices fetched');
-    } catch (err) { 
-      console.error(`[NOTICE] ❌ Error:`, (err as any)?.message);
-      next(err); 
-    }
+    } catch (err) { next(err); }
+  }
+
+  /** Mark a student/parent's personal notice recipient row as read */
+  async markRead(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { recipientId } = req.params as { recipientId: string };
+      const recipient = await markAsRead(recipientId, req.user!.id);
+      sendSuccess(res, recipient, 'Notice marked as read');
+    } catch (err) { next(err); }
   }
 
   async findById(req: Request, res: Response, next: NextFunction) {

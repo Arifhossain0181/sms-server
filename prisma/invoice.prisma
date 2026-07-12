@@ -8,7 +8,7 @@ model Invoice {
   dueDate        DateTime
   month          Int?
   year           Int
-  status         PaymentStatus @default(PENDING)
+  status         FeeStatus @default(PENDING)
   createdAt      DateTime      @default(now())
 
   payment Payment?
