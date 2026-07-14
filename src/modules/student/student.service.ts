@@ -10,6 +10,14 @@ import { getAttendance } from './student.attendence';
 import { getResults } from './student.result';
 
 export class StudentService {
+    static async getStudentIdByUserId(userId: string) {
+        const student = await prisma.student.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        return student?.id ?? null;
+    }
+
     async createStudent(dto: CreateStudentDto) {
         const rollNumber = assertValidRollNumber(dto.rollNumber);
         const dob = assertValidDob(String(dto.dateOfBirth));

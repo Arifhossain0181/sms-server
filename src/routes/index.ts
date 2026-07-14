@@ -12,6 +12,9 @@ import feeRoutes from '../modules/fee/router';
 import teachingApplicationRoutes from '../modules/teachingApplication/teachingApplication.routes';
 import noticeRoutes from '../modules/notice/notice.route';
 import timetableRoutes from '../modules/timetable/timetable.routes';
+import parentRoutes from '../modules/parents/parents.routes';
+import notificationRoutes from '../modules/notifiction/notifictaion.routes';
+import homeworkRoutes from '../modules/homework/howework.routes';
 
 const router = express.Router();
 
@@ -33,5 +36,9 @@ router.use('/fees', feeRoutes);
 router.use('/teaching', teachingApplicationRoutes);
 router.use('/notices', noticeRoutes);
 router.use('/timetable', timetableRoutes);
+router.use('/homework', homeworkRoutes);
+router.use('/parents', parentRoutes);
+router.use('/notifications', notificationRoutes);
+
 
 export default router;

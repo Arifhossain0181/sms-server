@@ -6,7 +6,7 @@ declare global {
 			id: string;
 			role: string;
 			email?: string;
-			studentId?: string; // যখন STUDENT login করে তখন তার student ID এ থাকবে
+			studentId?: string; 
 		}
 
 		interface Request {
