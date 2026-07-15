@@ -274,6 +274,20 @@ export class AdmissionService {
                     });
                 }
 
+                // 2) PARENT / GUARDIAN account is auto-provisioned here on
+                //    approval — the parent does NOT self sign-up. The school
+                //    account is created and credentials are emailed. Siblings
+                //    share one parent account (guardianEmail is reused), so
+                //    we only link the student to the existing parent when one
+                //    already exists (Req 1.2: multi-child accounts must work).
+                const parentResult = await this._ensureParentFromAdmission(tx, admission);
+                if (parentResult && !studentProfile.parentId) {
+                    studentProfile = await tx.student.update({
+                        where: { id: studentProfile.id },
+                        data: { parentId: parentResult.parent.id },
+                    });
+                }
+
                 await tx.admissionApplication.update({
                     where: { id: admission.id },
                     data: { studentId: studentProfile.id },
@@ -281,20 +295,83 @@ export class AdmissionService {
 
                 // Return tempPassword only inside the tx scope so the caller
                 // can send the welcome email AFTER commit — see below.
-                return { ...studentProfile, __tempPassword: tempPassword, __email: studentEmail };
+                return {
+                    ...studentProfile,
+                    __tempPassword: tempPassword,
+                    __email: studentEmail,
+                    __guardianName: admission.guardianName,
+                    __parentTempPassword: parentResult?.tempPassword ?? null,
+                    __parentEmail: parentResult?.email ?? null,
+                };
             },
             { isolationLevel: "Serializable" }
         ).then(async (result: any) => {
             // FIX: email is fired after the transaction commits, and is
             // non-blocking — approval should not wait on SMTP (NFR: 3s page loads).
             // FIX: temp password is no longer console.logged (security leak).
+            const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
             if (result.__tempPassword) {
-                const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
                 mailService
                     .sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl)
-                    .catch((err) => console.warn("Welcome email failed:", err?.message));
+                    .catch((err) => console.warn("Student welcome email failed:", err?.message));
+            }
+            if (result.__parentTempPassword) {
+                mailService
+                    .sendParentCredentials(
+                        result.__parentEmail,
+                        result.__guardianName,
+                        result.name,
+                        result.__parentTempPassword,
+                        loginUrl,
+                    )
+                    .catch((err) => console.warn("Parent welcome email failed:", err?.message));
             }
             return result;
         });
+    }
+
+    // Creates (or reuses) the guardian's User + Parent account and returns
+    // it. Reuses an existing parent account when the guardianEmail already
+    // has one (multi-child families). Returns null when no guardianEmail.
+    private async _ensureParentFromAdmission(tx: any, admission: any) {
+        const guardianEmail = admission.guardianEmail;
+        if (!guardianEmail) return null;
+
+        // Reuse existing parent account (siblings share one guardian email).
+        const existingParent = await tx.parent.findFirst({
+            where: { user: { email: guardianEmail } },
+        });
+        if (existingParent) {
+            return { parent: existingParent, email: guardianEmail, tempPassword: null };
+        }
+
+        // Reuse an existing user (no parent profile yet) or create a new one.
+        let user = await tx.user.findUnique({ where: { email: guardianEmail } });
+        let tempPassword: string | null = null;
+
+        if (!user) {
+            tempPassword = randomBytes(6).toString("hex").toUpperCase();
+            const passwordHash = await bcrypt.hash(tempPassword, 10);
+            user = await tx.user.create({
+                data: {
+                    name: admission.guardianName,
+                    email: guardianEmail,
+                    passwordHash,
+                    role: "PARENT",
+                },
+            });
+        }
+
+        const parent = await tx.parent.create({
+            data: {
+                userId: user.id,
+                name: admission.guardianName,
+                phone: admission.guardianPhone,
+                address: admission.address,
+                relation: "Guardian",
+            },
+        });
+
+        return { parent, email: guardianEmail, tempPassword };
     }
 }

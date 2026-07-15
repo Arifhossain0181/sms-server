@@ -8,9 +8,6 @@ const router = Router();
 //  Exam creation/scheduling/publishing is
 
 const EXAM_STAFF = ['EXAM_CONTROLLER', 'SCHOOL_ADMIN'] as const;
-// Staff who may see the full exam/reportCard payload (may include
-// unpublished results) — teachers included since they submit marks and
-// need to review, but STUDENT/PARENT must never hit these routes.
 const EXAM_VIEWERS = ['EXAM_CONTROLLER', 'SCHOOL_ADMIN', 'TEACHER'] as const;
 
 router.use(authenticate);

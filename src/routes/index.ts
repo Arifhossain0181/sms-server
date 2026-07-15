@@ -15,6 +15,7 @@ import timetableRoutes from '../modules/timetable/timetable.routes';
 import parentRoutes from '../modules/parents/parents.routes';
 import notificationRoutes from '../modules/notifiction/notifictaion.routes';
 import homeworkRoutes from '../modules/homework/howework.routes';
+import superAdminRoutes from '../modules/superAdmin/superAdmin.route';
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ router.use('/timetable', timetableRoutes);
 router.use('/homework', homeworkRoutes);
 router.use('/parents', parentRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/super-admin', superAdminRoutes);
 
 
 export default router;

@@ -5,9 +5,8 @@ import { authorizeRoles } from '../../middleware/role.middleware';
 
 const router = Router();
 
-// FIX: 'ADMIN' no longer exists in the Role enum. Class/section management
-// is School Admin's job (doc Req 1.5); Super Admin included as an override,
-// same pattern used in the attendance module.
+// Class/section management is School Admin's job (doc Req 1.5);
+// Super Admin included as an override, same pattern used in the attendance module.
 const CLASS_MANAGERS = ['SCHOOL_ADMIN', 'SUPER_ADMIN'] as const;
 
 // Class routes

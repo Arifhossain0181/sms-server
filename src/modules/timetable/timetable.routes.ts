@@ -39,11 +39,11 @@ router.get('/class/:classId',           authorizeRoles('SCHOOL_ADMIN', 'TEACHER'
 router.get('/teacher/:teacherId',       authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getTeacherWeeklyView.bind(c));
 router.get('/:id',                      authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.findById.bind(c));
 
-// ── Write: Admin only ─────────────────────────────────────────────
-router.post('/',                        authorizeRoles('SCHOOL_ADMIN'), c.createSlot.bind(c));
-router.post('/bulk',                    authorizeRoles('SCHOOL_ADMIN'), c.bulkCreate.bind(c));
-router.patch('/:id',                    authorizeRoles('SCHOOL_ADMIN'), c.update.bind(c));
-router.delete('/class/:classId',        authorizeRoles('SCHOOL_ADMIN'), c.deleteClassSchedule.bind(c));
-router.delete('/:id',                   authorizeRoles('SCHOOL_ADMIN'), c.delete.bind(c));
+// ── Write: EXAM_CONTROLLER only 
+router.post('/',                        authorizeRoles('EXAM_CONTROLLER'), c.createSlot.bind(c));
+router.post('/bulk',                    authorizeRoles('EXAM_CONTROLLER'), c.bulkCreate.bind(c));
+router.patch('/:id',                    authorizeRoles('EXAM_CONTROLLER'), c.update.bind(c));
+router.delete('/class/:classId',        authorizeRoles('EXAM_CONTROLLER'), c.deleteClassSchedule.bind(c));
+router.delete('/:id',                   authorizeRoles('EXAM_CONTROLLER'), c.delete.bind(c));
 
 export default router;

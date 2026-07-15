@@ -6,7 +6,7 @@ import { TeachersService } from './teachers.service';
 
 const teacherService = TeachersService;
 
-const ADMIN_LIKE_ROLES = ['ADMIN', 'SCHOOL_ADMIN', 'HR'];
+const ADMIN_LIKE_ROLES = ['SCHOOL_ADMIN', 'HR'];
 const SENSITIVE_FIELDS = ['salary', 'address', 'bloodGroup', 'dateOfBirth'] as const;
 
 function redactForRole<T extends Record<string, any>>(teacher: T, role?: string): T {

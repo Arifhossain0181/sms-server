@@ -1,4 +1,4 @@
-// ─── ENUMS ─────────────────────────────────────────────────
+//  ENUMS 
 
 enum Role {
   SUPER_ADMIN
@@ -9,8 +9,6 @@ enum Role {
   PARENT
   EXAM_CONTROLLER
   HR
-  LIBRARIAN
-  RECEPTIONIST
 }
 
 enum Gender {

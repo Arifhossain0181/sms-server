@@ -30,44 +30,44 @@ router.get(
 
 router.patch(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN',),
   teacherController.update.bind(teacherController)
 );
 
 router.delete(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN',),
   teacherController.delete.bind(teacherController)
 );
 
 router.patch(
   '/:id/avatar',
-  authorizeRoles('SCHOOL_ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN',),
   upload.single('avatar'),
   teacherController.uploadAvatar.bind(teacherController)
 );
 
 router.patch(
   '/:id/assign-subjects',
-  authorizeRoles('SCHOOL_ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN',),
   teacherController.assignSubjects.bind(teacherController)
 );
 
 router.patch(
   '/:id/assign-classes',
-  authorizeRoles('SCHOOL_ADMIN'),
+  authorizeRoles('SCHOOL_ADMIN',),
   teacherController.assignClasses.bind(teacherController)
 );
 
 router.get(
   '/:id/schedule',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER',),
   teacherController.getSchedule.bind(teacherController)
 );
 
 router.get(
   '/:id/dashboard',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER',),
   teacherController.getDashboardStats.bind(teacherController)
 );
 
