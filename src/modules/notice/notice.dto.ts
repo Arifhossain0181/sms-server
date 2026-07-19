@@ -4,7 +4,12 @@ export type NoticeAudience =
   | 'STUDENTS'
   | 'PARENTS'
   | 'TEACHERS'
-  | 'STAFF';
+  | 'STAFF'
+  | 'SUPER_ADMIN'
+  | 'SCHOOL_ADMIN'
+  | 'ACCOUNTANT'
+  | 'EXAM_CONTROLLER'
+  | 'HR';
 export type NoticePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
 // ─── Create / Update ────────────────────────────────────────────────

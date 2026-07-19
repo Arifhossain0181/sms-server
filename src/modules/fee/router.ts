@@ -25,9 +25,11 @@ router.use(authenticate);
 router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
 
 // ── Reports (before :id to avoid param clash) ──────────────────────
-router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getCollectionReport.bind(c));
-router.get('/report/overdue',     authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getOverdueFees.bind(c));
-router.get('/summary',            authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getSummary.bind(c));
+router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getCollectionReport.bind(c));
+router.get('/report/overdue',     authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getOverdueFees.bind(c));
+router.get('/summary',            authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getSummary.bind(c));
+router.get('/transactions',       authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getTransactions.bind(c));
+router.get('/analytics/monthly',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getMonthlyAnalytics.bind(c));
 
 
 // the controller now verifies req.user.studentId === :studentId before
@@ -46,7 +48,7 @@ router.patch('/:id',   authorizeRoles('ACCOUNTANT'), c.update.bind(c));
 router.delete('/:id',  authorizeRoles('ACCOUNTANT'), c.delete.bind(c));
 
 // ── Payments 
-router.post('/pay',  authorizeRoles('ACCOUNTANT'), c.recordPayment.bind(c));
+router.patch('/:id/pay',  authorizeRoles('ACCOUNTANT'), c.recordPayment.bind(c));
 router.post('/cash', authorizeRoles('ACCOUNTANT'), c.recordCashPayment.bind(c));
 
 export default router;

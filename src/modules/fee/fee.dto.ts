@@ -4,13 +4,13 @@ export type FeeType = PrismaFeeType; // Use Prisma-generated FeeType
 
 // ─── Create / Update ────────────────────────────────────────────────
 export interface CreateFeeDto {
-  studentId: string;
-  classId: string; // Added classId
+  studentId?: string;
+  classId: string;
   title: string;
-  type: FeeType; // Updated to use Prisma FeeType
+  type: FeeType;
   amount: number;
-  dueDate: string; // ISO date
-  dueDay: number; // Added dueDay
+  dueDate: string;
+  dueDay: number;
   description?: string;
 }
 

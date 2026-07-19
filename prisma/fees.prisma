@@ -15,7 +15,8 @@ model FeeStructure {
   title       String?
   description String?
   year        Int
-  month       Int
+  month       Int 
+  academicYear  String
 
   invoices Invoice[]
   payments Payment[]

@@ -7,8 +7,6 @@ const ALL_STAFF_ROLES: Role[] = [
     Role.SUPER_ADMIN,
     Role.SCHOOL_ADMIN,
     Role.ACCOUNTANT,
-    Role.LIBRARIAN,
-    Role.RECEPTIONIST,
     Role.EXAM_CONTROLLER,
     Role.HR,
     Role.TEACHER,
@@ -20,6 +18,11 @@ const ALL_STAFF_ROLES: Role[] = [
 const audienceToUserRoles: Partial<Record<NoticeAudience, Role[]>> = {
     TEACHERS: [Role.TEACHER],
     STAFF: ALL_STAFF_ROLES,
+    SUPER_ADMIN: [Role.SUPER_ADMIN],
+    SCHOOL_ADMIN: [Role.SCHOOL_ADMIN],
+    ACCOUNTANT: [Role.ACCOUNTANT],
+    EXAM_CONTROLLER: [Role.EXAM_CONTROLLER],
+    HR: [Role.HR],
 };
 
 /**

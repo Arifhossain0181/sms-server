@@ -12,6 +12,8 @@ import {
   getCollectionReport,
   getFeeSummary,
   getOverdueFees as getOverdueFeesService,
+  getAllPayments as getTransactionsService,
+  getMonthlyAnalytics as getMonthlyAnalyticsService,
 } from './fee.service';
 import { sendSuccess } from '../../utils/response.util';
 
@@ -45,9 +47,6 @@ export class FeesController {
 
       const fee = await findByid(idStr);
 
-      // : a STUDENT can hit this route too (see router), but
-      // nothing stopped them requesting any fee ID, not just their own.
-      // Every other role is trusted staff and passes through unchecked.
       if (req.user?.role === 'STUDENT' && fee.studentId !== req.user.studentId) {
         return res.status(403).json({ success: false, message: 'Forbidden' });
       }
@@ -78,9 +77,6 @@ export class FeesController {
 
   async recordPayment(req: Request, res: Response, next: NextFunction) {
     try {
-      // actorUserId was never passed — fee.service's recordPayment
-      // requires it for the audit-log write (NFR Auditability). This was
-      // either throwing at runtime or writing `undefined` as the actor.
       if (!req.user?.id) throw new Error('Authenticated user not found on request');
       const payment = await recordPayment(req.body, req.user.id);
       sendSuccess(res, payment, 'Payment recorded', 201);
@@ -89,7 +85,6 @@ export class FeesController {
 
   async recordCashPayment(req: Request, res: Response, next: NextFunction) {
     try {
-      // missing actorUserId as recordPayment above.
       if (!req.user?.id) throw new Error('Authenticated user not found on request');
       const payment = await recordCashPayment(req.body, req.user.id);
       sendSuccess(res, payment, 'Cash payment recorded', 201);
@@ -102,8 +97,6 @@ export class FeesController {
       const studentIdStr = Array.isArray(studentId) ? studentId[0] : studentId;
       if (!studentIdStr) throw new Error('studentId param required');
 
-      // same issue as findById — a STUDENT could pass any
-      // studentId in the URL and read someone else's fee summary.
       if (req.user?.role === 'STUDENT' && req.user.studentId !== studentIdStr) {
         return res.status(403).json({ success: false, message: 'Forbidden' });
       }
@@ -133,9 +126,6 @@ export class FeesController {
     } catch (err) { next(err); }
   }
 
-  // 
-  // per student." getFeeSummary only ever returned a count; this exposes
-  // the actual per-student list getOverdueFees (fee.service.ts) provides.
   async getOverdueFees(req: Request, res: Response, next: NextFunction) {
     try {
       const data = await getOverdueFeesService(req.query as any);
@@ -150,6 +140,22 @@ export class FeesController {
       }
       const data = await getstudentFeeSummary(req.user.studentId);
       sendSuccess(res, data, 'Your fees fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getTransactions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await getTransactionsService(req.query as any);
+      sendSuccess(res, data, 'Transactions fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getMonthlyAnalytics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const yearStr = req.query.year as string | undefined;
+      const year = yearStr ? parseInt(yearStr) : new Date().getFullYear();
+      const data = await getMonthlyAnalyticsService(year);
+      sendSuccess(res, data, 'Analytics fetched');
     } catch (err) { next(err); }
   }
 }

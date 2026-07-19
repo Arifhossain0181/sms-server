@@ -8,6 +8,11 @@ function deriveMonthYear(date: Date) {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
+function deriveAcademicYear(year: number, month: number): string {
+  if (month >= 7) return `${year}-${year + 1}`;
+  return `${year - 1}-${year}`;
+}
+
 function monthRange(month: string) {
   const start = new Date(`${month}-01`);
   const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
@@ -18,15 +23,18 @@ function monthRange(month: string) {
 // actually parse — CreateFeeDto's title/description map to real
 // FeeStructure columns.
 export const createfee = async (dto: CreateFeeDto) => {
-  const student = await prisma.student.findUnique({
-    where: { id: dto.studentId },
-    select: { id: true },
-  });
-  if (!student) throw new Error("Student not found");
+  if (dto.studentId) {
+    const student = await prisma.student.findUnique({
+      where: { id: dto.studentId },
+      select: { id: true },
+    });
+    if (!student) throw new Error("Student not found");
+  }
 
   const dueDate = new Date(dto.dueDate);
   if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
   const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
 
   return prisma.feeStructure.create({
     data: {
@@ -40,6 +48,7 @@ export const createfee = async (dto: CreateFeeDto) => {
       dueDay: dto.dueDay,
       year,
       month,
+      academicYear,
       status: "PENDING",
       Paidamount: 0,
     },
@@ -65,6 +74,7 @@ export const bulkcreate = async (dto: BulkCreateFeeDto) => {
   const dueDate = new Date(dto.dueDate);
   if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
   const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
 
   const fees = students.map((student) => ({
     studentId: student.id,
@@ -77,6 +87,7 @@ export const bulkcreate = async (dto: BulkCreateFeeDto) => {
     dueDay: dueDate.getDate(),
     year,
     month,
+    academicYear,
     status: "PENDING" as const,
     Paidamount: 0,
   }));
@@ -233,13 +244,15 @@ export const recordPayment = async (dto: RecordPaymentDto, actorUserId: string) 
       }
 
       const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
+      const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
       const payment = await tx.payment.create({
         data: {
           feeStructureId: dto.feeId,
           amount: dto.amountPaid,
           method: dto.method,
-          transactionId: dto.transactionId ?? undefined,
+          status: "PAID",
+          transactionId,
           note: dto.note ?? undefined,
           invoiceId: invoice.id,
           studentId: fee.studentId,
@@ -255,16 +268,13 @@ export const recordPayment = async (dto: RecordPaymentDto, actorUserId: string) 
         await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
       }
 
-      // NFR Auditability — payments must be logged with user/timestamp.
-      // Fire-and-forget so a logging hiccup never blocks the payment itself.
       tx.auditLog
         .create({
           data: {
             userId: actorUserId,
             action: "FEE_PAYMENT_RECORDED",
             targetId: fee.id,
-            meta: { amount: dto.amountPaid, method: dto.method, newStatus },
-            timestamp: new Date(),
+            metadata: { amount: dto.amountPaid, method: dto.method, newStatus, transactionId },
           },
         })
         .catch((err) => console.warn("Audit log failed:", err?.message));
@@ -291,6 +301,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
   const dueDate = dto.dueDate ? new Date(dto.dueDate) : now;
   if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
   const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
 
   return prisma.$transaction(
     async (tx) => {
@@ -300,6 +311,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
           feeType: dto.type,
           year,
           month,
+          academicYear,
           status: { in: ["PENDING", "PARTIAL"] },
         },
       });
@@ -316,6 +328,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
             dueDay: dueDate.getDate(),
             year,
             month,
+            academicYear,
             status: "PENDING",
             Paidamount: 0,
           },
@@ -327,6 +340,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
         throw new Error("Payment exceeds outstanding fee amount");
       }
       const newStatus = totalPaid === fee.amount ? "PAID" : "PARTIAL";
+      const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
       let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
       if (!invoice) {
@@ -354,7 +368,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
           method: "CASH",
           status: "PAID",
           paidAt: now,
-          transactionId: dto.transactionId ?? undefined,
+          transactionId,
           note: dto.note ?? undefined,
         },
       });
@@ -370,8 +384,7 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
             userId: actorUserId,
             action: "FEE_CASH_PAYMENT",
             targetId: fee.id,
-            meta: { amount: dto.amountPaid, isNewFee },
-            timestamp: new Date(),
+            metadata: { amount: dto.amountPaid, isNewFee },
           },
         })
         .catch((err) => console.warn("Audit log failed:", err?.message));
@@ -528,4 +541,102 @@ export const _exists = async (id: string) => {
   const fee = await prisma.feeStructure.findUnique({ where: { id }, select: { id: true } });
   if (!fee) throw new Error("Fee record not found");
   return fee;
+};
+
+export const getAllPayments = async (dto: { page?: string; limit?: string; method?: string; status?: string; month?: string }) => {
+  const page = Number(dto.page);
+  const limit = Number(dto.limit);
+  const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
+  const safeLimit = Number.isNaN(limit) || limit < 1 ? 20 : limit;
+  const skip = (safePage - 1) * safeLimit;
+  const take = safeLimit;
+
+  const where: any = {};
+  if (dto.method && ['STRIPE', 'CASH'].includes(dto.method)) {
+    where.method = dto.method;
+  }
+  if (dto.status && ['PENDING', 'PAID', 'FAILED', 'REFUNDED'].includes(dto.status)) {
+    where.status = dto.status;
+  }
+  if (dto.month) {
+    const monthStr = String(dto.month).trim();
+    const monthRegex = /^\d{4}-\d{2}$/;
+    if (monthRegex.test(monthStr)) {
+      const [yearStr, monthNumStr] = monthStr.split('-');
+      const year = Number(yearStr);
+      const monthNum = Number(monthNumStr);
+      if (year >= 2000 && year <= 2100 && monthNum >= 1 && monthNum <= 12) {
+        const start = new Date(Date.UTC(year, monthNum - 1, 1));
+        const end = new Date(Date.UTC(year, monthNum, 1));
+        where.createdAt = { gte: start, lt: end };
+      }
+    }
+  }
+
+  const [payments, total] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        method: true,
+        status: true,
+        transactionId: true,
+        note: true,
+        paidAt: true,
+        createdAt: true,
+        student: { select: { id: true, rollNumber: true, user: { select: { name: true, email: true } } } },
+        feeStructure: { select: { id: true, feeType: true, title: true, amount: true } },
+      },
+    }),
+    prisma.payment.count({ where }),
+  ]);
+
+  return {
+    data: payments,
+    meta: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit) || 1,
+    },
+  };
+};
+
+export const getMonthlyAnalytics = async (year: number) => {
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+  const [byMonth, byMethodYear, typeBreakdown] = await Promise.all([
+    Promise.all(
+      months.map(async (m) => {
+        const start = new Date(year, m - 1, 1);
+        const end = new Date(year, m, 1);
+        const agg = await prisma.payment.aggregate({
+          where: { createdAt: { gte: start, lt: end }, status: "PAID" },
+          _sum: { amount: true },
+          _count: { id: true },
+        });
+        return { month: m, total: agg._sum.amount ?? 0, count: agg._count };
+      })
+    ),
+    prisma.payment.groupBy({
+      by: ["method"],
+      where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) }, status: "PAID" },
+      _sum: { amount: true },
+    }),
+    prisma.feeStructure.groupBy({
+      by: ["feeType"],
+      _sum: { amount: true, Paidamount: true },
+    }),
+  ]);
+
+  return {
+    year,
+    byMonth,
+    byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
+    byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }])),
+  };
 };

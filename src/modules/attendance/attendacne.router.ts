@@ -10,7 +10,7 @@ router.use(authenticate); // every attendance route requires login
 
 // ── Teacher / School Admin: record & review attendance ─────────────
 router.post('/take', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.take.bind(c));
-router.get('/by-date', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.byDate.bind(c));
+router.get('/by-date', authorizeRoles('TEACHER', 'SCHOOL_ADMIN', 'ADMIN'), c.byDate.bind(c));
 router.get('/monthly-report', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.monthlyReport.bind(c));
 router.patch('/:id', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.update.bind(c));
 

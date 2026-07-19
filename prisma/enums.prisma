@@ -93,6 +93,11 @@ enum NoticeAudience {
   TEACHERS
   PARENTS
   STAFF
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  ACCOUNTANT
+  EXAM_CONTROLLER
+  HR
 }
 
 enum NoticePriority {
