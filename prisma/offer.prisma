@@ -1,0 +1,19 @@
+model Offer {
+  id           String    @id @default(uuid())
+  applicantId  String
+  applicant    Applicant @relation(fields: [applicantId], references: [id])
+  department    Department? @relation(fields: [departmentId], references: [id])
+  position     String
+  departmentId  String?
+  salary       Float
+  joiningDate  DateTime
+  validUntil   DateTime
+  terms        String?
+  status       String    @default("PENDING")
+  acceptedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([applicantId])
+  @@map("offers")
+}

@@ -22,6 +22,12 @@ CREATE TYPE "PerformanceRating" AS ENUM ('EXCELLENT', 'GOOD', 'SATISFACTORY', 'N
 -- CreateEnum
 CREATE TYPE "CriticalActionStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
+-- CreateEnum
+CREATE TYPE "JobStatus" AS ENUM ('OPEN', 'CLOSED', 'FILLED');
+
+-- CreateEnum
+CREATE TYPE "ApplicantStatus" AS ENUM ('APPLIED', 'SHORTLISTED', 'REJECTED', 'OFFERED', 'ACCEPTED', 'DECLINED');
+
 -- CreateTable
 CREATE TABLE "departments" (
     "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
@@ -162,6 +168,91 @@ CREATE TABLE "critical_actions" (
     CONSTRAINT "critical_actions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "job_postings" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+    "title" TEXT NOT NULL,
+    "departmentId" TEXT,
+    "designation" TEXT NOT NULL,
+    "vacancies" INTEGER NOT NULL,
+    "description" TEXT,
+    "requirements" TEXT,
+    "deadline" TIMESTAMP(3) NOT NULL,
+    "status" "JobStatus" NOT NULL DEFAULT 'OPEN',
+    "createdBy" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "job_postings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "applicants" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+    "jobPostingId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "phone" TEXT,
+    "resumeUrl" TEXT,
+    "coverLetter" TEXT,
+    "status" "ApplicantStatus" NOT NULL DEFAULT 'APPLIED',
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "applicants_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "interviews" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+    "applicantId" TEXT NOT NULL,
+    "scheduledAt" TIMESTAMP(3) NOT NULL,
+    "location" TEXT,
+    "interviewers" TEXT[],
+    "status" TEXT NOT NULL DEFAULT 'SCHEDULED',
+    "outcome" TEXT,
+    "score" INTEGER,
+    "feedback" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "interviews_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "offers" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+    "applicantId" TEXT NOT NULL,
+    "position" TEXT NOT NULL,
+    "departmentId" TEXT,
+    "salary" DOUBLE PRECISION NOT NULL,
+    "joiningDate" TIMESTAMP(3) NOT NULL,
+    "validUntil" TIMESTAMP(3) NOT NULL,
+    "terms" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "acceptedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "offers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "designation_salaries" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+    "designation" TEXT NOT NULL,
+    "departmentId" TEXT,
+    "basicPay" DOUBLE PRECISION NOT NULL,
+    "allowances" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "deductions" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "effectiveFrom" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "designation_salaries_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "departments_name_key" ON "departments"("name");
 
@@ -234,5 +325,26 @@ ALTER TABLE "payrolls" ADD CONSTRAINT "payrolls_staffId_fkey" FOREIGN KEY ("staf
 -- AddForeignKey
 ALTER TABLE "performance_reviews" ADD CONSTRAINT "performance_reviews_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- AddColumn
+ALTER TABLE "Teacher" ADD COLUMN "departmentId" TEXT;
+
 -- AddForeignKey
 ALTER TABLE "Teacher" ADD CONSTRAINT "Teacher_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "job_postings" ADD CONSTRAINT "job_postings_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "applicants" ADD CONSTRAINT "applicants_jobPostingId_fkey" FOREIGN KEY ("jobPostingId") REFERENCES "job_postings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "interviews" ADD CONSTRAINT "interviews_applicantId_fkey" FOREIGN KEY ("applicantId") REFERENCES "applicants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "offers" ADD CONSTRAINT "offers_applicantId_fkey" FOREIGN KEY ("applicantId") REFERENCES "applicants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "offers" ADD CONSTRAINT "offers_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "designation_salaries" ADD CONSTRAINT "designation_salaries_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;

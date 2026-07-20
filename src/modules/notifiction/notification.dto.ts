@@ -6,7 +6,10 @@ export type NotificationType =
   | 'ATTENDANCE'
   | 'NOTICE'
   | 'TIMETABLE'
-  | 'GENERAL';
+  | 'GENERAL'
+  | 'LEAVE'
+  | 'PAYROLL'
+  | 'RECRUITMENT';
 
 // ─── Internal: used by other services to fire a notification ────────
 export interface SendNotificationDto {

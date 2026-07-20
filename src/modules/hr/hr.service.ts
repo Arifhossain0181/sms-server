@@ -16,6 +16,7 @@ import {
 import prisma from '../../config/db';
 import { paginate } from '../../utils/pagination.util';
 import { randomBytes } from 'node:crypto';
+import PDFDocument from 'pdfkit';
 
 // ─── Department helpers 
 
@@ -64,7 +65,7 @@ export async function deleteDepartment(id: string) {
   return prisma.department.update({ where: { id }, data: { isActive: false } });
 }
 
-// ─── Staff helpers ────────────────────────────────────────────────
+// ─── Staff helpers 
 
 async function nextAutoStaffId(): Promise<string> {
   const all = await prisma.staff.findMany({ select: { employeeId: true } });
@@ -240,7 +241,7 @@ export async function getStaffDirectory() {
   return staff;
 }
 
-// ─── Attendance helpers ───────────────────────────────────────────
+// ─── Attendance helpers 
 
 export async function recordAttendance(dto: CreateAttendanceDto, actorId: string) {
   const staff = await prisma.staff.findUnique({ where: { id: dto.staffId } });
@@ -469,6 +470,22 @@ export async function approveLeaveRequest(id: string, dto: ApproveLeaveDto, acto
         data: { usedDays: balance.usedDays + leaveDays },
       });
     }
+
+    const isTeacher = await prisma.teacher.findUnique({ where: { id: leave.staffId } });
+    if (isTeacher) {
+      try {
+        const { broadcast } = await import('../../modules/notifiction/notification.service');
+        await broadcast({
+          role: 'EXAM_CONTROLLER',
+          title: 'Teacher Leave Approved - Reschedule Needed',
+          body: `${isTeacher.name} (${isTeacher.designation ?? 'Teacher'}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
+          type: 'LEAVE',
+          referenceId: leave.id,
+        });
+      } catch (notifErr) {
+        console.error('Failed to broadcast leave notification:', notifErr);
+      }
+    }
   }
 
   return updatedLeave;
@@ -501,7 +518,7 @@ export async function initializeDefaultLeaveBalances(staffId: string, year: numb
   });
 }
 
-// ─── Payroll helpers ──────────────────────────────────────────────
+// ─── Payroll helpers 
 
 async function calculateLeaveDaysInMonth(staffId: string, month: number, year: number): Promise<number> {
   const start = new Date(year, month - 1, 1);
@@ -654,7 +671,7 @@ export async function findPerformanceReviews(staffId: string) {
   });
 }
 
-// ─── Critical Action helpers ──────────────────────────────────────
+// ─── Critical Action helpers 
 
 export async function requestCriticalAction(dto: CreateCriticalActionDto, actorId: string) {
   return prisma.criticalAction.create({
@@ -758,3 +775,71 @@ export async function getHRDashboardStats() {
     currentYear,
   };
 }
+
+// ─── PDF Payslip Generation ──────────────────────────────────────
+
+export async function generatePayslipPdf(payrollId: string): Promise<Buffer> {
+  const payroll = await prisma.payroll.findUnique({
+    where: { id: payrollId },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, department: { select: { name: true } } } } },
+  });
+
+  if (!payroll) throw { status: 404, message: 'Payroll not found' };
+
+  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  const chunks: Buffer[] = [];
+
+  return new Promise<Buffer>((resolve, reject) => {
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    // Header
+    doc.fontSize(20).text('PAYSLIP', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).text(`Period: ${monthNames[payroll.month - 1]} ${payroll.year}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Company info
+    doc.fontSize(14).text('Greenwood School', { align: 'center' });
+    doc.fontSize(10).text('123 Education Lane, City', { align: 'center' });
+    doc.moveDown(1);
+
+    // Staff info
+    doc.fontSize(12).text('Employee Details', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10);
+    doc.text(`Name: ${payroll.staff.name}`);
+    doc.text(`Employee ID: ${payroll.staff.employeeId}`);
+    doc.text(`Designation: ${payroll.staff.designation ?? '—'}`);
+    doc.text(`Department: ${payroll.staff.department?.name ?? '—'}`);
+    doc.moveDown(1);
+
+    // Salary breakdown
+    doc.fontSize(12).text('Salary Breakdown', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10);
+
+    const rows = [
+      ['Basic Pay', `৳${payroll.basicPay.toLocaleString()}`],
+      ['Allowances', `৳${payroll.allowances.toLocaleString()}`],
+      ['Deductions', `-৳${payroll.deductions.toLocaleString()}`],
+      ['Attendance Days', String(payroll.attendanceDays)],
+      ['Leave Days', String(payroll.leaveDays)],
+      ['Net Salary', `৳${payroll.netSalary.toLocaleString()}`],
+    ];
+
+    rows.forEach(([label, value]) => {
+      doc.text(`${label}: ${value}`);
+    });
+
+    doc.moveDown(1);
+    doc.text(`Status: ${payroll.status}`);
+    doc.text(`Generated: ${new Date(payroll.createdAt).toLocaleDateString()}`);
+
+    doc.end();
+  });
+}
+

@@ -1,0 +1,15 @@
+model DesignationSalary {
+  id            String    @id @default(uuid())
+  designation   String
+  department    Department? @relation(fields: [departmentId], references: [id])
+  departmentId  String?
+  basicPay      Float
+  allowances    Float     @default(0)
+  deductions    Float     @default(0)
+  effectiveFrom DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([designation])
+  @@map("designation_salaries")
+}

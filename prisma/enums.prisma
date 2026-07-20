@@ -115,6 +115,9 @@ enum NotificationType {
   NOTICE
   TIMETABLE
   GENERAL
+  LEAVE
+  PAYROLL
+  RECRUITMENT
 }
 
 enum TeachingApplicationStatus {
@@ -160,4 +163,19 @@ enum CriticalActionStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+  FILLED
+}
+
+enum ApplicantStatus {
+  APPLIED
+  SHORTLISTED
+  REJECTED
+  OFFERED
+  ACCEPTED
+  DECLINED
 }

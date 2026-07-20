@@ -34,6 +34,7 @@ import {
   approveCriticalAction,
   rejectCriticalAction,
   getHRDashboardStats,
+  generatePayslipPdf,
 } from './hr.service';
 import { sendSuccess, sendError } from '../../utils/response.util';
 
@@ -300,6 +301,17 @@ export class HRController {
       const pending = await getPendingPayrolls();
       sendSuccess(res, pending, 'Pending payrolls fetched');
     } catch (err) {
+      next(err);
+    }
+  }
+
+  async downloadPayslip(req: Request, res: Response, next: NextFunction) {
+    try {
+      const pdfBuffer = await generatePayslipPdf(String(req.params.id));
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="payslip-${req.params.id}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (err: any) {
       next(err);
     }
   }

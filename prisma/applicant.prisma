@@ -1,0 +1,22 @@
+model Applicant {
+  id            String          @id @default(uuid())
+  jobPostingId  String
+  jobPosting    JobPosting      @relation(fields: [jobPostingId], references: [id])
+  departmentId  String?
+  department    Department?     @relation(fields: [departmentId], references: [id])
+  name          String
+  email         String
+  phone         String?
+  resumeUrl     String?
+  coverLetter   String?
+  status        ApplicantStatus @default(APPLIED)
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  interviews    Interview[]
+  offers        Offer[]
+
+  @@index([jobPostingId, status])
+  @@map("applicants")
+}

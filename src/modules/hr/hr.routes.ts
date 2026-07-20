@@ -46,6 +46,7 @@ router.post('/payroll', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.ge
 router.get('/payroll', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.findAllPayrolls.bind(c));
 router.get('/payroll/pending', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.getPendingPayrolls.bind(c));
 router.get('/payroll/staff/:id', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.getPayrollHistory.bind(c));
+router.get('/payroll/:id/download', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.downloadPayslip.bind(c));
 router.patch('/payroll/:id/mark-paid', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACCOUNTANT'), c.markPayrollPaid.bind(c));
 
 // ─── Performance Reviews ──────────────────────────────────────────
