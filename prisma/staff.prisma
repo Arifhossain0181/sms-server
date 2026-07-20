@@ -1,0 +1,37 @@
+model Staff {
+  id              String      @id @default(uuid())
+  employeeId      String      @unique
+  name            String
+  email           String      @unique
+  phone           String?
+  designation     String?
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id])
+  staffType       StaffType   @default(NON_TEACHING)
+  qualification   String?
+  experience      Int?
+  address         String?
+  dateOfBirth     DateTime?
+  bloodGroup      String?
+  gender          Gender?
+  joiningDate     DateTime?
+  photo           String?
+  idProofUrl      String?
+  certificates    String[]
+  contractUrl     String?
+  reportingTo     String?
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  attendances     StaffAttendance[]
+  leaves          Leave[]
+  leaveBalances   LeaveBalance[]
+  payrolls        Payroll[]
+  performanceReviews PerformanceReview[]
+
+  @@index([employeeId])
+  @@index([departmentId])
+  @@index([email])
+  @@map("staff")
+}

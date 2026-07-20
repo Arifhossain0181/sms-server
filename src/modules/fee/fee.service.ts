@@ -619,7 +619,7 @@ export const getMonthlyAnalytics = async (year: number) => {
           _sum: { amount: true },
           _count: { id: true },
         });
-        return { month: m, total: agg._sum.amount ?? 0, count: agg._count };
+        return { month: m, total: agg._sum.amount ?? 0, count: agg._count.id ?? 0 };
       })
     ),
     prisma.payment.groupBy({

@@ -1,0 +1,13 @@
+model StaffAttendance {
+  id        String           @id @default(uuid())
+  staffId   String
+  staff     Staff            @relation(fields: [staffId], references: [id])
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(PRESENT)
+  note      String?
+  createdAt DateTime        @default(now())
+
+  @@unique([staffId, date])
+  @@index([staffId, date])
+  @@map("staff_attendances")
+}

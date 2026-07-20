@@ -24,6 +24,8 @@ model Teacher {
   attendanceTaken       StudentAttendance[]
   designation           String?
   department            String?
+  departmentId          String?
+  departmentRef         Department?         @relation(fields: [departmentId], references: [id])
   qualification         String?
   experience            Int?
   address               String?

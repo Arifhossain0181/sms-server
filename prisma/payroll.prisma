@@ -1,0 +1,23 @@
+model Payroll {
+  id              String        @id @default(uuid())
+  staffId         String
+  staff           Staff         @relation(fields: [staffId], references: [id])
+  month           Int
+  year            Int
+  basicPay        Float
+  allowances      Float         @default(0)
+  deductions      Float         @default(0)
+  netSalary       Float
+  attendanceDays  Int
+  leaveDays       Int           @default(0)
+  status          PayrollStatus @default(PENDING)
+  generatedBy     String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([staffId, month, year])
+  @@index([staffId, year])
+  @@index([status])
+  @@map("payrolls")
+}

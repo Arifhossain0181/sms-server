@@ -1,0 +1,18 @@
+model CriticalAction {
+  id            String             @id @default(uuid())
+  actionType    String
+  staffId       String
+  staffName     String
+  reason        String
+  details       Json?
+  status        CriticalActionStatus @default(PENDING)
+  requestedBy   String
+  reviewedBy    String?
+  reviewComment String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([staffId])
+  @@index([status])
+  @@map("critical_actions")
+}

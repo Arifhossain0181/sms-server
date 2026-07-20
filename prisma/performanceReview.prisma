@@ -1,0 +1,16 @@
+model PerformanceReview {
+  id             String             @id @default(uuid())
+  staffId        String
+  staff          Staff              @relation(fields: [staffId], references: [id])
+  reviewDate     DateTime
+  rating         PerformanceRating
+  strengths      String?
+  areasToImprove String?
+  comments       String?
+  reviewedBy     String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([staffId, reviewDate])
+  @@map("performance_reviews")
+}

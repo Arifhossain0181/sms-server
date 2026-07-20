@@ -16,6 +16,7 @@ import parentRoutes from '../modules/parents/parents.routes';
 import notificationRoutes from '../modules/notifiction/notifictaion.routes';
 import homeworkRoutes from '../modules/homework/howework.routes';
 import superAdminRoutes from '../modules/superAdmin/superAdmin.route';
+import hrRoutes from '../modules/hr/hr.routes';
 
 const router = express.Router();
 
@@ -41,6 +42,7 @@ router.use('/homework', homeworkRoutes);
 router.use('/parents', parentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/super-admin', superAdminRoutes);
+router.use('/hr', hrRoutes);
 
 
 export default router;

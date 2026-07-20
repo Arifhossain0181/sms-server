@@ -122,3 +122,42 @@ enum TeachingApplicationStatus {
   APPROVED
   REJECTED
 }
+
+enum StaffType {
+  TEACHING
+  NON_TEACHING
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  EARNED
+  MATERNITY
+  PATERNITY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayrollStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum PerformanceRating {
+  EXCELLENT
+  GOOD
+  SATISFACTORY
+  NEEDS_IMPROVEMENT
+  POOR
+}
+
+enum CriticalActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

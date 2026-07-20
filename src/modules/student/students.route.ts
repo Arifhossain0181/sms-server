@@ -28,7 +28,7 @@ router.post(
 
 router.get(
   '/',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT'),
   studentController.findAll.bind(studentController)
 );
 
@@ -40,7 +40,7 @@ router.get(
 
 router.get(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT'),
   studentController.findById.bind(studentController)
 );
 
