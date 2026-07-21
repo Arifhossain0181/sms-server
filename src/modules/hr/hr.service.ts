@@ -317,7 +317,7 @@ export async function getDailyAttendance(date: string) {
 
   const records = await prisma.staffAttendance.findMany({
     where: { date: targetDate },
-    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, staffType: true, department: { select: { name: true } } } } },
     orderBy: { staff: { name: 'asc' } },
   });
 
@@ -333,6 +333,8 @@ export async function getDailyAttendance(date: string) {
       staffName: r.staff.name,
       employeeId: r.staff.employeeId,
       designation: r.staff.designation,
+      staffType: r.staff.staffType,
+      department: r.staff.department?.name,
       status: r.status,
       note: r.note,
     })),
