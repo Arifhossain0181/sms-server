@@ -105,6 +105,10 @@ export const updateExam = async (id: string, dto: UpdateExamDto) => {
 
 export const deleteExam = async (id: string) => {
     await getExamById(id);
+    await prisma.examSchedule.deleteMany({ where: { examId: id } });
+    await prisma.mark.deleteMany({ where: { examId: id } });
+    await prisma.admitCard.deleteMany({ where: { examId: id } });
+    await prisma.reportCard.deleteMany({ where: { examId: id } });
     return prisma.exam.delete({ where: { id } });
 };
 
