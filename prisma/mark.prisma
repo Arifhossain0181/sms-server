@@ -1,22 +1,26 @@
 model Mark {
-  id            String   @id @default(uuid())
+  id            String     @id @default(uuid())
   studentId     String
-  student       Student  @relation(fields: [studentId], references: [id])
+  student       Student    @relation(fields: [studentId], references: [id])
   examId        String
-  exam          Exam     @relation(fields: [examId], references: [id])
+  exam          Exam       @relation(fields: [examId], references: [id])
   subjectId     String
-  subject       Subject  @relation(fields: [subjectId], references: [id])
+  subject       Subject    @relation(fields: [subjectId], references: [id])
   teacherId     String
-  teacher       Teacher  @relation(fields: [teacherId], references: [id])
+  teacher       Teacher    @relation(fields: [teacherId], references: [id])
   marksObtained Float
   grade         String?
   gpa           Float?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        MarkStatus @default(SUBMITTED)   
+  rejectReason  String?                         
+  reviewedById  String?
+  reviewedAt    DateTime?                         
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@unique([studentId, examId, subjectId])
   @@index([studentId])
   @@index([studentId, examId])
-  @@index([examId])            // NEW
-
+  @@index([examId])
+  @@index([examId, status])        // NEW — pending-review queue lookups
 }

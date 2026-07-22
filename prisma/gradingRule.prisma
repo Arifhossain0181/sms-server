@@ -1,8 +1,24 @@
 model GradingRule {
-  id         String   @id @default(uuid())
-  minPercent Float
-  maxPercent Float
-  grade      String
-  gpa        Float
-  createdAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+
+  classId       String
+  class         Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+
+  academicYear  String?
+
+  minMark       Float
+  maxMark       Float
+
+  grade         String   
+  gpaPoint      Float    
+
+
+  isPassing     Boolean  @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+
+  @@index([classId, academicYear])
 }

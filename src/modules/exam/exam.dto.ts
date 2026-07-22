@@ -46,3 +46,17 @@ export interface SubmitExamMarksDto {
 export interface GetFailedStudentsQueryDto {
   classId?: string;
 }
+
+export interface ReviewMarksEntryDto {
+  studentId: string;
+  subjectId: string;
+}
+
+export interface ApproveMarksDto {
+  entries?: ReviewMarksEntryDto[]; // omit => approve ALL pending marks for the exam
+}
+
+export interface RejectMarksDto {
+  entries: ReviewMarksEntryDto[]; // required — can't reject "everything" blindly
+  reason: string;
+}

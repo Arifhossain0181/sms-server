@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../../config/db';
 import * as examService from './exam.service';
-import { sendSuccess } from '../../utils/response.util';
+import { sendSuccess } from '../../utils/response.util'; 
+import { streamAdmitCardPdf } from './admit-card.pdf';
+import { getAdmitCardData, getAdmitCardDataForClass } from './exam.service';
+import { listPendingMarks, approveMarks, rejectMarks, getPublishedResultsForStudent as getPublishedResultsSvc, getFailedStudents as getFailedStudentsSvc, submitExamMarks as submitExamMarksSvc } from './mark.service';
+
 
 const asParamString = (value: string | string[] | undefined): string => {
   if (Array.isArray(value)) return value[0] ?? '';
@@ -98,14 +102,14 @@ export const submitExamMarks = async (req: Request, res: Response, next: NextFun
     const authUser = req.user;
     if (!authUser) throw { status: 401, message: 'Unauthorized' };
 
-    const data = await examService.submitExamMarks(asParamString(req.params.examId), req.body, authUser);
+    const data = await submitExamMarksSvc(asParamString(req.params.examId), req.body, authUser);
     sendSuccess(res, data, 'Marks submitted');
   } catch (err) { next(err); }
 };
 
 export const getFailedStudents = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await examService.getFailedStudents(
+    const data = await getFailedStudentsSvc(
       asParamString(req.params.examId),
       asOptionalQueryString(req.query.classId)
     );
@@ -137,7 +141,7 @@ export const getMyResults = async (req: Request, res: Response, next: NextFuncti
     if (!student) throw { status: 404, message: 'Student profile not found' };
 
     const examId = asOptionalQueryString(req.query.examId);
-    const data = await examService.getPublishedResultsForStudent(student.id, examId);
+    const data = await getPublishedResultsSvc(student.id, examId);
     sendSuccess(res, data, 'Your results fetched');
   } catch (err) { next(err); }
 };
@@ -168,7 +172,60 @@ export const getChildResults = async (req: Request, res: Response, next: NextFun
   try {
     const child = await resolveOwnedChild(req.user!.id, asParamString(req.params.studentId));
     const examId = asOptionalQueryString(req.query.examId);
-    const data = await examService.getPublishedResultsForStudent(child.id, examId);
+    const data = await getPublishedResultsSvc(child.id, examId);
     sendSuccess(res, data, "Child's results fetched");
   } catch (err) { next(err); }
+};
+
+
+export const downloadAdmitCard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { examId, studentId } = req.params;
+        const data = await getAdmitCardData(asParamString(examId), asParamString(studentId));
+        streamAdmitCardPdf(data, res);
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const listAdmitCardDataForClass = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { examId, classId } = req.params;
+        const data = await getAdmitCardDataForClass(asParamString(examId), asParamString(classId));
+        res.json({ success: true, data });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const getPendingMarks = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const examId = asParamString(req.params.examId);
+        const classId = asOptionalQueryString(req.query.classId);
+        const subjectId = asOptionalQueryString(req.query.subjectId);
+        const data = await listPendingMarks(examId, classId, subjectId);
+        res.json({ success: true, data });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const postApproveMarks = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const examId = asParamString(req.params.examId);
+        const result = await approveMarks(examId, req.body, req.user!.id);
+        res.json({ success: true, data: result });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const postRejectMarks = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const examId = asParamString(req.params.examId);
+        const result = await rejectMarks(examId, req.body, req.user!.id);
+        res.json({ success: true, data: result });
+    } catch (err) {
+        next(err);
+    }
 };

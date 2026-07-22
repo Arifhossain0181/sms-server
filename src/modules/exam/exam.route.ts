@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import * as examController from './exam.controller';
+import { gradingRoutes } from '../grading/grading.route';
 import { authenticate } from '../../middleware/auth.middleware';
 import { authorizeRoles } from '../../middleware/role.middleware';
-
 const router = Router();
 
 //  Exam creation/scheduling/publishing is
@@ -28,6 +28,9 @@ router.delete('/schedules/:id',         authorizeRoles(...EXAM_STAFF), examContr
 // Marks & Result (teacher entry, staff review)
 router.post('/:examId/marks',            authorizeRoles('TEACHER', ...EXAM_STAFF), examController.submitExamMarks);
 router.get('/:examId/failed-students',   authorizeRoles('TEACHER', ...EXAM_STAFF), examController.getFailedStudents);
+router.get('/:examId/marks/pending',     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'), examController.getPendingMarks);
+router.post('/:examId/marks/approve',    authorizeRoles('EXAM_CONTROLLER'), examController.postApproveMarks);
+router.post('/:examId/marks/reject',     authorizeRoles('EXAM_CONTROLLER'), examController.postRejectMarks);
 
 // ── Student dashboard: own class schedule + own published results ───
 router.get('/my/schedule',               authorizeRoles('STUDENT'), examController.getMyExamSchedule);
@@ -37,4 +40,16 @@ router.get('/my/results',                authorizeRoles('STUDENT'), examControll
 router.get('/child/:studentId/schedule', authorizeRoles('PARENT'), examController.getChildExamSchedule);
 router.get('/child/:studentId/results',  authorizeRoles('PARENT'), examController.getChildResults);
 
+router.use('/grading-rules', gradingRoutes);
+router.get(
+    '/exams/:examId/students/:studentId/admit-card',
+    authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN', 'STUDENT', 'PARENT'),
+    examController.downloadAdmitCard
+);
+
+router.get(
+    '/exams/:examId/classes/:classId/admit-cards',
+    authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'),
+    examController.listAdmitCardDataForClass
+);
 export default router;

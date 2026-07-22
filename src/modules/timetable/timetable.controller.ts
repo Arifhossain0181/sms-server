@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as timetableService from './timetable.service';
 import { sendSuccess } from '../../utils/response.util';
 import { TeachersService } from '../teachers/teachers.service';
-import { StudentsService } from '../student/student.service';
+import { StudentService } from '../student/student.service';
 import { ParentsService } from '../parents/parents.service';
 
 

@@ -10,5 +10,6 @@ model Class {
   feeStructures FeeStructure[]
   examSchedules ExamSchedule[]
   admissions    AdmissionApplication[]
-  students      Student[]
+  students      Student[] 
+  gradingRules GradingRule[]
 }

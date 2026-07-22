@@ -5,8 +5,15 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -24,6 +31,122 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// src/utils/logger.ts
+var isProd, noop, withPrefix, logger, logger_default;
+var init_logger = __esm({
+  "src/utils/logger.ts"() {
+    "use strict";
+    isProd = process.env.NODE_ENV === "production";
+    noop = () => {
+    };
+    withPrefix = (prefix, fn) => (...args) => fn(prefix, ...args);
+    logger = {
+      // Debug/info are noisy request-level logs — disabled in production to avoid
+      // the synchronous I/O cost of console.log on every request.
+      debug: isProd ? noop : withPrefix("[DEBUG]", console.log.bind(console)),
+      info: isProd ? noop : withPrefix("[INFO]", console.log.bind(console)),
+      warn: withPrefix("[WARN]", console.warn.bind(console)),
+      error: withPrefix("[ERROR]", console.error.bind(console))
+    };
+    logger_default = logger;
+  }
+});
+
+// src/config/socket.ts
+var import_socket, io, initSocket, getIO, emitToUser, emitToRole;
+var init_socket = __esm({
+  "src/config/socket.ts"() {
+    "use strict";
+    import_socket = require("socket.io");
+    init_logger();
+    initSocket = (server2) => {
+      io = new import_socket.Server(server2, {
+        cors: {
+          origin: process.env.CLIENT_URL,
+          methods: ["GET", "POST"],
+          credentials: true
+        }
+      });
+      io.on("connection", (socket) => {
+        logger_default.debug("Client connected:", socket.id);
+        socket.on("join", (payload) => {
+          if (typeof payload === "string") {
+            socket.join(payload);
+            return;
+          }
+          if (payload?.userId) socket.join(payload.userId);
+          if (payload?.role) socket.join(payload.role);
+        });
+        socket.on("disconnect", () => {
+          logger_default.debug("Client disconnected:", socket.id);
+        });
+      });
+    };
+    getIO = () => {
+      if (!io) throw new Error("Socket not initialized");
+      return io;
+    };
+    emitToUser = (userId, event, payload) => {
+      getIO().to(userId).emit(event, payload);
+    };
+    emitToRole = (role, event, payload) => {
+      getIO().to(role).emit(event, payload);
+    };
+  }
+});
+
+// src/config/db.ts
+var import_config, import_client, import_adapter_pg, import_pg, isProd2, pool, prisma, db_default;
+var init_db = __esm({
+  "src/config/db.ts"() {
+    "use strict";
+    import_config = require("dotenv/config");
+    import_client = require("@prisma/client");
+    import_adapter_pg = require("@prisma/adapter-pg");
+    import_pg = require("pg");
+    isProd2 = process.env.NODE_ENV === "production";
+    pool = new import_pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.DB_POOL_MAX) || 20,
+      idleTimeoutMillis: 3e4,
+      connectionTimeoutMillis: 1e4,
+      maxUses: 1e4,
+      allowExitOnIdle: true
+    });
+    prisma = new import_client.PrismaClient({
+      adapter: new import_adapter_pg.PrismaPg(pool),
+      // `query` logging is very verbose (every query) — only in development.
+      log: isProd2 ? ["error"] : ["query", "error"]
+    });
+    db_default = prisma;
+  }
+});
+
+// src/utils/pagination.util.ts
+var paginate;
+var init_pagination_util = __esm({
+  "src/utils/pagination.util.ts"() {
+    "use strict";
+    paginate = async (model, where, page, limit) => {
+      const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
+      const safeLimit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
+      const skip = (safePage - 1) * safeLimit;
+      const take = safeLimit;
+      const total = await model.count({ where });
+      return {
+        skip,
+        take,
+        meta: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+          totalPages: Math.ceil(total / safeLimit)
+        }
+      };
+    };
+  }
+});
 
 // ../../../../node_modules/media-typer/index.js
 var require_media_typer = __commonJS({
@@ -10978,7 +11101,7 @@ var require_multipart = __commonJS({
     var BUF_CRLF = Buffer.from("\r\n");
     var BUF_CR = Buffer.from("\r");
     var BUF_DASH = Buffer.from("-");
-    function noop() {
+    function noop2() {
     }
     var MAX_HEADER_PAIRS = 2e3;
     var MAX_HEADER_SIZE = 16 * 1024;
@@ -11331,7 +11454,7 @@ var require_multipart = __commonJS({
                     return;
                   }
                   const writecb = this._writecb;
-                  this._writecb = noop;
+                  this._writecb = noop2;
                   ssCb(false, BUF_DASH, 0, 1, false);
                   this._writecb = writecb;
                 } else if (matchPostBoundary === 3) {
@@ -11346,7 +11469,7 @@ var require_multipart = __commonJS({
                     continue retrydata;
                   } else {
                     const writecb = this._writecb;
-                    this._writecb = noop;
+                    this._writecb = noop2;
                     ssCb(false, BUF_CR, 0, 1, false);
                     this._writecb = writecb;
                   }
@@ -13350,7 +13473,7 @@ var require_buffer_list = __commonJS({
         key: "_getString",
         value: function _getString(n) {
           var p = this.head;
-          var c4 = 1;
+          var c12 = 1;
           var ret = p.data;
           n -= ret.length;
           while (p = p.next) {
@@ -13361,7 +13484,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === str.length) {
-                ++c4;
+                ++c12;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13370,9 +13493,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c4;
+            ++c12;
           }
-          this.length -= c4;
+          this.length -= c12;
           return ret;
         }
         // Consumes a specified amount of bytes from the buffered data.
@@ -13381,7 +13504,7 @@ var require_buffer_list = __commonJS({
         value: function _getBuffer(n) {
           var ret = Buffer2.allocUnsafe(n);
           var p = this.head;
-          var c4 = 1;
+          var c12 = 1;
           p.data.copy(ret);
           n -= p.data.length;
           while (p = p.next) {
@@ -13391,7 +13514,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === buf.length) {
-                ++c4;
+                ++c12;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13400,9 +13523,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c4;
+            ++c12;
           }
-          this.length -= c4;
+          this.length -= c12;
           return ret;
         }
         // Make sure the linked list only shows the minimal necessary information.
@@ -14502,8 +14625,8 @@ var require_string_decoder = __commonJS({
       if ((buf.length - i) % 2 === 0) {
         var r = buf.toString("utf16le", i);
         if (r) {
-          var c4 = r.charCodeAt(r.length - 1);
-          if (c4 >= 55296 && c4 <= 56319) {
+          var c12 = r.charCodeAt(r.length - 1);
+          if (c12 >= 55296 && c12 <= 56319) {
             this.lastNeed = 2;
             this.lastTotal = 4;
             this.lastChar[0] = buf[buf.length - 2];
@@ -14569,7 +14692,7 @@ var require_end_of_stream = __commonJS({
         callback.apply(this, args);
       };
     }
-    function noop() {
+    function noop2() {
     }
     function isRequest(stream) {
       return stream.setHeader && typeof stream.abort === "function";
@@ -14577,7 +14700,7 @@ var require_end_of_stream = __commonJS({
     function eos(stream, opts, callback) {
       if (typeof opts === "function") return eos(stream, null, opts);
       if (!opts) opts = {};
-      callback = once(callback || noop);
+      callback = once(callback || noop2);
       var readable = opts.readable || opts.readable !== false && stream.readable;
       var writable = opts.writable || opts.writable !== false && stream.writable;
       var onlegacyfinish = function onlegacyfinish2() {
@@ -15813,7 +15936,7 @@ var require_pipeline = __commonJS({
     var _require$codes = require_errors().codes;
     var ERR_MISSING_ARGS = _require$codes.ERR_MISSING_ARGS;
     var ERR_STREAM_DESTROYED = _require$codes.ERR_STREAM_DESTROYED;
-    function noop(err) {
+    function noop2(err) {
       if (err) throw err;
     }
     function isRequest(stream) {
@@ -15851,8 +15974,8 @@ var require_pipeline = __commonJS({
       return from.pipe(to);
     }
     function popCallback(streams) {
-      if (!streams.length) return noop;
-      if (typeof streams[streams.length - 1] !== "function") return noop;
+      if (!streams.length) return noop2;
+      if (typeof streams[streams.length - 1] !== "function") return noop2;
       return streams.pop();
     }
     function pipeline() {
@@ -16738,73 +16861,185 @@ var require_multer = __commonJS({
   }
 });
 
+// src/modules/notifiction/notification.service.ts
+var notification_service_exports = {};
+__export(notification_service_exports, {
+  broadcast: () => broadcast,
+  deleteAll: () => deleteAll,
+  deleteNotification: () => deleteNotification,
+  findAll: () => findAll3,
+  getUnreadCount: () => getUnreadCount,
+  markAllRead: () => markAllRead,
+  markRead: () => markRead,
+  send: () => send
+});
+var send, broadcast, findAll3, markRead, markAllRead, deleteNotification, deleteAll, getUnreadCount;
+var init_notification_service = __esm({
+  "src/modules/notifiction/notification.service.ts"() {
+    "use strict";
+    init_db();
+    init_pagination_util();
+    init_socket();
+    send = async (dto) => {
+      const notification = await db_default.notification.create({
+        data: {
+          userId: dto.userId,
+          title: dto.title,
+          body: dto.body,
+          type: dto.type,
+          referenceId: dto.referenceId,
+          isRead: false
+        }
+      });
+      try {
+        emitToUser(dto.userId, "notification:new", {
+          id: notification.id,
+          title: notification.title,
+          body: notification.body,
+          type: notification.type,
+          referenceId: notification.referenceId,
+          createdAt: notification.createdAt,
+          isRead: notification.isRead
+        });
+      } catch (err) {
+        console.error("Failed to emit notification:new:", err);
+      }
+      return notification;
+    };
+    broadcast = async (dto) => {
+      const users = dto.role === "ALL" ? await db_default.user.findMany({ select: { id: true } }) : await db_default.user.findMany({ where: { role: dto.role }, select: { id: true } });
+      if (!users.length) throw new Error("No users found for the specified role");
+      await db_default.notification.createMany({
+        data: users.map((user) => ({
+          userId: user.id,
+          title: dto.title,
+          body: dto.body,
+          type: dto.type,
+          referenceId: dto.referenceId,
+          isRead: false
+        }))
+      });
+      try {
+        emitToRole(dto.role, "notification:new", {
+          title: dto.title,
+          body: dto.body,
+          type: dto.type,
+          referenceId: dto.referenceId,
+          isRead: false,
+          createdAt: /* @__PURE__ */ new Date()
+        });
+      } catch (err) {
+        console.error("Failed to emit role broadcast:", err);
+      }
+      return {
+        sent: users.length
+      };
+    };
+    findAll3 = async (userId, query) => {
+      const { page = "1", limit = "20", isRead, type } = query;
+      const where = {
+        userId,
+        ...type && { type },
+        ...isRead !== void 0 && { isRead: isRead === "true" }
+      };
+      const { skip, take, meta } = await paginate(
+        db_default.notification,
+        where,
+        parseInt(page, 10),
+        parseInt(limit, 10)
+      );
+      const [notifications, unreadCount] = await Promise.all([
+        db_default.notification.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { createdAt: "desc" }
+        }),
+        db_default.notification.count({ where: { userId, isRead: false } })
+      ]);
+      return { notifications, unreadCount, meta };
+    };
+    markRead = async (userId, notificationId) => {
+      const notification = await db_default.notification.findFirst({
+        where: { id: notificationId, userId }
+      });
+      if (!notification) throw new Error("Notification not found");
+      if (notification.isRead) return notification;
+      const updated = await db_default.notification.update({
+        where: { id: notificationId },
+        data: { isRead: true, readAt: /* @__PURE__ */ new Date() }
+      });
+      try {
+        emitToUser(userId, "notification:read", { id: notificationId });
+      } catch (err) {
+        console.error("Failed to emit notification:read:", err);
+      }
+      return updated;
+    };
+    markAllRead = async (userId) => {
+      const { count } = await db_default.notification.updateMany({
+        where: { userId, isRead: false },
+        data: { isRead: true, readAt: /* @__PURE__ */ new Date() }
+      });
+      try {
+        emitToUser(userId, "notification:readAll", {});
+      } catch (err) {
+        console.error("Failed to emit notification:readAll:", err);
+      }
+      return { marked: count };
+    };
+    deleteNotification = async (id, userId) => {
+      const notification = await db_default.notification.findUnique({
+        where: { id }
+      });
+      if (!notification || notification.userId !== userId) throw new Error("Notification not found or not authorized");
+      return await db_default.notification.delete({
+        where: { id }
+      });
+    };
+    deleteAll = async (userId) => {
+      const { count } = await db_default.notification.deleteMany({
+        where: { userId }
+      });
+      return { deleted: count };
+    };
+    getUnreadCount = async (userId) => {
+      const count = await db_default.notification.count({
+        where: { userId, isRead: false }
+      });
+      return { unreadCount: count };
+    };
+  }
+});
+
 // src/index.ts
-var import_express14 = __toESM(require("express"));
+var import_express21 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
 var import_http = __toESM(require("http"));
-
-// src/config/socket.ts
-var import_socket = require("socket.io");
-var io;
-var initSocket = (server2) => {
-  io = new import_socket.Server(server2, {
-    cors: {
-      origin: process.env.CLIENT_URL,
-      methods: ["GET", "POST"],
-      credentials: true
-    }
-  });
-  io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
-    socket.on("join", (payload) => {
-      if (typeof payload === "string") {
-        socket.join(payload);
-        return;
-      }
-      if (payload?.userId) socket.join(payload.userId);
-      if (payload?.role) socket.join(payload.role);
-    });
-    socket.on("disconnect", () => {
-      console.log("Client disconnected:", socket.id);
-    });
-  });
-};
-var getIO = () => {
-  if (!io) throw new Error("Socket not initialized");
-  return io;
-};
-var emitToRole = (role, event, payload) => {
-  getIO().to(role).emit(event, payload);
-};
+init_socket();
 
 // src/middleware/error.middle.ts
+init_logger();
 var errorMiddleware = (err, req, res, next) => {
-  const status = err.status || 500;
-  const message = err.message || "Internal Server Error";
+  const status = err?.status || 500;
+  const message = err?.message || "Internal Server Error";
+  logger_default.error(`[ERROR] ${req.method} ${req.path} -> ${status} ${message}`, err);
   res.status(status).json({ success: false, message });
 };
 
+// src/index.ts
+init_logger();
+
 // src/routes/index.ts
-var import_express13 = __toESM(require("express"));
+var import_express20 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
 
-// src/config/db.ts
-var import_config = require("dotenv/config");
-var import_client = require("@prisma/client");
-var import_adapter_pg = require("@prisma/adapter-pg");
-var import_pg = require("pg");
-var pool = new import_pg.Pool({
-  connectionString: process.env.DATABASE_URL
-});
-var prisma = new import_client.PrismaClient({
-  adapter: new import_adapter_pg.PrismaPg(pool),
-  log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"]
-});
-var db_default = prisma;
+// src/modules/auth/auth.service.ts
+init_db();
 
 // src/utils/jwt.util.ts
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
@@ -16864,13 +17099,49 @@ var sendEmail = async ({ to, subject, text }) => {
     text
   });
 };
+var USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  isActive: true,
+  createdAt: true
+};
 var AuthService = class {
+  // ─── PRIVATE: one shared token-issuing path for every login flow ──
+  async _issueTokens(user) {
+    if (!user.isActive) {
+      throw new Error("Your account has been deactivated");
+    }
+    const tokenPayload = { id: user.id, email: user.email, role: user.role };
+    if (user.role === "STUDENT" && user.studentProfile?.id) {
+      tokenPayload.studentId = user.studentProfile.id;
+    }
+    const accessToken = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+    await db_default.$transaction([
+      db_default.refreshToken.deleteMany({ where: { userId: user.id } }),
+      db_default.refreshToken.create({
+        data: {
+          token: refreshToken,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3)
+        }
+      })
+    ]);
+    return { accessToken, refreshToken };
+  }
+  // ─── PRIVATE: write one AuditLog row, never let logging break the flow ─
+  async _logAudit(userId, action, metadata) {
+    try {
+      await db_default.auditLog.create({
+        data: { userId, action, targetType: "User", targetId: userId, metadata }
+      });
+    } catch {
+    }
+  }
   async register(dto) {
-    const existing = await db_default.user.findUnique({
-      where: {
-        email: dto.email
-      }
-    });
+    const existing = await db_default.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new Error("User already Registered");
     }
@@ -16882,22 +17153,15 @@ var AuthService = class {
         passwordHash: hashedPassword,
         role: dto.role
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
+      select: USER_SELECT
     });
+    await this._logAudit(user.id, "REGISTER", { role: dto.role });
     return user;
   }
   async login(dto) {
     const user = await db_default.user.findUnique({
-      where: {
-        email: dto.email
-      }
+      where: { email: dto.email },
+      include: { studentProfile: true }
     });
     if (!user) {
       throw new Error("Invalid email or password");
@@ -16906,39 +17170,12 @@ var AuthService = class {
     if (!isMatch) {
       throw new Error("Invalid email or password");
     }
-    const accessToken = generateAccessToken({
-      id: user.id,
-      email: user.email,
-      role: user.role
-    });
-    const refreshToken = generateRefreshToken({
-      id: user.id,
-      email: user.email,
-      role: user.role
-    });
-    await db_default.$transaction([
-      db_default.refreshToken.deleteMany({
-        where: {
-          userId: user.id
-        }
-      }),
-      db_default.refreshToken.create({
-        data: {
-          token: refreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3)
-        }
-      })
-    ]);
+    const { accessToken, refreshToken } = await this._issueTokens(user);
+    await this._logAudit(user.id, "LOGIN");
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     };
   }
   async refreshToken(dto) {
@@ -16949,66 +17186,31 @@ var AuthService = class {
       throw err;
     }
     const user = await db_default.user.findUnique({
-      where: {
-        id: payload.id
-      }
+      where: { id: payload.id },
+      include: { studentProfile: true }
     });
-    const storedToken = await db_default.refreshToken.findFirst({
-      where: {
-        userId: user?.id,
-        token: dto.refreshToken,
-        expiresAt: {
-          gte: /* @__PURE__ */ new Date()
-        }
-      }
-    });
-    if (!user || !storedToken) {
+    if (!user) {
       const err = new Error("Invalid refresh token");
       err.status = 401;
       throw err;
     }
-    const accessToken = generateAccessToken({
-      id: user.id,
-      email: user.email,
-      role: user.role
+    const storedToken = await db_default.refreshToken.findFirst({
+      where: { userId: user.id, token: dto.refreshToken, expiresAt: { gte: /* @__PURE__ */ new Date() } }
     });
-    const newRefreshToken = generateRefreshToken({
-      id: user.id,
-      email: user.email,
-      role: user.role
-    });
-    await db_default.$transaction([
-      db_default.refreshToken.deleteMany({
-        where: {
-          userId: user.id
-        }
-      }),
-      db_default.refreshToken.create({
-        data: {
-          token: newRefreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3)
-        }
-      })
-    ]);
-    return {
-      accessToken,
-      refreshToken: newRefreshToken
-    };
+    if (!storedToken) {
+      const err = new Error("Invalid refresh token");
+      err.status = 401;
+      throw err;
+    }
+    const { accessToken, refreshToken } = await this._issueTokens(user);
+    return { accessToken, refreshToken };
   }
   async logout(userId) {
-    await db_default.refreshToken.deleteMany({
-      where: {
-        userId
-      }
-    });
+    await db_default.refreshToken.deleteMany({ where: { userId } });
+    await this._logAudit(userId, "LOGOUT");
   }
   async changePassword(userId, dto) {
-    const user = await db_default.user.findUnique({
-      where: {
-        id: userId
-      }
-    });
+    const user = await db_default.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new Error("User not found");
     }
@@ -17017,33 +17219,21 @@ var AuthService = class {
       throw new Error("Old password is incorrect");
     }
     const hashed = await import_bcryptjs.default.hash(dto.newPassword, 10);
-    await db_default.user.update({
-      where: {
-        id: userId
-      },
-      data: {
-        passwordHash: hashed
-      }
-    });
+    await db_default.$transaction([
+      db_default.user.update({ where: { id: userId }, data: { passwordHash: hashed } }),
+      db_default.refreshToken.deleteMany({ where: { userId } })
+    ]);
+    await this._logAudit(userId, "CHANGE_PASSWORD");
   }
   async forgotPassword(dto) {
-    const user = await db_default.user.findUnique({
-      where: {
-        email: dto.email
-      }
-    });
+    const user = await db_default.user.findUnique({ where: { email: dto.email } });
     if (!user) {
-      throw new Error("User not found");
+      return;
     }
     const token = (0, import_node_crypto.randomBytes)(32).toString("hex");
     const expiresAt = new Date(Date.now() + 60 * 60 * 1e3);
     await db_default.passwordReset.create({
-      data: {
-        userId: user.id,
-        otp: token,
-        expiresAt,
-        used: false
-      }
+      data: { userId: user.id, otp: token, expiresAt, used: false }
     });
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     await sendEmail({
@@ -17051,58 +17241,69 @@ var AuthService = class {
       subject: "Password Reset Request",
       text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`
     });
+    await this._logAudit(user.id, "FORGOT_PASSWORD_REQUEST");
   }
   async resetPassword(dto) {
     const resetRequest = await db_default.passwordReset.findFirst({
-      where: {
-        otp: dto.token,
-        used: false,
-        expiresAt: {
-          gte: /* @__PURE__ */ new Date()
-        }
-      }
+      where: { otp: dto.token, used: false, expiresAt: { gte: /* @__PURE__ */ new Date() } }
     });
     if (!resetRequest) {
       throw new Error("Invalid or expired reset token");
     }
     const hashed = await import_bcryptjs.default.hash(dto.newPassword, 10);
     await db_default.$transaction([
-      db_default.user.update({
-        where: {
-          id: resetRequest.userId
-        },
-        data: {
-          passwordHash: hashed
-        }
-      }),
-      db_default.passwordReset.update({
-        where: {
-          id: resetRequest.id
-        },
-        data: {
-          used: true
-        }
-      })
+      db_default.user.update({ where: { id: resetRequest.userId }, data: { passwordHash: hashed } }),
+      db_default.passwordReset.update({ where: { id: resetRequest.id }, data: { used: true } }),
+      db_default.refreshToken.deleteMany({ where: { userId: resetRequest.userId } })
     ]);
+    await this._logAudit(resetRequest.userId, "RESET_PASSWORD");
   }
   async getme(userId) {
-    const user = await db_default.user.findUnique({
-      where: {
-        id: userId
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
-    });
+    const user = await db_default.user.findUnique({ where: { id: userId }, select: USER_SELECT });
     if (!user) {
       throw new Error("User not found");
     }
     return user;
+  }
+  async studentLogin(dto) {
+    const user = await db_default.user.findUnique({
+      where: { email: dto.email },
+      include: { studentProfile: { include: { admissionRecord: true } } }
+    });
+    if (!user) {
+      throw new Error("Invalid email or password");
+    }
+    if (!user.isActive) {
+      throw new Error("Your account is deactivated. Please contact admin.");
+    }
+    if (user.role !== "STUDENT") {
+      throw new Error("This account is not a student account");
+    }
+    if (!user.studentProfile) {
+      throw new Error("Student profile not found");
+    }
+    const admission = user.studentProfile.admissionRecord;
+    if (!admission || admission.status !== "APPROVED") {
+      throw new Error("Your admission is not verified yet. Please wait for admin approval.");
+    }
+    const isMatch = await import_bcryptjs.default.compare(dto.password, user.passwordHash);
+    if (!isMatch) {
+      throw new Error("Invalid email or password");
+    }
+    const { accessToken, refreshToken } = await this._issueTokens(user);
+    await this._logAudit(user.id, "STUDENT_LOGIN");
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        studentId: user.studentProfile.studentId,
+        studentClass: user.studentProfile.classId
+      }
+    };
   }
 };
 
@@ -17113,75 +17314,65 @@ var sendSuccess = (res, data, message = "Success", statusCode = 200) => {
 
 // src/modules/auth/auth.controller.ts
 var authService = new AuthService();
+function _setAuthCookies(res, accessToken, refreshToken) {
+  const isProd3 = process.env.NODE_ENV === "production";
+  const base = {
+    httpOnly: true,
+    secure: isProd3,
+    sameSite: "lax"
+  };
+  res.cookie("accessToken", accessToken, { ...base, maxAge: 24 * 60 * 60 * 1e3 });
+  res.cookie("refreshToken", refreshToken, { ...base, maxAge: 7 * 24 * 60 * 60 * 1e3 });
+}
+function _forward(next, error, fallbackMessage, fallbackStatus = 400) {
+  const status = typeof error === "object" && error && "status" in error ? error.status : fallbackStatus;
+  const message = error instanceof Error ? error.message : fallbackMessage;
+  next({ status, message });
+}
 var AuthController = {
   async register(req, res, next) {
     try {
       const user = await authService.register(req.body);
-      res.status(201).json({
-        success: true,
-        data: user,
-        message: "User Registered Successfully"
-      });
+      res.status(201).json({ success: true, data: user, message: "User Registered Successfully" });
     } catch (error) {
-      next({
-        status: 400,
-        message: error instanceof Error ? error.message : "Registration Failed"
-      });
+      _forward(next, error, "Registration Failed");
     }
   },
   async login(req, res, next) {
     try {
       const data = await authService.login(req.body);
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Login Successful"
-      });
+      _setAuthCookies(res, data.accessToken, data.refreshToken);
+      res.status(200).json({ success: true, data, message: "Login Successful" });
     } catch (error) {
-      next({
-        status: 400,
-        message: error instanceof Error ? error.message : "Login Failed"
-      });
+      _forward(next, error, "Login Failed");
+    }
+  },
+  async studentLogin(req, res, next) {
+    try {
+      const data = await authService.studentLogin(req.body);
+      _setAuthCookies(res, data.accessToken, data.refreshToken);
+      res.status(200).json({ success: true, data, message: "Student Login Successful" });
+    } catch (error) {
+      _forward(next, error, "Student Login Failed");
     }
   },
   async refreshToken(req, res, next) {
     try {
       const data = await authService.refreshToken(req.body);
-      res.cookie("accessToken", data.accessToken, {
-        httpOnly: false,
-        sameSite: "lax",
-        maxAge: 24 * 60 * 60 * 1e3
-      });
-      res.cookie("refreshToken", data.refreshToken, {
-        httpOnly: false,
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1e3
-      });
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Token Refreshed Successfully"
-      });
+      _setAuthCookies(res, data.accessToken, data.refreshToken);
+      res.status(200).json({ success: true, data, message: "Token Refreshed Successfully" });
     } catch (error) {
-      const status = typeof error === "object" && error && "status" in error ? error.status : 400;
-      next({
-        status,
-        message: error instanceof Error ? error.message : "Token Refresh Failed"
-      });
+      _forward(next, error, "Token Refresh Failed", 401);
     }
   },
   async logout(req, res, next) {
     try {
       await authService.logout(req.user.id);
-      res.status(200).json({
-        success: true,
-        message: "Logout Successful"
-      });
+      res.clearCookie("accessToken");
+      res.clearCookie("refreshToken");
+      res.status(200).json({ success: true, message: "Logout Successful" });
     } catch (error) {
-      next({
-        status: 400,
-        message: error instanceof Error ? error.message : "Logout Failed"
-      });
+      _forward(next, error, "Logout Failed");
     }
   },
   async changePassword(req, res, next) {
@@ -17189,15 +17380,15 @@ var AuthController = {
       await authService.changePassword(req.user.id, req.body);
       sendSuccess(res, null, "Password changed successfully");
     } catch (err) {
-      next(err);
+      _forward(next, err, "Password Change Failed");
     }
   },
   async forgotPassword(req, res, next) {
     try {
       await authService.forgotPassword(req.body);
-      sendSuccess(res, null, "Reset link sent to your email");
+      sendSuccess(res, null, "If that email is registered, a reset link has been sent");
     } catch (err) {
-      next(err);
+      _forward(next, err, "Request Failed");
     }
   },
   async resetPassword(req, res, next) {
@@ -17205,7 +17396,7 @@ var AuthController = {
       await authService.resetPassword(req.body);
       sendSuccess(res, null, "Password reset successfully");
     } catch (err) {
-      next(err);
+      _forward(next, err, "Password Reset Failed");
     }
   },
   async getMe(req, res, next) {
@@ -17213,15 +17404,17 @@ var AuthController = {
       const user = await authService.getme(req.user.id);
       sendSuccess(res, user, "Profile fetched");
     } catch (err) {
-      next(err);
+      _forward(next, err, "Could Not Fetch Profile", 404);
     }
   }
 };
 
 // src/middleware/auth.middleware.ts
+init_logger();
 var authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   let token;
+  logger_default.debug(`[AUTH] Authenticating: ${req.method} ${req.path}`);
   if (authHeader && authHeader.startsWith("Bearer ")) {
     token = authHeader.split(" ")[1];
   } else if (req.headers.cookie) {
@@ -17244,6 +17437,7 @@ var router = (0, import_express.Router)();
 var authController = AuthController;
 router.post("/register", authController.register.bind(authController));
 router.post("/login", authController.login.bind(authController));
+router.post("/student-login", authController.studentLogin.bind(authController));
 router.post("/refresh-token", authController.refreshToken.bind(authController));
 router.post("/forgot-password", authController.forgotPassword.bind(authController));
 router.post("/reset-password", authController.resetPassword.bind(authController));
@@ -17257,142 +17451,257 @@ var auth_route_default = router;
 var import_express2 = require("express");
 
 // src/modules/student/student.service.ts
-var import_bcryptjs2 = __toESM(require("bcryptjs"));
-var paginate = async (model, where, page, limit) => {
-  const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
-  const safeLimit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
-  const skip = (safePage - 1) * safeLimit;
-  const take = safeLimit;
-  const total = await model.count({ where });
-  return {
-    skip,
-    take,
-    meta: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-      totalPages: Math.ceil(total / safeLimit)
-    }
-  };
+init_db();
+var import_bcryptjs3 = __toESM(require("bcryptjs"));
+init_pagination_util();
+
+// src/modules/student/student.maPPer.ts
+var GENDER_MAP = { "Male": "MALE", "Female": "FEMALE", "Other": "OTHER" };
+var BLOOD_GROUP_MAP = {
+  "A+": "A_POS",
+  "A-": "A_NEG",
+  "B+": "B_POS",
+  "B-": "B_NEG",
+  "AB+": "AB_POS",
+  "AB-": "AB_NEG",
+  "O+": "O_POS",
+  "O-": "O_NEG"
 };
+function mapGender(input) {
+  const mapped = GENDER_MAP[input];
+  if (!mapped) throw new Error(`Invalid gender: ${input}`);
+  return mapped;
+}
+function mapBloodGroup(input) {
+  if (!input) return void 0;
+  return BLOOD_GROUP_MAP[input] ?? input;
+}
+
+// src/modules/student/student.validation.ts
+function assertValidRollNumber(raw) {
+  const rollNumber = Number(raw);
+  if (!Number.isInteger(rollNumber)) {
+    throw new Error("Roll number must be a valid number");
+  }
+  return rollNumber;
+}
+function assertValidDob(dateOfBirth) {
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) {
+    throw new Error("Invalid dateOfBirth format");
+  }
+  return dob;
+}
+
+// src/modules/student/student.helPer.ts
+function notFoundError(message) {
+  return Object.assign(new Error(message), { status: 404 });
+}
+async function findAvailableSection(tx, classId) {
+  const sections = await tx.section.findMany({
+    where: { classId },
+    include: { _count: { select: { students: true } } },
+    orderBy: { name: "asc" }
+  });
+  const section = sections.find((s) => s._count.students < s.maxCapacity);
+  if (!section) throw new Error("All sections are full \u2014 create a new section or increase the capacity of existing sections");
+  return section;
+}
+async function assertRollNumberAvailable(tx, sectionId, rollNumber, excludeStudentId) {
+  const existing = await tx.student.findFirst({
+    where: {
+      sectionId,
+      rollNumber,
+      ...excludeStudentId && { id: { not: excludeStudentId } }
+    }
+  });
+  if (existing) throw new Error("Roll number already exists in this section");
+}
+
+// src/modules/student/student.Parents.ts
+var import_bcryptjs2 = __toESM(require("bcryptjs"));
+async function linkOrCreateGuardian(tx, guardian) {
+  if (!guardian.guardianName || !guardian.guardianEmail) return null;
+  let parentRecord = await tx.parent.findFirst({
+    where: { user: { email: guardian.guardianEmail } }
+  });
+  if (!parentRecord) {
+    const existingUser = await tx.user.findUnique({ where: { email: guardian.guardianEmail } });
+    if (existingUser) {
+      throw new Error(
+        `This email (${guardian.guardianEmail}) is already in use by another ${existingUser.role} account`
+      );
+    }
+    const parentUser = await tx.user.create({
+      data: {
+        name: guardian.guardianName,
+        email: guardian.guardianEmail,
+        passwordHash: await import_bcryptjs2.default.hash(Math.random().toString(36), 10),
+        role: "PARENT"
+      }
+    });
+    parentRecord = await tx.parent.create({
+      data: {
+        userId: parentUser.id,
+        name: guardian.guardianName,
+        phone: guardian.guardianPhone || "",
+        relation: guardian.guardianRelation
+      }
+    });
+  }
+  return parentRecord.id;
+}
+async function updateGuardian(tx, existingParent, guardian) {
+  const { guardianName, guardianPhone, guardianEmail, guardianRelation } = guardian;
+  const nothingProvided = guardianName === void 0 && guardianPhone === void 0 && guardianEmail === void 0 && guardianRelation === void 0;
+  if (nothingProvided) return void 0;
+  if (existingParent?.id) {
+    const parentUpdateData = {};
+    if (guardianName !== void 0) parentUpdateData.name = guardianName;
+    if (guardianPhone !== void 0) parentUpdateData.phone = guardianPhone;
+    if (guardianRelation !== void 0) parentUpdateData.relation = guardianRelation;
+    if (Object.keys(parentUpdateData).length > 0) {
+      await tx.parent.update({ where: { id: existingParent.id }, data: parentUpdateData });
+    }
+    if (guardianEmail !== void 0 && existingParent.userId) {
+      await tx.user.update({ where: { id: existingParent.userId }, data: { email: guardianEmail } });
+    }
+    return void 0;
+  }
+  if (guardianName || guardianEmail) {
+    const parentUser = await tx.user.create({
+      data: {
+        name: guardianName || "Guardian",
+        email: guardianEmail || `guardian-${Date.now()}@school.local`,
+        passwordHash: await import_bcryptjs2.default.hash(Math.random().toString(36), 10),
+        role: "PARENT"
+      }
+    });
+    const parentRecord = await tx.parent.create({
+      data: {
+        userId: parentUser.id,
+        name: guardianName || "Guardian",
+        phone: guardianPhone || "",
+        relation: guardianRelation
+      }
+    });
+    return parentRecord.id;
+  }
+  return void 0;
+}
+
+// src/modules/student/student.attendence.ts
+init_db();
+var getAttendance = async (studentId) => {
+  const counts = await db_default.studentAttendance.groupBy({
+    by: ["status"],
+    where: { studentId },
+    _count: { _all: true }
+  });
+  const total = counts.reduce((sum, c12) => sum + c12._count._all, 0);
+  const present = counts.find((c12) => c12.status === "PRESENT")?._count._all ?? 0;
+  const absent = counts.find((c12) => c12.status === "ABSENT")?._count._all ?? 0;
+  const late = counts.find((c12) => c12.status === "LATE")?._count._all ?? 0;
+  const percentage = total > 0 ? Math.round(present / total * 100) : 0;
+  return { total, present, absent, late, percentage };
+};
+
+// src/modules/student/student.result.ts
+init_db();
+var getResults = async (studentId) => {
+  const publishedExamIds = await db_default.reportCard.findMany({
+    where: { studentId, status: "PUBLISHED" },
+    select: { examId: true }
+  }).then((rows) => rows.map((r) => r.examId));
+  if (!publishedExamIds.length) {
+    return { results: [], totalObtained: 0, totalPossible: 0, percentage: 0 };
+  }
+  const results = await db_default.mark.findMany({
+    where: { studentId, examId: { in: publishedExamIds } },
+    include: {
+      exam: { select: { name: true } },
+      subject: { select: { name: true, fullMarks: true } }
+    }
+  });
+  const totalObtained = results.reduce((sum, r) => sum + r.marksObtained, 0);
+  const totalPossible = results.reduce((sum, r) => sum + r.subject.fullMarks, 0);
+  const percentage = totalPossible > 0 ? Math.round(totalObtained / totalPossible * 100) : 0;
+  return { results, totalObtained, totalPossible, percentage };
+};
+
+// src/modules/student/student.service.ts
 var StudentService = class {
-  notFound(message) {
-    return Object.assign(new Error(message), { status: 404 });
+  static async getStudentIdByUserId(userId) {
+    const student = await db_default.student.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+    return student?.id ?? null;
   }
   async createStudent(dto) {
-    const rollNumber = Number(dto.rollNumber);
-    if (!Number.isInteger(rollNumber)) {
-      throw new Error("Roll number must be a valid number");
-    }
+    const rollNumber = assertValidRollNumber(dto.rollNumber);
+    const dob = assertValidDob(String(dto.dateOfBirth));
     if (dto.email) {
-      const emailExists = await db_default.user.findUnique({
-        where: {
-          email: dto.email
-        }
-      });
-      if (emailExists) {
-        throw new Error("Email already exists");
-      }
+      const emailExists = await db_default.user.findUnique({ where: { email: dto.email } });
+      if (emailExists) throw new Error("Email already exists");
     }
-    const rollexists = await db_default.student.findFirst({
-      where: {
-        rollNumber
-      }
-    });
-    if (rollexists) {
-      throw new Error("Roll number already exists");
-    }
-    const classExists = await db_default.class.findUnique({
-      where: {
-        id: dto.classId
-      }
-    });
-    if (!classExists) {
-      throw new Error("Class not found");
-    }
-    const hashedPassword = dto.password ? await import_bcryptjs2.default.hash(dto.password, 10) : "";
-    const studentId = `STU-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-    const section = await db_default.section.findFirst({
-      where: {
-        classId: dto.classId
-      }
-    });
-    if (!section) {
-      throw new Error("No section found for this class");
-    }
-    const genderMap = { "Male": "MALE", "Female": "FEMALE", "Other": "OTHER" };
-    const student = await db_default.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email || `student-${Date.now()}@school.local`,
-        // Generate temp email if not provided
-        passwordHash: hashedPassword,
-        role: "STUDENT",
-        studentProfile: {
-          create: {
-            studentId,
-            rollNumber,
-            sectionId: section.id,
-            classId: dto.classId,
-            dob: new Date(dto.dateOfBirth),
-            gender: genderMap[dto.gender],
-            bloodGroup: dto.bloodGroup,
-            photo: dto.avatarUrl,
-            address: dto.address,
-            name: dto.name
-          }
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        studentProfile: {
-          select: {
-            id: true,
-            studentId: true,
-            rollNumber: true,
-            classId: true,
-            sectionId: true,
-            dob: true,
-            gender: true,
-            bloodGroup: true,
-            photo: true,
-            address: true,
-            name: true
-          }
-        }
-      }
-    });
-    if (dto.guardianName && dto.guardianEmail) {
-      const parentUser = await db_default.user.create({
+    const classExists = await db_default.class.findUnique({ where: { id: dto.classId } });
+    if (!classExists) throw new Error("Class not found");
+    return db_default.$transaction(async (tx) => {
+      const section = await findAvailableSection(tx, dto.classId);
+      await assertRollNumberAvailable(tx, section.id, rollNumber);
+      const hashedPassword = dto.password ? await import_bcryptjs3.default.hash(dto.password, 10) : "";
+      const studentId = `STU-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const user = await tx.user.create({
         data: {
-          name: dto.guardianName,
-          email: dto.guardianEmail,
-          passwordHash: await import_bcryptjs2.default.hash(Math.random().toString(36), 10),
-          // Random password for guardian
-          role: "PARENT"
-        }
-      });
-      const parentRecord = await db_default.parent.create({
-        data: {
-          userId: parentUser.id,
-          name: dto.guardianName,
-          phone: dto.guardianPhone || ""
-        }
-      });
-      if (student.studentProfile?.id) {
-        await db_default.student.update({
-          where: { id: student.studentProfile.id },
-          data: {
-            parentId: parentRecord.id
+          name: dto.name,
+          email: dto.email || `student-${Date.now()}@school.local`,
+          passwordHash: hashedPassword,
+          role: "STUDENT",
+          studentProfile: {
+            create: {
+              studentId,
+              rollNumber,
+              sectionId: section.id,
+              classId: dto.classId,
+              dob,
+              gender: mapGender(dto.gender),
+              bloodGroup: mapBloodGroup(dto.bloodGroup),
+              photo: dto.avatarUrl,
+              address: dto.address,
+              name: dto.name
+            }
           }
-        });
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          studentProfile: {
+            select: {
+              id: true,
+              studentId: true,
+              rollNumber: true,
+              classId: true,
+              sectionId: true,
+              dob: true,
+              gender: true,
+              bloodGroup: true,
+              photo: true,
+              address: true,
+              name: true
+            }
+          }
+        }
+      });
+      const parentId = await linkOrCreateGuardian(tx, dto);
+      if (parentId && user.studentProfile?.id) {
+        await tx.student.update({ where: { id: user.studentProfile.id }, data: { parentId } });
       }
-    }
-    return student;
+      return user;
+    }, { isolationLevel: "Serializable" });
   }
   async findAllStudents(query) {
     const { page = "1", limit = "10", search, classId, gender } = query;
@@ -17406,169 +17715,127 @@ var StudentService = class {
         ]
       }
     };
-    const { skip, take, meta } = await paginate(
-      db_default.student,
-      where,
-      parseInt(page),
-      parseInt(limit)
-    );
+    const { skip, take, meta } = await paginate(db_default.student, where, parseInt(page), parseInt(limit));
     const students = await db_default.student.findMany({
       where,
       skip,
       take,
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            createdAt: true
-          }
-        },
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true } },
         parent: {
           select: {
-            phone: true
-          }
-        },
-        class: {
-          select: {
-            id: true,
+            phone: true,
             name: true,
-            sections: true
+            user: { select: { email: true } }
           }
         },
-        admissionRecord: {
-          select: {
-            guardianPhone: true
-          }
-        }
+        class: { select: { id: true, name: true } },
+        admissionRecord: { select: { guardianPhone: true, guardianEmail: true, guardianName: true } }
       },
-      orderBy: {
-        createdAt: "desc"
-      }
+      orderBy: { createdAt: "desc" }
     });
-    const flattened = students.map((student) => ({
-      ...student,
-      email: student.user?.email,
-      phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
-    }));
-    return {
-      data: flattened,
-      meta
-    };
+    const flattened = students.map((student) => {
+      const guardianEmail = student.parent?.user?.email ?? student.admissionRecord?.guardianEmail ?? null;
+      return {
+        ...student,
+        email: student.user?.email,
+        guardianEmail: guardianEmail ?? "\u2014",
+        phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
+      };
+    });
+    return { data: flattened, meta };
   }
+  /** Staff-only detail view — full history, not publish-gated. Keep behind staff routes. */
   async findStudentById(id) {
     const student = await db_default.student.findUnique({
-      where: {
-        id
-      },
+      where: { id },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            createdAt: true
-          }
-        },
-        class: {
-          select: {
-            id: true,
-            name: true,
-            section: true
-          }
-        },
-        attendance: {
-          take: 10,
-          orderBy: {
-            date: "desc"
-          }
-        },
-        results: {
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true } },
+        class: { select: { id: true, name: true, sections: true } },
+        attendances: { take: 10, orderBy: { date: "desc" } },
+        marks: {
           include: {
-            exam: {
-              select: {
-                title: true
-              }
-            },
-            subject: {
-              select: {
-                name: true
-              }
-            }
+            exam: { select: { name: true } },
+            subject: { select: { name: true } }
           },
           take: 10,
-          orderBy: {
-            createdAt: "desc"
-          }
+          orderBy: { createdAt: "desc" }
         },
-        fees: {
-          take: 5,
-          orderBy: {
-            dueDate: "desc"
-          }
-        }
+        feeStructures: { take: 5, orderBy: { dueDate: "desc" } }
       }
     });
-    if (!student) {
-      throw this.notFound("Student not found");
-    }
+    if (!student) throw notFoundError("Student not found");
     return student;
   }
-  async findStudentByUserId(userId) {
-    console.log(`
-\u{1F4CC} [DASHBOARD] User accessing dashboard: ${userId}`);
+  async getStudentForEdit(id) {
     const student = await db_default.student.findUnique({
-      where: {
-        userId
-      },
+      where: { id },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            createdAt: true
-          }
-        },
-        section: {
-          select: {
-            id: true,
-            name: true,
-            class: true
-          }
+        user: { select: { id: true, name: true, email: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        parent: {
+          select: { id: true, name: true, phone: true, relation: true, user: { select: { email: true } } }
         }
       }
     });
-    if (!student) {
-      console.log(`\u274C Student profile NOT FOUND for user: ${userId}`);
-      throw this.notFound("Student not found");
-    }
-    console.log(`\u2713 Student found: ${student.user.email}`);
-    console.log(`\u2705 Dashboard access granted
-`);
+    if (!student) throw notFoundError("Student not found");
+    return {
+      id: student.id,
+      studentId: student.studentId,
+      rollNumber: student.rollNumber,
+      name: student.name,
+      email: student.user?.email,
+      phone: student.parent?.phone,
+      address: student.address,
+      dateOfBirth: student.dob ? student.dob.toISOString().split("T")[0] : null,
+      gender: student.gender,
+      bloodGroup: student.bloodGroup,
+      avatarUrl: student.photo,
+      religion: student.religion,
+      classId: student.classId,
+      className: student.class?.name,
+      sectionId: student.sectionId,
+      sectionName: student.section?.name,
+      isActive: student.isActive,
+      guardianName: student.parent?.name,
+      guardianEmail: student.parent?.user?.email,
+      guardianPhone: student.parent?.phone,
+      guardianRelation: student.parent?.relation,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt
+    };
+  }
+  async findStudentByUserId(userId) {
+    const student = await db_default.student.findUnique({
+      where: { userId },
+      include: {
+        user: { select: { id: true, name: true, email: true, isActive: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        parent: {
+          select: { id: true, name: true, phone: true, relation: true, user: { select: { email: true } } }
+        },
+        admissionRecord: { select: { status: true } }
+      }
+    });
+    if (!student) throw notFoundError("Student profile not found");
     return student;
   }
   async update(id, dto) {
     const student = await db_default.student.findUnique({
-      where: { id }
-    });
-    if (!student) {
-      throw new Error("Student not found");
-    }
-    if (dto.classId) {
-      const classExists = await db_default.class.findUnique({
-        where: { id: dto.classId }
-      });
-      if (!classExists) {
-        throw new Error("Class not found");
+      where: { id },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        parent: { select: { id: true, userId: true, name: true, phone: true } }
       }
+    });
+    if (!student) throw new Error("Student not found");
+    if (dto.classId) {
+      const classExists = await db_default.class.findUnique({ where: { id: dto.classId } });
+      if (!classExists) throw new Error("Class not found");
     }
     const {
       name,
@@ -17577,143 +17844,144 @@ var StudentService = class {
       address,
       bloodGroup,
       avatarUrl,
-      classId
+      classId,
+      guardianName,
+      guardianPhone,
+      guardianEmail,
+      guardianRelation
     } = dto;
-    const dob = dateOfBirth ? new Date(dateOfBirth) : void 0;
-    if (dateOfBirth && Number.isNaN(dob?.getTime())) {
-      throw new Error("Invalid dateOfBirth");
+    const dob = dateOfBirth ? assertValidDob(dateOfBirth) : void 0;
+    if (email && email !== student.user.email) {
+      const existingUser = await db_default.user.findUnique({ where: { email } });
+      if (existingUser) throw new Error("Email already in use by another user");
     }
-    const userUpdate = {};
-    if (name) userUpdate.name = name;
-    if (email) userUpdate.email = email;
-    if (email) {
-      const existingUser = await db_default.user.findUnique({
-        where: { email }
+    return db_default.$transaction(async (tx) => {
+      const userUpdate = {};
+      if (name !== void 0) userUpdate.name = name;
+      if (email !== void 0) userUpdate.email = email;
+      const studentUpdateData = {};
+      if (name !== void 0) studentUpdateData.name = name;
+      if (address !== void 0) studentUpdateData.address = address;
+      if (avatarUrl !== void 0) studentUpdateData.photo = avatarUrl;
+      if (bloodGroup !== void 0) studentUpdateData.bloodGroup = mapBloodGroup(bloodGroup);
+      if (dob !== void 0) studentUpdateData.dob = dob;
+      if (classId !== void 0 && classId !== student.classId) {
+        const newSection = await findAvailableSection(tx, classId);
+        await assertRollNumberAvailable(tx, newSection.id, student.rollNumber, id);
+        studentUpdateData.class = { connect: { id: classId } };
+        studentUpdateData.section = { connect: { id: newSection.id } };
+      }
+      if (Object.keys(userUpdate).length > 0) {
+        studentUpdateData.user = { update: userUpdate };
+      }
+      const newParentId = await updateGuardian(tx, student.parent, {
+        guardianName,
+        guardianPhone,
+        guardianEmail,
+        guardianRelation
       });
-      if (existingUser && existingUser.id !== student.userId) {
-        throw new Error("Email already in use");
-      }
-    }
-    const updatedStudent = await db_default.student.update({
-      where: { id },
-      data: {
-        ...address !== void 0 && { address },
-        ...avatarUrl !== void 0 && { photo: avatarUrl },
-        ...bloodGroup !== void 0 && { bloodGroup },
-        ...dob && { dob },
-        ...classId && { class: { connect: { id: classId } } },
-        ...name && { name },
-        ...Object.keys(userUpdate).length > 0 && { user: { update: userUpdate } }
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        section: {
-          select: {
-            id: true,
-            name: true,
-            class: true
-          }
+      if (newParentId) studentUpdateData.parentId = newParentId;
+      return tx.student.update({
+        where: { id },
+        data: studentUpdateData,
+        include: {
+          user: { select: { id: true, name: true, email: true, role: true, isActive: true } },
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+          parent: { select: { id: true, name: true, phone: true } }
         }
-      }
-    });
-    return updatedStudent;
+      });
+    }, { isolationLevel: "Serializable" });
   }
-  async delete(id) {
-    const student = await db_default.student.findUnique({
-      where: {
-        id
-      }
-    });
-    if (!student) {
-      throw new Error("Student not found");
+  /** Soft delete — the safe default. */
+  async deactivate(id) {
+    const student = await db_default.student.findUnique({ where: { id } });
+    if (!student) throw new Error("Student not found");
+    await db_default.$transaction([
+      db_default.student.update({ where: { id }, data: { isActive: false } }),
+      db_default.user.update({ where: { id: student.userId }, data: { isActive: false } })
+    ]);
+  }
+  async reactivate(id) {
+    const student = await db_default.student.findUnique({ where: { id } });
+    if (!student) throw new Error("Student not found");
+    await db_default.$transaction([
+      db_default.student.update({ where: { id }, data: { isActive: true } }),
+      db_default.user.update({ where: { id: student.userId }, data: { isActive: true } })
+    ]);
+  }
+  /**
+   * NOTE: named `deleteStudent`, not `delete` — `delete` is a reserved word in
+   * JS/TS and `export const delete = ...` is a syntax error. This worked
+   * before only because it was a class *method* name (`async delete(id)`),
+   * which is allowed; a top-level function export can't use it.
+   */
+  async deleteStudent(id) {
+    const student = await db_default.student.findUnique({ where: { id } });
+    if (!student) throw new Error("Student not found");
+    const [attendanceCount, markCount, paymentCount] = await Promise.all([
+      db_default.studentAttendance.count({ where: { studentId: id } }),
+      db_default.mark.count({ where: { studentId: id } }),
+      db_default.payment.count({ where: { studentId: id } })
+    ]);
+    if (attendanceCount > 0 || markCount > 0 || paymentCount > 0) {
+      throw {
+        status: 409,
+        message: "\u098F\u0987 student-\u098F\u09B0 attendance/marks/payment history \u0986\u099B\u09C7 \u2014 \u09AE\u09C1\u099B\u09C7 \u09AB\u09C7\u09B2\u09BE \u09AF\u09BE\u09AC\u09C7 \u09A8\u09BE, deactivate \u09AC\u09CD\u09AF\u09AC\u09B9\u09BE\u09B0 \u0995\u09B0\u09C1\u09A8"
+      };
     }
-    await db_default.user.delete({
-      where: {
-        id: student.userId
-      }
-    });
+    await db_default.user.delete({ where: { id: student.userId } });
+  }
+  /** Controller-facing alias for the hard delete (reserved-word safe). */
+  async delete(id) {
+    return this.deleteStudent(id);
   }
   async uploadAvatar(studentId, avatarUrl) {
-    const student = await db_default.student.findUnique({
-      where: {
-        id: studentId
-      }
-    });
-    if (!student) {
-      throw new Error("Student not found");
-    }
-    return await db_default.student.update({
-      where: {
-        id: studentId
-      },
-      data: {
-        photo: avatarUrl
-      }
-    });
+    const student = await db_default.student.findUnique({ where: { id: studentId } });
+    if (!student) throw new Error("Student not found");
+    return db_default.student.update({ where: { id: studentId }, data: { photo: avatarUrl } });
   }
   async getAttendance(studentId) {
-    const [total, present, absent, late] = await Promise.all([
-      db_default.studentAttendance.count({
-        where: {
-          studentId
-        }
-      }),
-      db_default.studentAttendance.count({
-        where: {
-          studentId,
-          status: "PRESENT"
-        }
-      }),
-      db_default.studentAttendance.count({
-        where: {
-          studentId,
-          status: "ABSENT"
-        }
-      }),
-      db_default.studentAttendance.count({
-        where: {
-          studentId,
-          status: "LATE"
-        }
-      })
-    ]);
-    const Parcentage = total > 0 ? Math.round(present / total * 100) : 0;
-    return {
-      total,
-      present,
-      absent,
-      late,
-      percentage: Parcentage
-    };
+    return getAttendance(studentId);
   }
   async getResults(studentId) {
-    const results = await db_default.mark.findMany({
-      where: {
-        studentId
-      },
-      include: {
-        exam: {
-          select: {
-            name: true
-          }
-        },
-        subject: {
-          select: {
-            name: true
-          }
-        }
-      }
+    return getResults(studentId);
+  }
+  async getClassRoutine(studentId) {
+    const student = await db_default.student.findUnique({
+      where: { id: studentId },
+      select: { classId: true, sectionId: true }
     });
-    const totalObtained = results.reduce((sum, r) => sum + r.marksObtained, 0);
-    const totalPossible = results.length * 100;
-    const percentage = totalPossible > 0 ? Math.round(totalObtained / totalPossible * 100) : 0;
-    return { results, totalObtained, totalPossible, percentage };
+    if (!student) throw notFoundError("Student not found");
+    return db_default.timetable.findMany({
+      where: { sectionId: student.sectionId },
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, user: { select: { name: true } } } }
+      },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+    });
+  }
+  async getStudentDashboard(userId) {
+    const student = await this.findStudentByUserId(userId);
+    const [attendance, results] = await Promise.all([
+      getAttendance(student.id),
+      getResults(student.id)
+    ]);
+    return {
+      student: {
+        id: student.id,
+        name: student.user?.name,
+        studentId: student.studentId,
+        rollNumber: student.rollNumber,
+        classId: student.classId,
+        className: student.class?.name,
+        sectionId: student.sectionId,
+        sectionName: student.section?.name
+      },
+      attendance,
+      results
+    };
   }
 };
 
@@ -17760,11 +18028,43 @@ var StudentController = class {
       next(err);
     }
   }
+  async getStudentForEdit(req, res, next) {
+    try {
+      const student = await studentService.getStudentForEdit(String(req.params.id));
+      sendSuccess(res, student, "Student data fetched for edit");
+    } catch (err) {
+      next(err);
+    }
+  }
   async getMyProfile(req, res, next) {
     try {
+      console.log(`
+[STUDENT] getMyProfile called - User ID: ${req.user?.id}`);
       const student = await studentService.findStudentByUserId(req.user.id);
+      const admissionStatus = student.admissionRecord?.status;
+      if (admissionStatus && admissionStatus !== "APPROVED") {
+        console.log(`[STUDENT] \u26A0\uFE0F Admission not approved - Status: ${admissionStatus}`);
+        sendSuccess(res, {
+          id: student.id,
+          pending: true,
+          admissionStatus,
+          message: `Your admission is ${admissionStatus.toLowerCase()}. Waiting for admin approval.`
+        }, "Student profile pending approval");
+        return;
+      }
+      console.log(`[STUDENT] \u2705 Profile found and returned - Admission: APPROVED`);
       sendSuccess(res, student, "Student profile fetched");
     } catch (err) {
+      console.log(`[STUDENT] Error fetching profile:`, err?.message);
+      if (err?.message?.includes("not found")) {
+        console.log(`[STUDENT] \u26A0\uFE0F Student profile not found for user: ${req.user.id}, but user exists`);
+        sendSuccess(res, {
+          id: req.user.id,
+          pending: true,
+          message: "Student profile is pending. Please complete your admission application."
+        }, "Student profile pending approval");
+        return;
+      }
       next(err);
     }
   }
@@ -17818,12 +18118,34 @@ var StudentController = class {
       next(err);
     }
   }
+  async getClassRoutine(req, res, next) {
+    try {
+      const student = await studentService.findStudentByUserId(req.user.id);
+      const data = await studentService.getClassRoutine(student.id);
+      sendSuccess(res, data, "Class routine fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getDashboard(req, res, next) {
+    try {
+      const data = await studentService.getStudentDashboard(req.user.id);
+      sendSuccess(res, data, "Student dashboard data fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/middleware/role.middleware.ts
+init_logger();
 var authorizeRoles = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user) {
+      return res.status(403).json({ success: false, message: "Forbidden: You do not have the required role to access this resource" });
+    }
+    if (!roles.includes(req.user.role)) {
+      logger_default.warn(`[ROLE] Access denied - User ${req.user.role}, required [${roles.join(", ")}]`);
       return res.status(403).json({ success: false, message: "Forbidden: You do not have the required role to access this resource" });
     }
     next();
@@ -17852,45 +18174,52 @@ var router2 = (0, import_express2.Router)();
 var studentController = new StudentController();
 router2.use(authenticate);
 router2.get("/me", authorizeRoles("STUDENT"), studentController.getMyProfile.bind(studentController));
+router2.get("/dashboard/my-dashboard", authorizeRoles("STUDENT"), studentController.getDashboard.bind(studentController));
+router2.get("/routine/my-routine", authorizeRoles("STUDENT"), studentController.getClassRoutine.bind(studentController));
 router2.post(
   "/",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   studentController.create.bind(studentController)
 );
 router2.get(
   "/",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT"),
   studentController.findAll.bind(studentController)
 );
 router2.get(
+  "/:id/edit",
+  authorizeRoles("SCHOOL_ADMIN"),
+  studentController.getStudentForEdit.bind(studentController)
+);
+router2.get(
   "/:id",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT"),
   studentController.findById.bind(studentController)
 );
-router2.patch(
+router2.put(
   "/:id",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   studentController.update.bind(studentController)
 );
 router2.delete(
   "/:id",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   studentController.delete.bind(studentController)
 );
 router2.patch(
   "/:id/avatar",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   upload.single("avatar"),
   studentController.uploadAvatar.bind(studentController)
 );
 router2.get(
   "/:id/attendance",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   studentController.getAttendanceSummary.bind(studentController)
 );
 router2.get(
   "/:id/results",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   studentController.getResultSummary.bind(studentController)
 );
 var students_route_default = router2;
@@ -17899,37 +18228,57 @@ var students_route_default = router2;
 var import_express3 = require("express");
 
 // src/modules/subject/subject.service.ts
-var createSubject = async (dto) => {
-  const existing = await db_default.subject.findFirst({
-    where: {
-      name: dto.name,
-      classId: dto.classId
-    }
-  });
-  if (existing) {
-    throw new Error("Subject with this name already exists in this class");
+init_db();
+function assertValidMarks(fullMarks, passMarks) {
+  if (fullMarks !== void 0 && passMarks !== void 0 && passMarks > fullMarks) {
+    throw { status: 400, message: "passMarks cannot be greater than fullMarks" };
   }
-  const { teacherId, code: _code, isOptional, classId, ...rest } = dto;
-  return await db_default.subject.create({
-    data: {
-      ...rest,
-      isCompulsory: typeof isOptional === "boolean" ? !isOptional : true,
-      class: { connect: { id: classId } },
-      assignments: teacherId ? {
-        create: {
-          teacher: { connect: { id: teacherId } }
-        }
-      } : void 0
-    },
-    include: {
-      class: true,
-      assignments: {
-        include: {
-          teacher: true
+}
+function isDuplicateConstraintError(err) {
+  return err?.code === "P2002";
+}
+var createSubject = async (dto) => {
+  assertValidMarks(dto.fullMarks, dto.passMarks);
+  const [classExists, existingName, existingCode] = await Promise.all([
+    db_default.class.findUnique({ where: { id: dto.classId }, select: { id: true } }),
+    db_default.subject.findFirst({ where: { name: dto.name, classId: dto.classId }, select: { id: true } }),
+    db_default.subject.findFirst({ where: { code: dto.code, classId: dto.classId }, select: { id: true } })
+  ]);
+  if (!classExists) throw { status: 404, message: "Class not found" };
+  if (existingName) throw { status: 409, message: "Subject with this name already exists in this class" };
+  if (existingCode) throw { status: 409, message: "Subject with this code already exists in this class" };
+  if (dto.teacherId) {
+    const teacherExists = await db_default.teacher.findUnique({ where: { id: dto.teacherId }, select: { id: true } });
+    if (!teacherExists) throw { status: 404, message: "Teacher not found" };
+  }
+  const { teacherId, isOptional, classId, ...rest } = dto;
+  try {
+    return await db_default.subject.create({
+      data: {
+        ...rest,
+        isCompulsory: typeof isOptional === "boolean" ? !isOptional : true,
+        class: { connect: { id: classId } },
+        assignments: teacherId ? {
+          create: {
+            teacher: { connect: { id: teacherId } }
+          }
+        } : void 0
+      },
+      include: {
+        class: true,
+        assignments: {
+          include: {
+            teacher: true
+          }
         }
       }
+    });
+  } catch (err) {
+    if (isDuplicateConstraintError(err)) {
+      throw { status: 409, message: "Subject with this name or code already exists in this class" };
     }
-  });
+    throw err;
+  }
 };
 var getAllSubjects = async (classId) => {
   return await db_default.subject.findMany({
@@ -17963,32 +18312,61 @@ var getSubjectById = async (id) => {
   return subject;
 };
 var updateSubject = async (id, dto) => {
-  await getSubjectById(id);
-  const { teacherId, code: _code, isOptional, ...rest } = dto;
-  return await db_default.subject.update({
-    where: { id },
-    data: {
-      ...rest,
-      isCompulsory: typeof isOptional === "boolean" ? !isOptional : void 0,
-      assignments: teacherId ? {
-        upsert: {
-          where: { subjectId_teacherId: { subjectId: id, teacherId } },
-          update: {},
-          create: {
-            teacher: { connect: { id: teacherId } }
+  const current = await getSubjectById(id);
+  assertValidMarks(
+    dto.fullMarks ?? current.fullMarks,
+    dto.passMarks ?? current.passMarks
+  );
+  if (dto.name && dto.name !== current.name) {
+    const existingName = await db_default.subject.findFirst({
+      where: { name: dto.name, classId: current.classId, NOT: { id } },
+      select: { id: true }
+    });
+    if (existingName) throw { status: 409, message: "Subject with this name already exists in this class" };
+  }
+  if (dto.code && dto.code !== current.code) {
+    const existingCode = await db_default.subject.findFirst({
+      where: { code: dto.code, classId: current.classId, NOT: { id } },
+      select: { id: true }
+    });
+    if (existingCode) throw { status: 409, message: "Subject with this code already exists in this class" };
+  }
+  if (dto.teacherId) {
+    const teacherExists = await db_default.teacher.findUnique({ where: { id: dto.teacherId }, select: { id: true } });
+    if (!teacherExists) throw { status: 404, message: "Teacher not found" };
+  }
+  const { teacherId, isOptional, ...rest } = dto;
+  try {
+    return await db_default.subject.update({
+      where: { id },
+      data: {
+        ...rest,
+        isCompulsory: typeof isOptional === "boolean" ? !isOptional : void 0,
+        assignments: teacherId ? {
+          upsert: {
+            where: { subjectId_teacherId: { subjectId: id, teacherId } },
+            update: {},
+            create: {
+              teacher: { connect: { id: teacherId } }
+            }
+          }
+        } : void 0
+      },
+      include: {
+        class: true,
+        assignments: {
+          include: {
+            teacher: true
           }
         }
-      } : void 0
-    },
-    include: {
-      class: true,
-      assignments: {
-        include: {
-          teacher: true
-        }
       }
+    });
+  } catch (err) {
+    if (isDuplicateConstraintError(err)) {
+      throw { status: 409, message: "Subject with this name or code already exists in this class" };
     }
-  });
+    throw err;
+  }
 };
 var deleteSubject = async (id) => {
   await getSubjectById(id);
@@ -17996,14 +18374,26 @@ var deleteSubject = async (id) => {
 };
 var assignTeacher = async (subjectId, teacherId) => {
   await getSubjectById(subjectId);
-  await db_default.subjectAssignment.upsert({
-    where: { subjectId_teacherId: { subjectId, teacherId } },
-    update: {},
-    create: {
-      subject: { connect: { id: subjectId } },
-      teacher: { connect: { id: teacherId } }
-    }
-  });
+  const teacherExists = await db_default.teacher.findUnique({ where: { id: teacherId }, select: { id: true } });
+  if (!teacherExists) throw { status: 404, message: "Teacher not found" };
+  await db_default.$transaction([
+    db_default.subjectAssignment.deleteMany({
+      where: { subjectId, NOT: { teacherId } }
+    }),
+    db_default.subjectAssignment.upsert({
+      where: { subjectId_teacherId: { subjectId, teacherId } },
+      update: {},
+      create: {
+        subject: { connect: { id: subjectId } },
+        teacher: { connect: { id: teacherId } }
+      }
+    })
+  ]);
+  return await getSubjectById(subjectId);
+};
+var unassignTeacher = async (subjectId) => {
+  await getSubjectById(subjectId);
+  await db_default.subjectAssignment.deleteMany({ where: { subjectId } });
   return await getSubjectById(subjectId);
 };
 
@@ -18060,31 +18450,45 @@ var assignTeacher2 = async (req, res, next) => {
     next(err);
   }
 };
+var unassignTeacher2 = async (req, res, next) => {
+  try {
+    const data = await unassignTeacher(String(req.params.id));
+    sendSuccess(res, data, "Teacher unassigned");
+  } catch (err) {
+    next(err);
+  }
+};
 
 // src/modules/subject/subject.router.ts
 var router3 = (0, import_express3.Router)();
-router3.post("/", authenticate, authorizeRoles("ADMIN"), createSubject2);
+router3.post("/", authenticate, authorizeRoles("SCHOOL_ADMIN"), createSubject2);
 router3.get("/", authenticate, getAllSubjects2);
 router3.get("/:id", authenticate, getSubjectById2);
-router3.put("/:id", authenticate, authorizeRoles("ADMIN"), updateSubject2);
-router3.delete("/:id", authenticate, authorizeRoles("ADMIN"), deleteSubject2);
-router3.patch("/:id/assign-teacher", authenticate, authorizeRoles("ADMIN"), assignTeacher2);
+router3.put("/:id", authenticate, authorizeRoles("SCHOOL_ADMIN"), updateSubject2);
+router3.delete("/:id", authenticate, authorizeRoles("SCHOOL_ADMIN"), deleteSubject2);
+router3.patch("/:id/assign-teacher", authenticate, authorizeRoles("SCHOOL_ADMIN"), assignTeacher2);
+router3.delete("/:id/assign-teacher", authenticate, authorizeRoles("SCHOOL_ADMIN"), unassignTeacher2);
 var subject_router_default = router3;
 
 // src/modules/class/class.route.ts
 var import_express4 = require("express");
 
 // src/modules/class/class.service.ts
+init_db();
+var MIN_CLASS_LEVEL = 1;
+var MAX_CLASS_LEVEL = 10;
+function assertValidLevel(level) {
+  if (level < MIN_CLASS_LEVEL || level > MAX_CLASS_LEVEL) {
+    throw new Error(`Class level must be between ${MIN_CLASS_LEVEL} and ${MAX_CLASS_LEVEL}`);
+  }
+}
 var createClass = async (dto) => {
-  const existing = await db_default.class.findUnique({
-    where: {
-      name: dto.name
-    }
-  });
+  assertValidLevel(dto.numericLevel);
+  const existing = await db_default.class.findUnique({ where: { name: dto.name } });
   if (existing) {
     throw new Error("Class with this name already exists");
   }
-  return await db_default.class.create({
+  return db_default.class.create({
     data: {
       name: dto.name,
       numericLevel: dto.numericLevel
@@ -18095,24 +18499,10 @@ var getAllClasses = async () => {
   const classes = await db_default.class.findMany({
     include: {
       sections: {
-        include: {
-          classTeacher: true
-        },
-        orderBy: {
-          name: "asc"
-        }
+        include: { classTeacher: true },
+        orderBy: { name: "asc" }
       },
-      students: {
-        select: {
-          id: true,
-          name: true
-        }
-      },
-      _count: {
-        select: {
-          students: true
-        }
-      }
+      _count: { select: { students: true } }
     }
   });
   return classes.map((cls) => ({
@@ -18122,29 +18512,13 @@ var getAllClasses = async () => {
 };
 var getClassById = async (id) => {
   const cls = await db_default.class.findUnique({
-    where: {
-      id
-    },
+    where: { id },
     include: {
       sections: {
-        include: {
-          classTeacher: true
-        },
-        orderBy: {
-          name: "asc"
-        }
+        include: { classTeacher: true },
+        orderBy: { name: "asc" }
       },
-      students: {
-        select: {
-          id: true,
-          name: true
-        }
-      },
-      _count: {
-        select: {
-          students: true
-        }
-      }
+      _count: { select: { students: true } }
     }
   });
   if (!cls) {
@@ -18157,10 +18531,11 @@ var getClassById = async (id) => {
 };
 var updateClass = async (id, dto) => {
   await getClassById(id);
-  return await db_default.class.update({
-    where: {
-      id
-    },
+  if (dto.numericLevel !== void 0) {
+    assertValidLevel(dto.numericLevel);
+  }
+  return db_default.class.update({
+    where: { id },
     data: {
       name: dto.name,
       numericLevel: dto.numericLevel
@@ -18169,48 +18544,65 @@ var updateClass = async (id, dto) => {
 };
 var deleteClass = async (id) => {
   await getClassById(id);
+  const studentCount = await db_default.student.count({ where: { classId: id } });
+  if (studentCount > 0) {
+    throw {
+      status: 409,
+      message: `${studentCount} students are currently enrolled in this class. Please move them to another class before deleting.`
+    };
+  }
   await db_default.section.deleteMany({ where: { classId: id } });
-  return await db_default.class.delete({
-    where: {
-      id
-    }
-  });
+  return db_default.class.delete({ where: { id } });
 };
 var createSection = async (dto) => {
+  if (!dto.maxCapacity || dto.maxCapacity <= 0) {
+    throw new Error("maxCapacity must be a positive number");
+  }
   const existing = await db_default.section.findFirst({
-    where: {
-      name: dto.name,
-      classId: dto.classId
-    }
+    where: { name: dto.name, classId: dto.classId }
   });
   if (existing) {
     throw new Error("Section with this name already exists in this class");
   }
-  return await db_default.section.create({
-    data: {
-      name: dto.name,
-      classId: dto.classId,
-      classTeacherId: dto.classTeacherId,
-      maxCapacity: dto.maxCapacity
-    },
-    include: {
-      class: true
+  try {
+    return await db_default.section.create({
+      data: {
+        name: dto.name,
+        classId: dto.classId,
+        classTeacherId: dto.classTeacherId,
+        maxCapacity: dto.maxCapacity
+      },
+      include: { class: true }
+    });
+  } catch (err) {
+    if (err?.code === "P2002") {
+      throw new Error("Section with this name already exists in this class");
     }
-  });
+    throw err;
+  }
 };
 var getSectionsByClass = async (classId) => {
-  return await db_default.section.findMany({
+  return db_default.section.findMany({
     where: { classId },
-    include: {
-      classTeacher: true
-    },
+    include: { classTeacher: true },
     orderBy: { name: "asc" }
   });
 };
 var updateSection = async (id, dto) => {
   const section = await db_default.section.findUnique({ where: { id } });
   if (!section) throw { status: 404, message: "Section not found" };
-  return await db_default.section.update({
+  if (dto.maxCapacity !== void 0 && dto.maxCapacity <= 0) {
+    throw new Error("maxCapacity must be a positive number");
+  }
+  if (dto.maxCapacity !== void 0) {
+    const currentCount = await db_default.student.count({ where: { sectionId: id } });
+    if (dto.maxCapacity < currentCount) {
+      throw new Error(
+        `${currentCount} students are enrolled in this section \u2014 capacity cannot be reduced below this number`
+      );
+    }
+  }
+  return db_default.section.update({
     where: { id },
     data: {
       name: dto.name,
@@ -18222,7 +18614,14 @@ var updateSection = async (id, dto) => {
 var deleteSection = async (id) => {
   const section = await db_default.section.findUnique({ where: { id } });
   if (!section) throw { status: 404, message: "Section not found" };
-  return await db_default.section.delete({ where: { id } });
+  const studentCount = await db_default.student.count({ where: { sectionId: id } });
+  if (studentCount > 0) {
+    throw {
+      status: 409,
+      message: `${studentCount} students are currently enrolled in this section. Please move them to another section before deleting.`
+    };
+  }
+  return db_default.section.delete({ where: { id } });
 };
 
 // src/modules/class/class.controller.ts
@@ -18305,19 +18704,23 @@ var deleteSection2 = async (req, res, next) => {
 
 // src/modules/class/class.route.ts
 var router4 = (0, import_express4.Router)();
-router4.post("/", authenticate, authorizeRoles("ADMIN"), createClass2);
+var CLASS_MANAGERS = ["SCHOOL_ADMIN", "SUPER_ADMIN"];
+router4.post("/", authenticate, authorizeRoles(...CLASS_MANAGERS), createClass2);
 router4.get("/", authenticate, getAllClasses2);
 router4.get("/:id", authenticate, getClassById2);
-router4.put("/:id", authenticate, authorizeRoles("ADMIN"), updateClass2);
-router4.delete("/:id", authenticate, authorizeRoles("ADMIN"), deleteClass2);
-router4.post("/sections", authenticate, authorizeRoles("ADMIN"), createSection2);
+router4.put("/:id", authenticate, authorizeRoles(...CLASS_MANAGERS), updateClass2);
+router4.delete("/:id", authenticate, authorizeRoles(...CLASS_MANAGERS), deleteClass2);
+router4.post("/sections", authenticate, authorizeRoles(...CLASS_MANAGERS), createSection2);
 router4.get("/:classId/sections", authenticate, getSectionsByClass2);
-router4.put("/sections/:id", authenticate, authorizeRoles("ADMIN"), updateSection2);
-router4.delete("/sections/:id", authenticate, authorizeRoles("ADMIN"), deleteSection2);
+router4.put("/sections/:id", authenticate, authorizeRoles(...CLASS_MANAGERS), updateSection2);
+router4.delete("/sections/:id", authenticate, authorizeRoles(...CLASS_MANAGERS), deleteSection2);
 var class_route_default = router4;
 
 // src/modules/exam/exam.route.ts
 var import_express5 = require("express");
+
+// src/modules/exam/exam.controller.ts
+init_db();
 
 // src/modules/exam/exam.service.ts
 var import_client2 = require("@prisma/client");
@@ -18329,45 +18732,40 @@ var ResultStatus = {
 };
 
 // src/modules/exam/exam.service.ts
+init_db();
+function mapExamType(type) {
+  if (!type) return void 0;
+  return type === "FINAL" ? "FINAL_EXAM" : type;
+}
 var createExam = async (dto) => {
-  const examType = dto.type ? dto.type === "FINAL" ? "FINAL_EXAM" : dto.type : "CLASS_TEST";
+  const examType = mapExamType(dto.type) ?? "CLASS_TEST";
   const rawDate = dto.startDate ?? dto.date;
   const parsedDate = rawDate ? new Date(rawDate) : /* @__PURE__ */ new Date();
   const createdAt = Number.isNaN(parsedDate.getTime()) ? /* @__PURE__ */ new Date() : parsedDate;
   const existing = await db_default.exam.findFirst({
-    where: {
-      name: dto.name,
-      type: examType
-    }
+    where: { name: dto.name, type: examType }
   });
   if (existing) {
     throw { status: 409, message: "Exam with this name and type already exists" };
   }
-  return await db_default.exam.create({
+  return db_default.exam.create({
     data: {
       name: dto.name,
       type: examType,
       createdAt,
       schedules: {
-        create: [
-          {
-            classId: dto.classId,
-            subjectId: dto.subjectId,
-            examDate: createdAt,
-            startTime: dto.startTime,
-            endTime: dto.endTime
-          }
-        ]
+        create: [{
+          classId: dto.classId,
+          subjectId: dto.subjectId,
+          examDate: createdAt,
+          startTime: dto.startTime,
+          endTime: dto.endTime
+        }]
       },
       totalMarks: dto.totalMarks
     },
     include: {
-      schedules: {
-        include: {
-          subject: true,
-          class: true
-        }
-      }
+      schedules: { include: { subject: true, class: true } }
     }
   });
 };
@@ -18376,45 +18774,34 @@ var getAllExams = async (classId) => {
     where: classId ? { schedules: { some: { classId } } } : void 0,
     include: {
       schedules: {
-        include: {
-          subject: true,
-          class: true
-        }
+        where: classId ? { classId } : void 0,
+        // FIX: only this class's schedules when filtered
+        include: { subject: true, class: true },
+        orderBy: { examDate: "asc" }
       }
     },
-    orderBy: {
-      createdAt: "desc"
-    }
+    orderBy: { createdAt: "desc" }
   });
-  return exams.map((exam) => {
-    const schedule = exam.schedules?.[0];
-    return {
-      ...exam,
-      subject: schedule?.subject,
-      subjectId: schedule?.subjectId,
-      class: schedule?.class,
-      classId: schedule?.classId,
-      date: schedule?.examDate,
-      startTime: schedule?.startTime,
-      endTime: schedule?.endTime
-    };
+  return exams;
+};
+var getExamScheduleForClass = async (classId) => {
+  return db_default.examSchedule.findMany({
+    where: { classId },
+    include: {
+      subject: { select: { id: true, name: true, fullMarks: true } },
+      exam: { select: { id: true, name: true, type: true } }
+    },
+    orderBy: { examDate: "asc" }
   });
 };
 var getExamById = async (id) => {
   const exam = await db_default.exam.findUnique({
     where: { id },
     include: {
-      schedules: {
-        include: {
-          subject: true,
-          class: true
-        }
-      },
-      result: {
-        include: {
-          student: true
-        }
-      }
+      schedules: { include: { subject: true, class: true } },
+      // FIX: `result` isn't a real relation on Exam — it's `reportCards`.
+      // The old field name would throw a Prisma validation error on every call.
+      reportCards: { include: { student: true } }
     }
   });
   if (!exam) {
@@ -18424,8 +18811,8 @@ var getExamById = async (id) => {
 };
 var updateExam = async (id, dto) => {
   await getExamById(id);
-  const examType = dto.type ? dto.type === "FINAL" ? "FINAL_EXAM" : dto.type : void 0;
-  return await db_default.exam.update({
+  const examType = mapExamType(dto.type);
+  return db_default.exam.update({
     where: { id },
     data: {
       name: dto.name,
@@ -18436,31 +18823,49 @@ var updateExam = async (id, dto) => {
 };
 var deleteExam = async (id) => {
   await getExamById(id);
-  return await db_default.exam.delete({ where: { id } });
+  return db_default.exam.delete({ where: { id } });
 };
-var publishExam = async (id) => {
+var publishExam = async (id, actorUserId) => {
   await getExamById(id);
   const updated = await db_default.reportCard.updateMany({
     where: { examId: id },
     data: { status: ResultStatus.PUBLISHED }
   });
-  return {
-    examId: id,
-    status: ResultStatus.PUBLISHED,
-    affectedReportCards: updated.count
-  };
+  try {
+    await db_default.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: "EXAM_RESULT_PUBLISH",
+        targetId: id,
+        meta: { affectedReportCards: updated.count },
+        timestamp: /* @__PURE__ */ new Date()
+      }
+    });
+  } catch (err) {
+    console.warn("Audit log failed:", err?.message);
+  }
+  return { examId: id, status: ResultStatus.PUBLISHED, affectedReportCards: updated.count };
 };
-var unpublishExam = async (id) => {
+var unpublishExam = async (id, actorUserId) => {
   await getExamById(id);
   const updated = await db_default.reportCard.updateMany({
     where: { examId: id },
     data: { status: ResultStatus.UNPUBLISHED }
   });
-  return {
-    examId: id,
-    status: ResultStatus.UNPUBLISHED,
-    affectedReportCards: updated.count
-  };
+  try {
+    await db_default.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: "EXAM_RESULT_UNPUBLISH",
+        targetId: id,
+        meta: { affectedReportCards: updated.count },
+        timestamp: /* @__PURE__ */ new Date()
+      }
+    });
+  } catch (err) {
+    console.warn("Audit log failed:", err?.message);
+  }
+  return { examId: id, status: ResultStatus.UNPUBLISHED, affectedReportCards: updated.count };
 };
 var createExamSchedule = async (dto) => {
   await getExamById(dto.examId);
@@ -18484,11 +18889,7 @@ var createExamSchedule = async (dto) => {
         startTime: dto.startTime,
         endTime: dto.endTime
       },
-      include: {
-        subject: true,
-        exam: true,
-        class: true
-      }
+      include: { subject: true, exam: true, class: true }
     });
   } catch (error) {
     if (error instanceof import_client2.Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -18498,7 +18899,7 @@ var createExamSchedule = async (dto) => {
   }
 };
 var getScheduleByExam = async (examId) => {
-  return await db_default.examSchedule.findMany({
+  return db_default.examSchedule.findMany({
     where: { examId },
     include: { subject: true },
     orderBy: { examDate: "asc" }
@@ -18507,16 +18908,12 @@ var getScheduleByExam = async (examId) => {
 var deleteSchedule = async (id) => {
   const schedule = await db_default.examSchedule.findUnique({ where: { id } });
   if (!schedule) throw { status: 404, message: "Schedule not found" };
-  return await db_default.examSchedule.delete({ where: { id } });
+  return db_default.examSchedule.delete({ where: { id } });
 };
 var resolveGrade = (marksObtained, fullMarks, rules) => {
   const percent = fullMarks === 0 ? 0 : marksObtained / fullMarks * 100;
   const matchedRule = rules.find((rule) => percent >= rule.minPercent && percent <= rule.maxPercent);
-  return {
-    grade: matchedRule?.grade,
-    gpa: matchedRule?.gpa,
-    percent
-  };
+  return { grade: matchedRule?.grade, gpa: matchedRule?.gpa, percent };
 };
 var submitExamMarks = async (examId, dto, authUser) => {
   await getExamById(examId);
@@ -18534,42 +18931,66 @@ var submitExamMarks = async (examId, dto, authUser) => {
     }
     teacherIdFromAuth = teacher.id;
   }
-  const gradingRules = await db_default.gradingRule.findMany({
-    orderBy: { minPercent: "asc" },
-    select: { minPercent: true, maxPercent: true, grade: true, gpa: true }
+  const studentIds = [...new Set(dto.entries.map((e) => e.studentId))];
+  const subjectIds = [...new Set(dto.entries.map((e) => e.subjectId))];
+  const [students, subjects, gradingRules] = await Promise.all([
+    db_default.student.findMany({ where: { id: { in: studentIds } }, select: { id: true } }),
+    db_default.subject.findMany({ where: { id: { in: subjectIds } }, select: { id: true, fullMarks: true } }),
+    db_default.gradingRule.findMany({
+      orderBy: { minPercent: "asc" },
+      select: { minPercent: true, maxPercent: true, grade: true, gpa: true }
+    })
+  ]);
+  const studentSet = new Set(students.map((s) => s.id));
+  const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+  for (const entry of dto.entries) {
+    if (!studentSet.has(entry.studentId)) {
+      throw { status: 404, message: `Student not found: ${entry.studentId}` };
+    }
+    const subject = subjectMap.get(entry.subjectId);
+    if (!subject) {
+      throw { status: 404, message: `Subject not found: ${entry.subjectId}` };
+    }
+    if (entry.marksObtained < 0 || entry.marksObtained > subject.fullMarks) {
+      throw {
+        status: 400,
+        message: `Marks must be between 0 and ${subject.fullMarks} for subject ${entry.subjectId}`
+      };
+    }
+    const teacherId = teacherIdFromAuth ?? entry.teacherId;
+    if (!teacherId) {
+      throw {
+        status: 400,
+        message: `teacherId is required for admin mark entry (student: ${entry.studentId})`
+      };
+    }
+  }
+  const requiredPairs = dto.entries.map((entry) => ({
+    subjectId: entry.subjectId,
+    teacherId: teacherIdFromAuth ?? entry.teacherId
+  }));
+  const uniquePairs = [...new Map(
+    requiredPairs.map((p) => [`${p.subjectId}:${p.teacherId}`, p])
+  ).values()];
+  const assignments = await db_default.subjectAssignment.findMany({
+    where: { OR: uniquePairs.map((p) => ({ subjectId: p.subjectId, teacherId: p.teacherId })) },
+    select: { subjectId: true, teacherId: true }
   });
-  const marks = await db_default.$transaction(async (tx) => {
-    const processed = [];
-    for (const entry of dto.entries) {
-      const student = await tx.student.findUnique({
-        where: { id: entry.studentId },
-        select: { id: true }
-      });
-      if (!student) {
-        throw { status: 404, message: `Student not found: ${entry.studentId}` };
-      }
-      const subject = await tx.subject.findUnique({
-        where: { id: entry.subjectId },
-        select: { id: true, fullMarks: true }
-      });
-      if (!subject) {
-        throw { status: 404, message: `Subject not found: ${entry.subjectId}` };
-      }
-      if (entry.marksObtained < 0 || entry.marksObtained > subject.fullMarks) {
-        throw {
-          status: 400,
-          message: `Marks must be between 0 and ${subject.fullMarks} for subject ${entry.subjectId}`
-        };
-      }
+  const assignedSet = new Set(assignments.map((a) => `${a.subjectId}:${a.teacherId}`));
+  for (const pair of uniquePairs) {
+    if (!assignedSet.has(`${pair.subjectId}:${pair.teacherId}`)) {
+      throw {
+        status: 403,
+        message: `Teacher ${pair.teacherId} is not assigned to subject ${pair.subjectId}`
+      };
+    }
+  }
+  const marks = await db_default.$transaction(
+    dto.entries.map((entry) => {
+      const subject = subjectMap.get(entry.subjectId);
       const teacherId = teacherIdFromAuth ?? entry.teacherId;
-      if (!teacherId) {
-        throw {
-          status: 400,
-          message: `teacherId is required for admin mark entry (student: ${entry.studentId})`
-        };
-      }
       const { grade, gpa } = resolveGrade(entry.marksObtained, subject.fullMarks, gradingRules);
-      const mark = await tx.mark.upsert({
+      return db_default.mark.upsert({
         where: {
           studentId_examId_subjectId: {
             studentId: entry.studentId,
@@ -18577,12 +18998,7 @@ var submitExamMarks = async (examId, dto, authUser) => {
             subjectId: entry.subjectId
           }
         },
-        update: {
-          marksObtained: entry.marksObtained,
-          grade,
-          gpa,
-          teacherId
-        },
+        update: { marksObtained: entry.marksObtained, grade, gpa, teacherId },
         create: {
           studentId: entry.studentId,
           examId,
@@ -18593,15 +19009,29 @@ var submitExamMarks = async (examId, dto, authUser) => {
           teacherId
         }
       });
-      processed.push(mark);
-    }
-    return processed;
+    })
+  );
+  return { examId, totalProcessed: marks.length, marks };
+};
+var getPublishedResultsForStudent = async (studentId, examId) => {
+  const publishedReportCards = await db_default.reportCard.findMany({
+    where: {
+      studentId,
+      status: ResultStatus.PUBLISHED,
+      ...examId && { examId }
+    },
+    include: { exam: { select: { id: true, name: true, type: true } } }
   });
-  return {
-    examId,
-    totalProcessed: marks.length,
-    marks
-  };
+  if (!publishedReportCards.length) return [];
+  const publishedExamIds = publishedReportCards.map((rc) => rc.examId);
+  const marks = await db_default.mark.findMany({
+    where: { studentId, examId: { in: publishedExamIds } },
+    include: { subject: { select: { name: true, fullMarks: true, passMarks: true } } }
+  });
+  return publishedReportCards.map((rc) => ({
+    ...rc,
+    subjects: marks.filter((m) => m.examId === rc.examId)
+  }));
 };
 var getFailedStudents = async (examId, classId) => {
   await getExamById(examId);
@@ -18617,22 +19047,11 @@ var getFailedStudents = async (examId, classId) => {
           studentId: true,
           name: true,
           section: {
-            select: {
-              id: true,
-              name: true,
-              classId: true,
-              class: { select: { name: true } }
-            }
+            select: { id: true, name: true, classId: true, class: { select: { name: true } } }
           }
         }
       },
-      subject: {
-        select: {
-          id: true,
-          name: true,
-          passMarks: true
-        }
-      }
+      subject: { select: { id: true, name: true, passMarks: true } }
     }
   });
   const failedMarks = allMarks.filter((mark) => mark.marksObtained < mark.subject.passMarks);
@@ -18649,10 +19068,7 @@ var getFailedStudents = async (examId, classId) => {
       existing.failedSubjects.push(failedSubject);
       continue;
     }
-    grouped.set(mark.student.id, {
-      student: mark.student,
-      failedSubjects: [failedSubject]
-    });
+    grouped.set(mark.student.id, { student: mark.student, failedSubjects: [failedSubject] });
   }
   return {
     examId,
@@ -18715,7 +19131,7 @@ var deleteExam2 = async (req, res, next) => {
 };
 var publishExam2 = async (req, res, next) => {
   try {
-    const data = await publishExam(asParamString2(req.params.id));
+    const data = await publishExam(asParamString2(req.params.id), req.user.id);
     sendSuccess(res, data, "Exam published");
   } catch (err) {
     next(err);
@@ -18723,7 +19139,7 @@ var publishExam2 = async (req, res, next) => {
 };
 var unpublishExam2 = async (req, res, next) => {
   try {
-    const data = await unpublishExam(asParamString2(req.params.id));
+    const data = await unpublishExam(asParamString2(req.params.id), req.user.id);
     sendSuccess(res, data, "Exam unpublished");
   } catch (err) {
     next(err);
@@ -18756,9 +19172,7 @@ var deleteSchedule2 = async (req, res, next) => {
 var submitExamMarks2 = async (req, res, next) => {
   try {
     const authUser = req.user;
-    if (!authUser) {
-      throw { status: 401, message: "Unauthorized" };
-    }
+    if (!authUser) throw { status: 401, message: "Unauthorized" };
     const data = await submitExamMarks(asParamString2(req.params.examId), req.body, authUser);
     sendSuccess(res, data, "Marks submitted");
   } catch (err) {
@@ -18776,27 +19190,95 @@ var getFailedStudents2 = async (req, res, next) => {
     next(err);
   }
 };
+var getMyExamSchedule = async (req, res, next) => {
+  try {
+    const student = await db_default.student.findFirst({
+      where: { userId: req.user.id },
+      select: { classId: true }
+    });
+    if (!student) throw { status: 404, message: "Student profile not found" };
+    const data = await getExamScheduleForClass(student.classId);
+    sendSuccess(res, data, "Exam schedule fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+var getMyResults = async (req, res, next) => {
+  try {
+    const student = await db_default.student.findFirst({
+      where: { userId: req.user.id },
+      select: { id: true }
+    });
+    if (!student) throw { status: 404, message: "Student profile not found" };
+    const examId = asOptionalQueryString(req.query.examId);
+    const data = await getPublishedResultsForStudent(student.id, examId);
+    sendSuccess(res, data, "Your results fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+async function resolveOwnedChild(userId, studentId) {
+  const parent = await db_default.parent.findFirst({ where: { userId }, select: { id: true } });
+  if (!parent) throw { status: 404, message: "Parent profile not found" };
+  const child = await db_default.student.findFirst({
+    where: { id: studentId, parentId: parent.id },
+    select: { id: true, classId: true }
+  });
+  if (!child) throw { status: 403, message: "This student is not linked to your account" };
+  return child;
+}
+var getChildExamSchedule = async (req, res, next) => {
+  try {
+    const child = await resolveOwnedChild(req.user.id, asParamString2(req.params.studentId));
+    const data = await getExamScheduleForClass(child.classId);
+    sendSuccess(res, data, "Child's exam schedule fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+var getChildResults = async (req, res, next) => {
+  try {
+    const child = await resolveOwnedChild(req.user.id, asParamString2(req.params.studentId));
+    const examId = asOptionalQueryString(req.query.examId);
+    const data = await getPublishedResultsForStudent(child.id, examId);
+    sendSuccess(res, data, "Child's results fetched");
+  } catch (err) {
+    next(err);
+  }
+};
 
 // src/modules/exam/exam.route.ts
 var router5 = (0, import_express5.Router)();
-router5.post("/", authenticate, authorizeRoles("ADMIN"), createExam2);
-router5.get("/", authenticate, getAllExams2);
-router5.get("/:id", authenticate, getExamById2);
-router5.put("/:id", authenticate, authorizeRoles("ADMIN"), updateExam2);
-router5.delete("/:id", authenticate, authorizeRoles("ADMIN"), deleteExam2);
-router5.patch("/:id/publish", authenticate, authorizeRoles("ADMIN"), publishExam2);
-router5.patch("/:id/unpublish", authenticate, authorizeRoles("ADMIN"), unpublishExam2);
-router5.post("/schedules", authenticate, authorizeRoles("ADMIN"), createSchedule);
-router5.get("/:examId/schedules", authenticate, getScheduleByExam2);
-router5.delete("/schedules/:id", authenticate, authorizeRoles("ADMIN"), deleteSchedule2);
-router5.post("/:examId/marks", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitExamMarks2);
-router5.get("/:examId/failed-students", authenticate, authorizeRoles("ADMIN", "TEACHER"), getFailedStudents2);
+var EXAM_STAFF = ["EXAM_CONTROLLER", "SCHOOL_ADMIN"];
+var EXAM_VIEWERS = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "TEACHER"];
+router5.use(authenticate);
+router5.post("/", authorizeRoles(...EXAM_STAFF), createExam2);
+router5.get("/", authorizeRoles(...EXAM_VIEWERS), getAllExams2);
+router5.get("/:id", authorizeRoles(...EXAM_VIEWERS), getExamById2);
+router5.put("/:id", authorizeRoles(...EXAM_STAFF), updateExam2);
+router5.delete("/:id", authorizeRoles(...EXAM_STAFF), deleteExam2);
+router5.patch("/:id/publish", authorizeRoles(...EXAM_STAFF), publishExam2);
+router5.patch("/:id/unpublish", authorizeRoles(...EXAM_STAFF), unpublishExam2);
+router5.post("/schedules", authorizeRoles(...EXAM_STAFF), createSchedule);
+router5.get("/:examId/schedules", authorizeRoles(...EXAM_VIEWERS), getScheduleByExam2);
+router5.delete("/schedules/:id", authorizeRoles(...EXAM_STAFF), deleteSchedule2);
+router5.post("/:examId/marks", authorizeRoles("TEACHER", ...EXAM_STAFF), submitExamMarks2);
+router5.get("/:examId/failed-students", authorizeRoles("TEACHER", ...EXAM_STAFF), getFailedStudents2);
+router5.get("/my/schedule", authorizeRoles("STUDENT"), getMyExamSchedule);
+router5.get("/my/results", authorizeRoles("STUDENT"), getMyResults);
+router5.get("/child/:studentId/schedule", authorizeRoles("PARENT"), getChildExamSchedule);
+router5.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults);
 var exam_route_default = router5;
 
 // src/modules/attendance/attendacne.router.ts
 var import_express6 = require("express");
 
+// src/modules/attendance/attendance.controller.ts
+init_db();
+
 // src/modules/attendance/attendance.service.ts
+init_db();
+init_socket();
 var takeAttendance = async (dto, requesterId, requesterRole) => {
   const attendanceDate = new Date(dto.date);
   attendanceDate.setHours(0, 0, 0, 0);
@@ -18825,21 +19307,26 @@ var takeAttendance = async (dto, requesterId, requesterRole) => {
       throw new Error("Teacher is required for attendance");
     }
   }
-  const records = await db_default.$transaction(
-    dto.entries.map((entry) => {
-      return db_default.studentAttendance.create({
-        data: {
-          studentId: entry.studentId,
-          sectionId: dto.sectionId,
-          teacherId: resolvedTeacherId,
-          date: attendanceDate,
-          status: entry.status
-        }
-      });
-    })
-  );
+  await db_default.studentAttendance.createMany({
+    data: dto.entries.map((entry) => ({
+      studentId: entry.studentId,
+      sectionId: dto.sectionId,
+      teacherId: resolvedTeacherId,
+      date: attendanceDate,
+      status: entry.status
+    })),
+    skipDuplicates: true
+    // relies on @@unique([studentId, date])
+  });
+  const records = await db_default.studentAttendance.findMany({
+    where: {
+      sectionId: dto.sectionId,
+      date: attendanceDate,
+      studentId: { in: dto.entries.map((e) => e.studentId) }
+    }
+  });
   try {
-    getIO().to("ADMIN").emit("attendance:taken", {
+    getIO().to("SCHOOL_ADMIN").emit("attendance:taken", {
       classId: dto.classId,
       sectionId: dto.sectionId,
       date: dto.date,
@@ -18864,7 +19351,7 @@ var getAttendanceByDate = async (classId, sectionId, date) => {
     }
   }
   const d = new Date(date);
-  return await db_default.studentAttendance.findMany({
+  return db_default.studentAttendance.findMany({
     where: {
       sectionId,
       date: {
@@ -18872,8 +19359,17 @@ var getAttendanceByDate = async (classId, sectionId, date) => {
         lte: new Date(d.setHours(23, 59, 59, 999))
       }
     },
-    include: {
-      student: true
+    // FIX: was `include: { student: true }` — pulls every column
+    // (address, photo, religion...) for every row. Only the display
+    // fields are needed here.
+    select: {
+      id: true,
+      studentId: true,
+      status: true,
+      date: true,
+      student: {
+        select: { id: true, name: true, rollNumber: true, photo: true }
+      }
     }
   });
 };
@@ -18892,22 +19388,22 @@ var getStudentAttendance = async (student, month, year) => {
       date: true,
       status: true
     },
-    orderBy: {
-      date: "desc"
-    },
+    orderBy: { date: "desc" },
     take: 50
   });
   const total = records.length;
   const present = records.filter((r) => r.status === "PRESENT").length;
   const absent = records.filter((r) => r.status === "ABSENT").length;
   const late = records.filter((r) => r.status === "LATE").length;
-  const Parcentage = total > 0 ? Math.round(present / total * 100) : 0;
+  const percentage = total > 0 ? Math.round(present / total * 100) : 0;
   return {
     total,
     present,
     absent,
     late,
-    Parcentage,
+    percentage,
+    Parcentage: percentage,
+    // TODO: remove after frontend migrates
     records
   };
 };
@@ -18916,31 +19412,59 @@ var updateAttendance = async (id, dto, requesterId, requesterRole) => {
     where: { id }
   });
   if (!record) throw { status: 404, message: "Attendance record not found" };
-  const houreDiff = (Date.now() - new Date(record.createdAt).getTime()) / (1e3 * 60 * 60);
-  if (requesterRole !== "ADMIN" && houreDiff > 24) {
-    throw { status: 403, message: "Only admin can edit attendance after 24 hours" };
+  const isSchoolAdmin = requesterRole === "SCHOOL_ADMIN" || requesterRole === "SUPER_ADMIN";
+  const hourDiff = (Date.now() - new Date(record.createdAt).getTime()) / (1e3 * 60 * 60);
+  if (!isSchoolAdmin && hourDiff > 24) {
+    throw { status: 403, message: "Only School Admin can edit attendance after 24 hours" };
   }
-  return await db_default.studentAttendance.update({
+  if (!isSchoolAdmin && requesterRole === "TEACHER") {
+    const teacher = await db_default.teacher.findFirst({
+      where: { userId: requesterId },
+      select: { id: true }
+    });
+    if (!teacher || teacher.id !== record.teacherId) {
+      throw { status: 403, message: "You can only edit attendance you recorded" };
+    }
+  }
+  const updated = await db_default.studentAttendance.update({
     where: { id },
     data: dto
   });
+  try {
+    await db_default.auditLog.create({
+      data: {
+        userId: requesterId,
+        action: "ATTENDANCE_EDIT",
+        targetId: id,
+        meta: { from: record.status, to: dto.status },
+        timestamp: /* @__PURE__ */ new Date()
+      }
+    });
+  } catch (err) {
+    console.warn("Audit log failed:", err?.message);
+  }
+  return updated;
 };
 var getMonthlyReport = async (classId, sectionId, month, year) => {
-  const record = await db_default.studentAttendance.findMany({
+  const records = await db_default.studentAttendance.findMany({
     where: {
-      classId,
       sectionId,
+      section: { classId },
       date: {
         gte: new Date(year, month - 1, 1),
         lte: new Date(year, month, 0)
       }
     },
-    include: {
-      student: true
+    select: {
+      studentId: true,
+      status: true,
+      student: {
+        select: { id: true, name: true, rollNumber: true }
+      }
     }
   });
   const grouped = {};
-  for (const r of record) {
+  for (const r of records) {
     if (!grouped[r.studentId]) {
       grouped[r.studentId] = {
         student: r.student,
@@ -18957,170 +19481,245 @@ var getMonthlyReport = async (classId, sectionId, month, year) => {
   }
   return Object.values(grouped).map((g) => ({
     ...g,
-    Percentage: Math.round(g.present / g.total * 100),
+    percentage: Math.round(g.present / g.total * 100),
     belowThreshold: Math.round(g.present / g.total * 100) < 75
   }));
 };
 
 // src/modules/attendance/attendance.controller.ts
-var takeAttendance2 = async (req, res, next) => {
-  try {
-    if (!req.user) throw { status: 401, message: "Unauthorized" };
-    const data = await takeAttendance(req.body, req.user.id, req.user.role);
-    sendSuccess(res, data, "Attendance saved", 201);
-  } catch (err) {
-    next(err);
+var AttendanceController = class {
+  /** Teacher / School Admin — take attendance for a section */
+  async take(req, res, next) {
+    try {
+      const records = await takeAttendance(req.body, req.user.id, req.user.role);
+      sendSuccess(res, records, "Attendance recorded", 201);
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var getAttendanceByDate2 = async (req, res, next) => {
-  try {
-    const { classId, sectionId, date } = req.query;
-    const data = await getAttendanceByDate(classId, sectionId, date);
-    sendSuccess(res, data);
-  } catch (err) {
-    next(err);
+  /** Teacher / School Admin — view a section's attendance for a specific date */
+  async byDate(req, res, next) {
+    try {
+      const { classId, sectionId, date } = req.query;
+      const data = await getAttendanceByDate(classId, sectionId, date);
+      sendSuccess(res, data, "Attendance fetched");
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var getStudentAttendance2 = async (req, res, next) => {
-  try {
-    const { month, year } = req.query;
-    const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
-    const data = await getStudentAttendance(
-      studentId,
-      month ? Number(month) : void 0,
-      year ? Number(year) : void 0
-    );
-    sendSuccess(res, data);
-  } catch (err) {
-    next(err);
+  /**
+   * Student — view own attendance.
+   * FIX target: studentId must NEVER come from the client (params/query/body).
+   * It is always resolved from the authenticated user's own Student profile,
+   * so a student cannot view anyone else's records by editing a URL.
+   */
+  async myAttendance(req, res, next) {
+    try {
+      const student = await db_default.student.findFirst({
+        where: { userId: req.user.id },
+        select: { id: true }
+      });
+      if (!student) throw { status: 404, message: "Student profile not found" };
+      const { month, year } = req.query;
+      const data = await getStudentAttendance(
+        student.id,
+        month ? Number(month) : void 0,
+        year ? Number(year) : void 0
+      );
+      sendSuccess(res, data, "Your attendance fetched");
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var updateAttendance2 = async (req, res, next) => {
-  try {
-    if (!req.user) throw { status: 401, message: "Unauthorized" };
-    const attendanceId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const data = await updateAttendance(
-      attendanceId,
-      req.body,
-      req.user.id,
-      req.user.role
-    );
-    sendSuccess(res, data, "Attendance updated");
-  } catch (err) {
-    next(err);
+  /**
+   * Parent — view a specific child's attendance.
+   * FIX target: the requested studentId is only served if it actually
+   * belongs to this parent's account (Student.parentId === this parent's id).
+   * Without this check, any parent could view any other student's attendance
+   * by guessing/enumerating studentId — a direct Privacy NFR violation.
+   */
+  async childAttendance(req, res, next) {
+    try {
+      const parent = await db_default.parent.findFirst({
+        where: { userId: req.user.id },
+        select: { id: true }
+      });
+      if (!parent) throw { status: 404, message: "Parent profile not found" };
+      const studentId = String(req.params.studentId);
+      const child = await db_default.student.findFirst({
+        where: { id: studentId, parentId: parent.id },
+        select: { id: true }
+      });
+      if (!child) throw { status: 403, message: "This student is not linked to your account" };
+      const { month, year } = req.query;
+      const data = await getStudentAttendance(
+        child.id,
+        month ? Number(month) : void 0,
+        year ? Number(year) : void 0
+      );
+      sendSuccess(res, data, "Child's attendance fetched");
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var getMonthlyReport2 = async (req, res, next) => {
-  try {
-    const { classId, sectionId, month, year } = req.query;
-    const data = await getMonthlyReport(
-      classId,
-      sectionId,
-      Number(month),
-      Number(year)
-    );
-    sendSuccess(res, data);
-  } catch (err) {
-    next(err);
+  /** Teacher (own record, within 24h) / School Admin (override) */
+  async update(req, res, next) {
+    try {
+      const updated = await updateAttendance(
+        String(req.params.id),
+        req.body,
+        req.user.id,
+        req.user.role
+      );
+      sendSuccess(res, updated, "Attendance updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  /** Teacher / School Admin — monthly per-student report for a section */
+  async monthlyReport(req, res, next) {
+    try {
+      const { classId, sectionId, month, year } = req.query;
+      const data = await getMonthlyReport(classId, sectionId, Number(month), Number(year));
+      sendSuccess(res, data, "Monthly report generated");
+    } catch (err) {
+      next(err);
+    }
   }
 };
 
 // src/modules/attendance/attendacne.router.ts
 var router6 = (0, import_express6.Router)();
-router6.post("/", authenticate, authorizeRoles("ADMIN", "TEACHER"), takeAttendance2);
-router6.get("/", authenticate, getAttendanceByDate2);
-router6.get("/student/:studentId", authenticate, getStudentAttendance2);
-router6.get("/monthly-report", authenticate, authorizeRoles("ADMIN", "TEACHER"), getMonthlyReport2);
-router6.patch("/:id", authenticate, authorizeRoles("ADMIN", "TEACHER"), updateAttendance2);
+var c = new AttendanceController();
+router6.use(authenticate);
+router6.post("/take", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.take.bind(c));
+router6.get("/by-date", authorizeRoles("TEACHER", "SCHOOL_ADMIN", "ADMIN"), c.byDate.bind(c));
+router6.get("/monthly-report", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.monthlyReport.bind(c));
+router6.patch("/:id", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.update.bind(c));
+router6.get("/my-attendance", authorizeRoles("STUDENT"), c.myAttendance.bind(c));
+router6.get("/child/:studentId", authorizeRoles("PARENT"), c.childAttendance.bind(c));
 var attendacne_router_default = router6;
 
 // src/modules/teachers/teacher.routes.ts
 var import_express7 = require("express");
 
 // src/modules/teachers/teachers.service.ts
-var import_bcryptjs3 = __toESM(require("bcryptjs"));
+init_db();
+var import_bcryptjs4 = __toESM(require("bcryptjs"));
 var import_node_crypto2 = require("crypto");
-
-// src/utils/pagination.util.ts
-var paginate2 = async (model, where, page, limit) => {
-  const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
-  const safeLimit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
-  const skip = (safePage - 1) * safeLimit;
-  const take = safeLimit;
-  const total = await model.count({ where });
-  return {
-    skip,
-    take,
-    meta: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-      totalPages: Math.ceil(total / safeLimit)
-    }
-  };
-};
-
-// src/modules/teachers/teachers.service.ts
+init_pagination_util();
+async function nextAutoEmployeeId() {
+  const all = await db_default.teacher.findMany({ select: { employeeId: true } });
+  const maxNumeric = all.reduce((max, t) => {
+    const n = Number(t.employeeId);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return String(maxNumeric + 1).padStart(2, "0");
+}
 var TeachersService = {
-  async create(dto) {
-    const emailExists = await db_default.user.findUnique({
-      where: { email: dto.email }
+  async getTeacherIdByUserId(userId) {
+    const teacher = await db_default.teacher.findUnique({
+      where: { userId },
+      select: { id: true }
     });
+    return teacher?.id ?? null;
+  },
+  async create(dto) {
+    const emailExists = await db_default.user.findUnique({ where: { email: dto.email } });
     if (emailExists) {
       throw { status: 409, message: "Email already exists" };
     }
     let employeeId;
     if (dto.TeachersId) {
       employeeId = dto.TeachersId;
-      const exists = await db_default.teacher.findUnique({
-        where: { employeeId }
-      });
+      const exists = await db_default.teacher.findUnique({ where: { employeeId } });
       if (exists) {
         throw { status: 409, message: "Teacher ID already exists" };
       }
     } else {
-      const lastTeacher = await db_default.teacher.findFirst({
-        orderBy: { createdAt: "desc" }
-      });
-      let next = 1;
-      if (lastTeacher?.employeeId) {
-        next = Number(lastTeacher.employeeId) + 1;
-      }
-      employeeId = String(next).padStart(2, "0");
+      employeeId = await nextAutoEmployeeId();
     }
+    const wasPasswordGenerated = !dto.password;
     const rawPassword = dto.password ?? (0, import_node_crypto2.randomBytes)(4).toString("hex");
-    const hashedPassword = await import_bcryptjs3.default.hash(rawPassword, 10);
-    return await db_default.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        passwordHash: hashedPassword,
-        role: "TEACHER",
-        teacherProfile: {
-          create: {
-            employeeId,
-            // FINAL VALUE (manual or auto)
-            name: dto.name,
-            email: dto.email,
-            phone: dto.phone,
-            subjectSpecialization: dto.department,
-            joiningDate: new Date(dto.dateOfJoining),
-            photo: dto.avatarUrl
-          }
+    const hashedPassword = await import_bcryptjs4.default.hash(rawPassword, 10);
+    const buildData = (id) => ({
+      name: dto.name,
+      email: dto.email,
+      passwordHash: hashedPassword,
+      role: "TEACHER",
+      teacherProfile: {
+        create: {
+          employeeId: id,
+          name: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          gender: dto.gender,
+          designation: dto.designation,
+          department: dto.department,
+          qualification: dto.qualification,
+          experience: dto.experience,
+          address: dto.address,
+          dateOfBirth: new Date(dto.dateOfBirth),
+          joiningDate: new Date(dto.dateOfJoining),
+          bloodGroup: dto.bloodGroup,
+          salary: dto.salary,
+          photo: dto.avatarUrl
         }
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        teacherProfile: true
       }
     });
+    const selectShape = {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      teacherProfile: {
+        include: { subjectAssignments: { include: { subject: true } } }
+      }
+    };
+    let newTeacher;
+    try {
+      newTeacher = await db_default.user.create({ data: buildData(employeeId), select: selectShape });
+    } catch (err) {
+      if (err?.code === "P2002" && !dto.TeachersId) {
+        employeeId = await nextAutoEmployeeId();
+        newTeacher = await db_default.user.create({ data: buildData(employeeId), select: selectShape });
+      } else {
+        throw err;
+      }
+    }
+    let subjectAssignmentWarning;
+    if (dto.subjectId && newTeacher.teacherProfile?.id) {
+      const subjectExists = await db_default.subject.findUnique({ where: { id: dto.subjectId } });
+      if (!subjectExists) {
+        subjectAssignmentWarning = `Subject with ID ${dto.subjectId} not found \u2014 teacher created without a subject assignment.`;
+      } else {
+        try {
+          await db_default.subjectAssignment.create({
+            data: { subjectId: dto.subjectId, teacherId: newTeacher.teacherProfile.id }
+          });
+        } catch (err) {
+          subjectAssignmentWarning = `Subject assignment failed: ${err?.message ?? "unknown error"}`;
+        }
+      }
+    }
+    return {
+      ...newTeacher,
+      //  an auto-generated password was previously created and then
+      // never surfaced anywhere — the account existed but nobody had the
+      // credential to log into it. Only present when we generated it, so
+      // an admin who supplied their own password never sees this key.
+      ...wasPasswordGenerated && { temporaryPassword: rawPassword },
+      ...subjectAssignmentWarning && { warning: subjectAssignmentWarning }
+    };
   },
   async findAll(query) {
-    const { page = "1", limit = "10", search } = query;
+    const { page = "1", limit = "10", search, department, designation } = query;
     const where = {
+      //  department/designation were accepted in TeacherQueryDto but
+      // never actually applied to the query — filtering by either did
+      // nothing before.
+      ...department && { department },
+      ...designation && { designation },
       ...search && {
         OR: [
           { name: { contains: search, mode: "insensitive" } },
@@ -19129,7 +19728,7 @@ var TeachersService = {
         ]
       }
     };
-    const { skip, take, meta } = await paginate2(db_default.teacher, where, parseInt(page, 10), parseInt(limit, 10));
+    const { skip, take, meta } = await paginate(db_default.teacher, where, parseInt(page, 10), parseInt(limit, 10));
     const teachers = await db_default.teacher.findMany({
       where,
       skip,
@@ -19141,41 +19740,62 @@ var TeachersService = {
       },
       orderBy: { createdAt: "desc" }
     });
-    return { teachers, meta };
+    const transformedTeachers = teachers.map((teacher) => ({
+      id: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone,
+      gender: teacher.gender ?? "\u2014",
+      createdAt: teacher.createdAt,
+      subject: teacher.subjectAssignments?.[0]?.subject?.name ?? teacher.subjectSpecialization ?? "\u2014",
+      subjectId: teacher.subjectAssignments?.[0]?.subjectId,
+      // FIX: was `teacher.joiningDate` mislabeled as dateOfBirth — now
+      // that the column actually exists, use the real value.
+      dateOfBirth: teacher.dateOfBirth,
+      joiningDate: teacher.joiningDate
+    }));
+    return { teachers: transformedTeachers, meta };
   },
   async findById(id) {
     const teacher = await db_default.teacher.findUnique({
       where: { id },
       include: {
-        user: true,
-        subjectAssignments: {
-          include: { subject: true }
-        },
-        sectionTeacher: {
-          include: { class: true }
-        },
-        timetableSlots: {
-          include: {
-            subject: true,
-            section: true
-          },
-          take: 20
-        }
+        user: { select: { id: true, name: true, email: true } },
+        subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
+        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
       }
     });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
     return {
       id: teacher.id,
       name: teacher.name,
       email: teacher.email,
       phone: teacher.phone ?? "\u2014",
-      // SUBJECT FIX
-      subject: teacher.subjectAssignments?.[0]?.subject?.name || teacher.subjectSpecialization || "\u2014",
-      //  GENDER FIX
       gender: teacher.gender ?? "\u2014",
-      dateOfJoining: teacher.joiningDate,
+      //  these six were all hardcoded placeholders before because
+      // the columns didn't exist. Now they return what was actually
+      // stored.
+      dateOfBirth: teacher.dateOfBirth,
       employeeId: teacher.employeeId,
-      classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? []
+      designation: teacher.designation ?? "\u2014",
+      department: teacher.department ?? "\u2014",
+      qualification: teacher.qualification ?? "\u2014",
+      experience: teacher.experience ?? 0,
+      address: teacher.address ?? "\u2014",
+      bloodGroup: teacher.bloodGroup ?? "\u2014",
+      joiningDate: teacher.joiningDate,
+      salary: teacher.salary ?? 0,
+      subject: teacher.subjectAssignments?.[0]?.subject?.name ?? "\u2014",
+      subjectId: teacher.subjectAssignments?.[0]?.subjectId ?? null,
+      subjectAssignments: teacher.subjectAssignments?.map((sa) => ({
+        id: sa.id,
+        subjectId: sa.subject.id,
+        subjectName: sa.subject.name
+      })) ?? [],
+      classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? [],
+      isActive: teacher.isActive,
+      createdAt: teacher.createdAt,
+      updatedAt: teacher.updatedAt
     };
   },
   async findByUserId(userId) {
@@ -19194,20 +19814,17 @@ var TeachersService = {
   },
   async update(id, dto) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
-    const { name, avatarUrl, ...teacherFields } = dto;
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
+    const { name, avatarUrl, dateOfBirth, ...teacherFields } = dto;
     const updatedTeacher = await db_default.teacher.update({
       where: { id },
       data: {
         ...teacherFields,
+        ...dateOfBirth !== void 0 && { dateOfBirth: new Date(dateOfBirth) },
         ...avatarUrl !== void 0 && { photo: avatarUrl },
         ...name && {
           name,
-          user: {
-            update: {
-              name
-            }
-          }
+          user: { update: { name } }
         }
       },
       include: {
@@ -19218,22 +19835,34 @@ var TeachersService = {
     });
     return updatedTeacher;
   },
+  //  this hard-deleted the User row (cascading onto Teacher) even
+  // though the schema has an `isActive` flag clearly meant for this. A
+  // teacher with any Marks, TeacherAttendance, Homework, or Timetable
+  // rows (none of which cascade-delete from Teacher) would hit a raw FK
+  // violation the moment they'd ever taught a class — deleting a
+  // teacher's account also isn't supposed to erase the historical
+  // academic records tied to them (grades they entered, attendance they
+  // took), same reasoning as fee records with payment history. This now
+  // deactivates instead, matching the WAIVED-instead-of-delete pattern.
   async delete(id) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
-    await db_default.user.delete({ where: { id: teacher.userId } });
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
+    return db_default.teacher.update({
+      where: { id },
+      data: { isActive: false }
+    });
   },
   async uploadAvatar(id, avatarUrl) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
     return db_default.teacher.update({ where: { id }, data: { photo: avatarUrl } });
   },
   async assignSubjects(id, dto) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
     const validSubjects = await db_default.subject.findMany({ where: { id: { in: dto.subjectIds } }, select: { id: true } });
     if (validSubjects.length !== dto.subjectIds.length) {
-      throw new Error("One or more subject IDs are invalid");
+      throw { status: 400, message: "One or more subject IDs are invalid" };
     }
     await db_default.subjectAssignment.deleteMany({ where: { teacherId: id } });
     if (dto.subjectIds.length > 0) {
@@ -19251,7 +19880,7 @@ var TeachersService = {
   },
   async assignClasses(id, dto) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
     const sections = await db_default.section.findMany({ where: { classId: { in: dto.classIds } }, select: { id: true } });
     await db_default.teacher.update({
       where: { id },
@@ -19271,7 +19900,9 @@ var TeachersService = {
   },
   async getTeacherSchedule(id) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) {
+      throw { status: 404, message: "Teacher not found" };
+    }
     return db_default.timetable.findMany({
       where: { teacherId: id },
       include: {
@@ -19289,42 +19920,42 @@ var TeachersService = {
         sectionTeacher: { select: { classId: true } }
       }
     });
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
     const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+    if (classIds.length === 0) {
+      return {
+        totalStudents: 0,
+        totalClasses: 0,
+        totalSubjects: teacher.subjectAssignments.length,
+        upcomingExams: 0
+      };
+    }
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
     const [totalStudents, totalClasses, totalSubjects, upcomingExams] = await Promise.all([
       db_default.student.count({
-        where: {
-          section: {
-            classId: {
-              in: classIds
-            }
-          }
-        }
+        where: { section: { classId: { in: classIds } } }
       }),
       Promise.resolve(classIds.length),
       Promise.resolve(teacher.subjectAssignments.length),
       db_default.examSchedule.count({
-        where: {
-          classId: {
-            in: classIds
-          },
-          examDate: {
-            gte: /* @__PURE__ */ new Date()
-          }
-        }
+        where: { classId: { in: classIds }, examDate: { gte: today } }
       })
     ]);
-    return {
-      totalStudents,
-      totalClasses,
-      totalSubjects,
-      upcomingExams
-    };
+    return { totalStudents, totalClasses, totalSubjects, upcomingExams };
   }
 };
 
 // src/modules/teachers/teachers.controller.ts
 var teacherService = TeachersService;
+var ADMIN_LIKE_ROLES = ["SCHOOL_ADMIN", "HR"];
+var SENSITIVE_FIELDS = ["salary", "address", "bloodGroup", "dateOfBirth"];
+function redactForRole(teacher, role) {
+  if (role && ADMIN_LIKE_ROLES.includes(role)) return teacher;
+  const copy = { ...teacher };
+  for (const field of SENSITIVE_FIELDS) delete copy[field];
+  return copy;
+}
 var TeacherController = class {
   async create(req, res, next) {
     try {
@@ -19337,7 +19968,10 @@ var TeacherController = class {
   async findAll(req, res, next) {
     try {
       const data = await teacherService.findAll(req.query);
-      sendSuccess(res, data, "Teachers fetched");
+      sendSuccess(res, {
+        ...data,
+        teachers: data.teachers.map((t) => redactForRole(t, req.user?.role))
+      }, "Teachers fetched");
     } catch (err) {
       next(err);
     }
@@ -19345,7 +19979,7 @@ var TeacherController = class {
   async findById(req, res, next) {
     try {
       const teacher = await teacherService.findById(String(req.params.id));
-      sendSuccess(res, teacher, "Teacher fetched");
+      sendSuccess(res, redactForRole(teacher, req.user?.role), "Teacher fetched");
     } catch (err) {
       next(err);
     }
@@ -19376,7 +20010,7 @@ var TeacherController = class {
   }
   async uploadAvatar(req, res, next) {
     try {
-      if (!req.file) throw new Error("No file uploaded");
+      if (!req.file) throw { status: 400, message: "No file uploaded" };
       const result = await new Promise((resolve, reject) => {
         const stream = cloudinary_default.uploader.upload_stream({ folder: "teachers/avatars" }, (error, uploadResult) => {
           if (error || !uploadResult) {
@@ -19410,16 +20044,43 @@ var TeacherController = class {
   }
   async getSchedule(req, res, next) {
     try {
-      const data = await teacherService.getTeacherSchedule(String(req.params.id));
-      sendSuccess(res, data, "Schedule fetched");
+      let teacherId = String(req.params.id);
+      const teacherByUserId = await teacherService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+      try {
+        const data = await teacherService.getTeacherSchedule(teacherId);
+        sendSuccess(res, data, "Schedule fetched");
+      } catch (scheduleErr) {
+        if (scheduleErr?.status === 404) {
+          sendSuccess(res, [], "Schedule fetched");
+        } else {
+          next(scheduleErr);
+        }
+      }
     } catch (err) {
       next(err);
     }
   }
   async getDashboardStats(req, res, next) {
     try {
-      const data = await teacherService.getDashboardStats(String(req.params.id));
-      sendSuccess(res, data, "Dashboard stats fetched");
+      let teacherId = String(req.params.id);
+      const teacherByUserId = await teacherService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+      try {
+        const data = await teacherService.getDashboardStats(teacherId);
+        sendSuccess(res, data, "Dashboard stats fetched");
+      } catch (statsErr) {
+        if (statsErr?.status === 404) {
+          sendSuccess(res, {
+            totalStudents: 0,
+            totalClasses: 0,
+            totalSubjects: 0,
+            upcomingExams: 0
+          }, "Dashboard stats fetched");
+        } else {
+          next(statsErr);
+        }
+      }
     } catch (err) {
       next(err);
     }
@@ -19431,51 +20092,51 @@ var router7 = (0, import_express7.Router)();
 var teacherController = new TeacherController();
 router7.use(authenticate);
 router7.get("/me", authorizeRoles("TEACHER"), teacherController.getMyProfile.bind(teacherController));
-router7.post("/", authorizeRoles("ADMIN"), teacherController.create.bind(teacherController));
+router7.post("/", authorizeRoles("SCHOOL_ADMIN"), teacherController.create.bind(teacherController));
 router7.get(
   "/",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   teacherController.findAll.bind(teacherController)
 );
 router7.get(
   "/:id",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   teacherController.findById.bind(teacherController)
 );
 router7.patch(
   "/:id",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   teacherController.update.bind(teacherController)
 );
 router7.delete(
   "/:id",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   teacherController.delete.bind(teacherController)
 );
 router7.patch(
   "/:id/avatar",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   upload.single("avatar"),
   teacherController.uploadAvatar.bind(teacherController)
 );
 router7.patch(
   "/:id/assign-subjects",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   teacherController.assignSubjects.bind(teacherController)
 );
 router7.patch(
   "/:id/assign-classes",
-  authorizeRoles("ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN"),
   teacherController.assignClasses.bind(teacherController)
 );
 router7.get(
   "/:id/schedule",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   teacherController.getSchedule.bind(teacherController)
 );
 router7.get(
   "/:id/dashboard",
-  authorizeRoles("ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
   teacherController.getDashboardStats.bind(teacherController)
 );
 var teacher_routes_default = router7;
@@ -19483,138 +20144,107 @@ var teacher_routes_default = router7;
 // src/modules/result/result.router.ts
 var import_express8 = require("express");
 
+// src/modules/result/result.controller.ts
+init_db();
+
 // src/modules/result/result.service.ts
-var calculateGrade = (percentage) => {
-  if (percentage >= 80) return { grade: "A+", gpa: 5 };
-  if (percentage >= 70) return { grade: "A", gpa: 4 };
-  if (percentage >= 60) return { grade: "A-", gpa: 3.5 };
-  if (percentage >= 50) return { grade: "B", gpa: 3 };
-  if (percentage >= 40) return { grade: "C", gpa: 2 };
-  if (percentage >= 33) return { grade: "D", gpa: 1 };
-  return { grade: "F", gpa: 0 };
-};
-var recalculateAndSaveReportCard = async (studentId, examId) => {
+init_db();
+init_socket();
+var STAFF_OVERRIDE_ROLES = /* @__PURE__ */ new Set(["SCHOOL_ADMIN", "SUPER_ADMIN", "EXAM_CONTROLLER"]);
+async function loadGradingRules() {
+  return db_default.gradingRule.findMany({
+    orderBy: { minPercent: "asc" },
+    select: { minPercent: true, maxPercent: true, grade: true, gpa: true }
+  });
+}
+function resolveGrade2(marksObtained, fullMarks, rules) {
+  const percent = fullMarks === 0 ? 0 : marksObtained / fullMarks * 100;
+  const matchedRule = rules.find((rule) => percent >= rule.minPercent && percent <= rule.maxPercent);
+  return { grade: matchedRule?.grade ?? "F", gpa: matchedRule?.gpa ?? 0, percent };
+}
+var recalculateAndSaveReportCard = async (studentId, examId, gradingRules) => {
   const marks = await db_default.mark.findMany({
     where: { studentId, examId },
-    include: {
-      subject: {
-        select: {
-          fullMarks: true,
-          passMarks: true
-        }
-      }
-    }
+    include: { subject: { select: { fullMarks: true, passMarks: true } } }
   });
   const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
   const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
-  const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
+  const rawPercentage = totalFull > 0 ? totalObtained / totalFull * 100 : 0;
+  const percentage = Math.round(rawPercentage);
   const failed = marks.some((m) => m.marksObtained < m.subject.passMarks);
-  const { grade, gpa } = calculateGrade(percentage);
+  const { grade, gpa } = resolveGrade2(totalObtained, totalFull, gradingRules);
   const reportCard = await db_default.reportCard.upsert({
-    where: {
-      studentId_examId: {
-        studentId,
-        examId
-      }
-    },
-    create: {
-      studentId,
-      examId,
-      gpa
-    },
-    update: {
-      gpa
-    }
+    where: { studentId_examId: { studentId, examId } },
+    create: { studentId, examId, gpa, status: ResultStatus.UNPUBLISHED },
+    update: { gpa }
   });
-  return {
-    reportCard,
-    totalObtained,
-    totalFull,
-    percentage,
-    grade,
-    gpa,
-    isPassed: !failed
-  };
+  return { reportCard, totalObtained, totalFull, percentage, grade, gpa, isPassed: !failed };
 };
 var submitResult = async (dto, authUser) => {
   if (!dto.examId) throw { status: 400, message: "examId is required" };
   const exam = await db_default.exam.findUnique({ where: { id: dto.examId } });
   if (!exam) throw { status: 404, message: "Exam not found" };
-  const student = await db_default.student.findUnique({
-    where: { id: dto.studentId },
-    select: { id: true }
-  });
+  const student = await db_default.student.findUnique({ where: { id: dto.studentId }, select: { id: true } });
   if (!student) throw { status: 404, message: "Student not found" };
-  if (!dto.marks.length)
-    throw { status: 400, message: "At least one subject mark is required" };
+  if (!dto.marks.length) throw { status: 400, message: "At least one subject mark is required" };
   let currentTeacherId;
+  const isStaffOverride = !!authUser?.role && STAFF_OVERRIDE_ROLES.has(authUser.role);
   if (authUser?.role === "TEACHER") {
-    const teacher = await db_default.teacher.findUnique({
-      where: { userId: authUser.id },
-      select: { id: true }
-    });
-    if (!teacher)
-      throw { status: 403, message: "Teacher profile not found for this user" };
+    const teacher = await db_default.teacher.findUnique({ where: { userId: authUser.id }, select: { id: true } });
+    if (!teacher) throw { status: 403, message: "Teacher profile not found for this user" };
     currentTeacherId = teacher.id;
+  } else if (!isStaffOverride) {
+    throw { status: 403, message: "You are not authorized to submit exam results" };
   }
   const subjects = await db_default.subject.findMany({
     where: { id: { in: dto.marks.map((m) => m.subjectId) } },
-    include: {
-      assignments: {
-        select: {
-          teacherId: true
-        }
-      }
-    }
+    include: { assignments: { select: { teacherId: true } } }
   });
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+  const gradingRules = await loadGradingRules();
   await db_default.$transaction(async (tx) => {
     for (const m of dto.marks) {
       const subject = subjectMap.get(m.subjectId);
-      if (!subject)
-        throw { status: 404, message: `Subject not found: ${m.subjectId}` };
+      if (!subject) throw { status: 404, message: `Subject not found: ${m.subjectId}` };
       if (m.marksObtained < 0 || m.marksObtained > subject.fullMarks) {
-        throw {
-          status: 400,
-          message: `Marks must be between 0 and ${subject.fullMarks} for ${subject.name}`
-        };
+        throw { status: 400, message: `Marks must be between 0 and ${subject.fullMarks} for ${subject.name}` };
       }
-      let assignedTeacher = currentTeacherId ? subject.assignments.find((a) => a.teacherId === currentTeacherId) : void 0;
-      if (!assignedTeacher) {
-        assignedTeacher = subject.assignments[0];
-      }
-      if (!assignedTeacher) {
-        if (authUser?.role === "ADMIN") {
+      let teacherToAssign;
+      if (currentTeacherId) {
+        const isAssignedToSubject = subject.assignments.some((a) => a.teacherId === currentTeacherId);
+        if (!isAssignedToSubject) {
           throw {
-            status: 400,
-            message: `No teacher assignment found for subject ${subject.name}. Please assign a teacher first.`
+            status: 403,
+            message: `You are not assigned to teach ${subject.name}. Please use an assigned subject.`
           };
         }
-        if (currentTeacherId) {
-          assignedTeacher = { teacherId: currentTeacherId };
+        teacherToAssign = currentTeacherId;
+      } else {
+        if (subject.assignments.length > 0) {
+          teacherToAssign = subject.assignments[0].teacherId;
+        } else {
+          throw {
+            status: 400,
+            message: `No teacher assigned to subject "${subject.name}". Please assign a teacher to this subject first.`
+          };
         }
       }
-      const percentage = subject.fullMarks > 0 ? m.marksObtained / subject.fullMarks * 100 : 0;
-      const { grade, gpa } = calculateGrade(percentage);
+      const { grade, gpa } = resolveGrade2(m.marksObtained, subject.fullMarks, gradingRules);
       await tx.mark.upsert({
         where: {
-          studentId_examId_subjectId: {
-            studentId: dto.studentId,
-            examId: dto.examId,
-            subjectId: m.subjectId
-          }
+          studentId_examId_subjectId: { studentId: dto.studentId, examId: dto.examId, subjectId: m.subjectId }
         },
         create: {
           studentId: dto.studentId,
           examId: dto.examId,
           subjectId: m.subjectId,
-          teacherId: assignedTeacher.teacherId,
+          teacherId: teacherToAssign,
           marksObtained: m.marksObtained,
           grade,
           gpa
         },
         update: {
-          teacherId: assignedTeacher.teacherId,
+          teacherId: teacherToAssign,
           marksObtained: m.marksObtained,
           grade,
           gpa
@@ -19622,61 +20252,86 @@ var submitResult = async (dto, authUser) => {
       });
     }
   });
-  const summary = await recalculateAndSaveReportCard(dto.studentId, dto.examId);
+  const summary = await recalculateAndSaveReportCard(dto.studentId, dto.examId, gradingRules);
+  if (authUser?.id) {
+    await db_default.auditLog.create({
+      data: {
+        userId: authUser.id,
+        action: "RESULT_SUBMITTED",
+        targetId: `${dto.studentId}:${dto.examId}`,
+        meta: { subjectCount: dto.marks.length },
+        timestamp: /* @__PURE__ */ new Date()
+      }
+    }).catch((err) => console.warn("Audit log failed:", err?.message));
+  }
   try {
-    getIO().to(dto.studentId).emit("result:Published", {
+    getIO().to("EXAM_CONTROLLER").emit("marks:submitted", {
       examId: dto.examId,
-      grade: summary.grade,
-      percentage: summary.percentage,
-      gpa: summary.gpa,
-      isPassed: summary.isPassed
+      studentId: dto.studentId,
+      subjectsGraded: dto.marks.length
     });
   } catch (_) {
   }
+  return { success: true, message: "Result submitted successfully", summary };
+};
+var submitBulkResult = async (dtos, authUser) => {
+  if (!dtos || dtos.length === 0) {
+    throw { status: 400, message: "No result entries provided" };
+  }
+  const succeeded = [];
+  const failed = [];
+  for (const dto of dtos) {
+    try {
+      const result = await submitResult(dto, authUser);
+      succeeded.push(result);
+    } catch (error) {
+      failed.push({ studentId: dto.studentId, error: error?.message || "Unknown error" });
+    }
+  }
   return {
-    success: true,
-    message: "result submitted successfll",
-    summary
+    success: failed.length === 0,
+    message: `${succeeded.length} succeeded, ${failed.length} failed out of ${dtos.length}`,
+    totalProcessed: succeeded.length,
+    results: succeeded,
+    failures: failed
   };
 };
 var getResultByStudent = async (studentId, examId, limit = 10) => {
-  const marks = await db_default.mark.findMany({
+  const publishedExamIds = await db_default.reportCard.findMany({
     where: {
       studentId,
-      ...examId ? { examId } : {}
+      status: ResultStatus.PUBLISHED,
+      ...examId && { examId }
     },
+    select: { examId: true }
+  }).then((rows) => rows.map((r) => r.examId));
+  if (!publishedExamIds.length) {
+    return { studentId, examId: examId ?? null, totalObtained: 0, totalFull: 0, percentage: 0, marks: [] };
+  }
+  const marks = await db_default.mark.findMany({
+    where: { studentId, examId: { in: publishedExamIds } },
     select: {
       id: true,
       marksObtained: true,
       grade: true,
+      examId: true,
       exam: { select: { id: true, name: true } },
       subject: { select: { id: true, name: true, fullMarks: true, passMarks: true } }
     },
-    orderBy: {
-      createdAt: "desc"
-    },
+    orderBy: { createdAt: "desc" },
     take: limit
   });
   const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
   const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
   const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
-  return {
-    studentId,
-    examId: examId ?? null,
-    totalObtained,
-    totalFull,
-    percentage,
-    marks
-  };
+  return { studentId, examId: examId ?? null, totalObtained, totalFull, percentage, marks };
 };
 var getResultByExam = async (examId) => {
   const marks = await db_default.mark.findMany({
     where: { examId },
-    include: {
-      student: true,
-      subject: true
-    }
+    include: { student: true, subject: true }
   });
+  const gradingRules = await loadGradingRules();
   const grouped = /* @__PURE__ */ new Map();
   for (const mark of marks) {
     const current = grouped.get(mark.studentId);
@@ -19697,7 +20352,6 @@ var getResultByExam = async (examId) => {
         marks: [markEntry],
         totalMarks: mark.marksObtained,
         fullMarks: mark.subject.fullMarks,
-        gpa: mark.gpa ?? 0,
         isPassed: pass
       });
       continue;
@@ -19709,7 +20363,7 @@ var getResultByExam = async (examId) => {
   }
   const results = Array.from(grouped.values()).map((item) => {
     const percentage = item.fullMarks > 0 ? Math.round(item.totalMarks / item.fullMarks * 100) : 0;
-    const calculated = calculateGrade(percentage);
+    const calculated = resolveGrade2(item.totalMarks, item.fullMarks, gradingRules);
     return {
       student: item.student,
       marks: item.marks,
@@ -19723,54 +20377,43 @@ var getResultByExam = async (examId) => {
   }).sort((a, b) => b.gpa - a.gpa);
   const total = results.length;
   const passed = results.filter((r) => r.isPassed).length;
-  const failed = total - passed;
+  const failedCount = total - passed;
   const avgGpa = total > 0 ? Number((results.reduce((sum, r) => sum + r.gpa, 0) / total).toFixed(2)) : 0;
-  return { results, summary: { total, passed, failed, avgGpa } };
+  return { results, summary: { total, passed, failed: failedCount, avgGpa } };
 };
-var updateMark = async (id, dto) => {
+var updateMark = async (id, dto, actorUserId) => {
   const mark = await db_default.mark.findUnique({
     where: { id },
-    include: {
-      subject: {
-        select: {
-          fullMarks: true
-        }
-      }
-    }
+    include: { subject: { select: { fullMarks: true } } }
   });
   if (!mark) throw { status: 404, message: "Mark record not found" };
   if (dto.marksObtained < 0 || dto.marksObtained > mark.subject.fullMarks) {
     throw { status: 400, message: "Marks exceed full marks" };
   }
-  const percentage = mark.subject.fullMarks > 0 ? dto.marksObtained / mark.subject.fullMarks * 100 : 0;
-  const { grade, gpa } = calculateGrade(percentage);
+  const gradingRules = await loadGradingRules();
+  const { grade, gpa } = resolveGrade2(dto.marksObtained, mark.subject.fullMarks, gradingRules);
   const updated = await db_default.mark.update({
     where: { id },
-    data: {
-      marksObtained: dto.marksObtained,
-      grade,
-      gpa
-    }
+    data: { marksObtained: dto.marksObtained, grade, gpa }
   });
-  const summary = await recalculateAndSaveReportCard(
-    updated.studentId,
-    updated.examId
-  );
+  const summary = await recalculateAndSaveReportCard(updated.studentId, updated.examId, gradingRules);
+  if (actorUserId) {
+    await db_default.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: "RESULT_MARK_EDITED",
+        targetId: id,
+        meta: { from: mark.marksObtained, to: dto.marksObtained },
+        timestamp: /* @__PURE__ */ new Date()
+      }
+    }).catch((err) => console.warn("Audit log failed:", err?.message));
+  }
   return { mark: updated, summary };
 };
 var getFailedStudents3 = async (examId) => {
   const marks = await db_default.mark.findMany({
     where: { examId },
-    include: {
-      student: true,
-      subject: {
-        select: {
-          id: true,
-          name: true,
-          passMarks: true
-        }
-      }
-    }
+    include: { student: true, subject: { select: { id: true, name: true, passMarks: true } } }
   });
   const grouped = /* @__PURE__ */ new Map();
   for (const mark of marks) {
@@ -19784,10 +20427,7 @@ var getFailedStudents3 = async (examId) => {
       passMarks: mark.subject.passMarks
     };
     if (!current) {
-      grouped.set(mark.studentId, {
-        student: mark.student,
-        marks: [markEntry]
-      });
+      grouped.set(mark.studentId, { student: mark.student, marks: [markEntry] });
       continue;
     }
     current.marks.push(markEntry);
@@ -19813,13 +20453,31 @@ var submitResult2 = async (req, res, next) => {
     next(err);
   }
 };
-var submitBulkResult = async (req, res, next) => {
+var submitBulkResult2 = async (req, res, next) => {
   try {
     const authUser = req.user;
     if (!authUser) throw { status: 401, message: "Unauthorized" };
-    const examId = req.body.examId || toSingleString(req.query.examId);
-    const { studentId, marks } = req.body;
-    const data = await submitResult({ examId, studentId, marks }, authUser);
+    if (!Array.isArray(req.body)) {
+      throw { status: 400, message: "Request body must be an array of result entries" };
+    }
+    if (req.body.length === 0) {
+      throw { status: 400, message: "Please enter marks for at least one student" };
+    }
+    for (let i = 0; i < req.body.length; i++) {
+      const entry = req.body[i];
+      if (!entry.examId) throw { status: 400, message: `Student ${i + 1}: examId is missing` };
+      if (!entry.studentId) throw { status: 400, message: `Student ${i + 1}: studentId is missing` };
+      if (!Array.isArray(entry.marks)) throw { status: 400, message: `Student ${i + 1}: marks must be an array` };
+      if (entry.marks.length === 0) throw { status: 400, message: `Student ${i + 1}: no marks provided` };
+      for (let j = 0; j < entry.marks.length; j++) {
+        const mark = entry.marks[j];
+        if (!mark.subjectId) throw { status: 400, message: `Student ${i + 1}, Subject ${j + 1}: subjectId is missing` };
+        if (typeof mark.marksObtained !== "number" || mark.marksObtained < 0) {
+          throw { status: 400, message: `Student ${i + 1}, Subject ${j + 1}: marks must be a non-negative number` };
+        }
+      }
+    }
+    const data = await submitBulkResult(req.body, authUser);
     sendSuccess(res, data, "Results submitted", 201);
   } catch (err) {
     next(err);
@@ -19850,7 +20508,7 @@ var updateMark2 = async (req, res, next) => {
   try {
     const id = toSingleString(req.params.id);
     if (!id) throw { status: 400, message: "id is required" };
-    const data = await updateMark(id, req.body);
+    const data = await updateMark(id, req.body, req.user?.id);
     sendSuccess(res, data, "Mark updated");
   } catch (err) {
     next(err);
@@ -19866,19 +20524,57 @@ var getFailedStudents4 = async (req, res, next) => {
     next(err);
   }
 };
+var getMyResults2 = async (req, res, next) => {
+  try {
+    const student = await db_default.student.findFirst({
+      where: { userId: req.user.id },
+      select: { id: true }
+    });
+    if (!student) throw { status: 404, message: "Student profile not found" };
+    const examId = toSingleString(req.query.examId);
+    const data = await getResultByStudent(student.id, examId);
+    sendSuccess(res, data, "Your results fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+var getChildResults2 = async (req, res, next) => {
+  try {
+    const parent = await db_default.parent.findFirst({ where: { userId: req.user.id }, select: { id: true } });
+    if (!parent) throw { status: 404, message: "Parent profile not found" };
+    const studentId = toSingleString(req.params.studentId);
+    const child = await db_default.student.findFirst({
+      where: { id: studentId, parentId: parent.id },
+      select: { id: true }
+    });
+    if (!child) throw { status: 403, message: "This student is not linked to your account" };
+    const examId = toSingleString(req.query.examId);
+    const data = await getResultByStudent(child.id, examId);
+    sendSuccess(res, data, "Child's results fetched");
+  } catch (err) {
+    next(err);
+  }
+};
 
 // src/modules/result/result.router.ts
 var router8 = (0, import_express8.Router)();
-router8.post("/", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitResult2);
-router8.post("/bulk", authenticate, authorizeRoles("ADMIN", "TEACHER"), submitBulkResult);
-router8.get("/student/:studentId", authenticate, getResultByStudent2);
-router8.get("/exam/:examId", authenticate, getResultByExam2);
-router8.get("/exam/:examId/failed", authenticate, authorizeRoles("ADMIN", "TEACHER"), getFailedStudents4);
-router8.patch("/marks/:id", authenticate, authorizeRoles("ADMIN", "TEACHER"), updateMark2);
+var EXAM_STAFF2 = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "SUPER_ADMIN"];
+router8.use(authenticate);
+router8.post("/", authorizeRoles("TEACHER", ...EXAM_STAFF2), submitResult2);
+router8.post("/bulk", authorizeRoles("TEACHER", ...EXAM_STAFF2), submitBulkResult2);
+router8.get("/student/:studentId", authorizeRoles("TEACHER", ...EXAM_STAFF2), getResultByStudent2);
+router8.get("/exam/:examId", authorizeRoles("TEACHER", ...EXAM_STAFF2), getResultByExam2);
+router8.get("/exam/:examId/failed", authorizeRoles("TEACHER", ...EXAM_STAFF2), getFailedStudents4);
+router8.patch("/marks/:id", authorizeRoles("TEACHER", ...EXAM_STAFF2), updateMark2);
+router8.get("/my-results", authorizeRoles("STUDENT"), getMyResults2);
+router8.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults2);
 var result_router_default = router8;
 
 // src/modules/admission/admission.routes.ts
 var import_express9 = require("express");
+
+// src/modules/admission/admission.service.ts
+init_db();
 
 // src/config/mail.ts
 var import_nodemailer2 = __toESM(require("nodemailer"));
@@ -19985,12 +20681,94 @@ var mailService = {
       subject,
       html
     });
+  },
+  // Send parent/guardian account creation email with credentials.
+  // The parent account is provisioned by the school on admission approval
+  // (the parent does NOT self sign-up), so credentials are emailed here.
+  async sendParentCredentials(email, parentName, studentName, tempPassword, loginUrl) {
+    const subject = "\u{1F468}\u200D\u{1F469}\u200D\u{1F466} Your Parent Account Has Been Created";
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+            .header h2 { margin: 0; }
+            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
+            .credentials { background: white; padding: 15px; border-left: 4px solid #11998e; margin: 15px 0; border-radius: 4px; }
+            .field { margin: 10px 0; }
+            .label { font-weight: bold; color: #333; }
+            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
+            .button { display: inline-block; background: #11998e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
+            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>Welcome, Parent/Guardian </h2>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${parentName}</strong>,</p>
+
+              <p>A student account for <strong>${studentName}</strong> has been approved, and a parent account has been created for you.</p>
+
+              <p>Use the credentials below to log in and monitor <strong>${studentName}</strong>'s academic progress:</p>
+
+              <div class="credentials">
+                <div class="field">
+                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="value">${email}</div>
+                </div>
+                <div class="field">
+                  <div class="label"> Temporary Password:</div>
+                  <div class="value">${tempPassword}</div>
+                </div>
+              </div>
+
+              <div class="warning">
+                <strong>Important:</strong> This is a temporary password. After logging in, please change it immediately to a secure password of your choice.
+              </div>
+
+              <p>
+                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
+              </p>
+
+              <p><strong>Next Steps:</strong></p>
+              <ol>
+                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
+                <li>Log in with your email and temporary password</li>
+                <li>Change your password immediately</li>
+                <li>Track attendance, results, fees and notices for your child</li>
+              </ol>
+
+              <p>If you have any issues, please contact the school administration.</p>
+
+              <p>Best regards,<br><strong>School Management System</strong></p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    return this.send({
+      to: email,
+      subject,
+      html
+    });
   }
 };
 
 // src/modules/admission/admission.service.ts
-var import_bcryptjs4 = __toESM(require("bcryptjs"));
+var import_bcryptjs5 = __toESM(require("bcryptjs"));
 var import_node_crypto3 = require("crypto");
+var MAX_PAGE_LIMIT = 100;
 var AdmissionService = class {
   async create(dto) {
     const classExists = await db_default.class.findUnique({
@@ -19998,15 +20776,10 @@ var AdmissionService = class {
     });
     if (!classExists) throw new Error("Class not found");
     const existing = await db_default.admissionApplication.findFirst({
-      where: {
-        OR: [
-          { guardianEmail: dto.guardianEmail },
-          { studentEmail: dto.studentEmail }
-        ]
-      }
+      where: { studentEmail: dto.studentEmail }
     });
     if (existing) {
-      throw new Error("\u098F\u0987 \u0987\u09AE\u09C7\u0987\u09B2 \u09A6\u09BF\u09AF\u09BC\u09C7 \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 \u098F\u0995\u099F\u09BF admission \u0986\u099B\u09C7");
+      throw new Error("An application with this student email already exists");
     }
     return db_default.admissionApplication.create({
       data: {
@@ -20036,8 +20809,8 @@ var AdmissionService = class {
     });
   }
   async findAll(query) {
-    const page = Number(query.page || 1);
-    const limit = Number(query.limit || 10);
+    const page = Math.max(Number(query.page) || 1, 1);
+    const limit = Math.min(Number(query.limit) || 10, MAX_PAGE_LIMIT);
     const skip = (page - 1) * limit;
     const where = {
       ...query.status && { status: query.status },
@@ -20061,7 +20834,7 @@ var AdmissionService = class {
       }),
       db_default.admissionApplication.count({ where })
     ]);
-    return { data, meta: { page, limit, total } };
+    return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
   async findById(id) {
     const admission = await db_default.admissionApplication.findUnique({
@@ -20092,8 +20865,8 @@ var AdmissionService = class {
       }
     });
   }
-  async updateStatus(id, dto) {
-    await this._exists(id);
+  async updateStatus(id, dto, actorUserId) {
+    const before = await this._exists(id);
     const admission = await db_default.admissionApplication.update({
       where: { id },
       data: {
@@ -20102,21 +20875,26 @@ var AdmissionService = class {
         reviewedAt: /* @__PURE__ */ new Date()
       }
     });
+    await this._audit(actorUserId, "ADMISSION_STATUS_CHANGE", id, {
+      from: before.status,
+      to: dto.status,
+      rejectionReason: dto.rejectionReason
+    });
     if (dto.status === "APPROVED" && !admission.studentId) {
-      await this.createStudentFromAdmission(admission.id);
-      const updatedAdmission = await db_default.admissionApplication.findUnique({
-        where: { id }
-      });
-      return updatedAdmission || admission;
+      const studentProfile = await this.createStudentFromAdmission(admission.id);
+      const updatedAdmission = await db_default.admissionApplication.findUnique({ where: { id } });
+      return updatedAdmission || { ...admission, studentId: studentProfile?.id };
     }
     return admission;
   }
   async convertToStudent(_dto) {
     throw new Error("Convert to student is not implemented yet");
   }
-  async delete(id) {
+  async delete(id, actorUserId) {
     await this._exists(id);
-    return db_default.admissionApplication.delete({ where: { id } });
+    const deleted = await db_default.admissionApplication.delete({ where: { id } });
+    await this._audit(actorUserId, "ADMISSION_DELETE", id, {});
+    return deleted;
   }
   async getStats() {
     const [total, pending, approved, rejected] = await Promise.all([
@@ -20136,10 +20914,7 @@ var AdmissionService = class {
   async getApplicationsByEmail(email) {
     return db_default.admissionApplication.findMany({
       where: {
-        OR: [
-          { studentEmail: email },
-          { guardianEmail: email }
-        ]
+        OR: [{ studentEmail: email }, { guardianEmail: email }]
       },
       select: {
         id: true,
@@ -20159,98 +20934,143 @@ var AdmissionService = class {
     if (!admission) throw new Error("Admission record not found");
     return admission;
   }
+  async _audit(userId, action, targetId, meta) {
+    try {
+      await db_default.auditLog.create({
+        data: { userId, action, targetId, meta, timestamp: /* @__PURE__ */ new Date() }
+      });
+    } catch (err) {
+      console.warn("Audit log failed:", err?.message);
+    }
+  }
   async createStudentFromAdmission(admissionId) {
-    console.log(`
- [APPROVAL] Processing admission: ${admissionId}`);
-    const admission = await db_default.admissionApplication.findUnique({
-      where: { id: admissionId }
-    });
-    if (!admission) throw new Error("Admission record not found");
-    if (admission.studentId) {
-      console.log(` Student already created`);
-      return admission;
-    }
-    const studentEmail = admission.studentEmail;
-    console.log(` Email: ${studentEmail}`);
-    if (!studentEmail) throw new Error("Student email is required to create account");
-    let user = await db_default.user.findUnique({
-      where: { email: studentEmail }
-    });
-    if (!user) {
-      console.log(`\u{1F464} Creating new user account...`);
-      const tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
-      const passwordHash = await import_bcryptjs4.default.hash(tempPassword, 10);
-      user = await db_default.user.create({
-        data: {
-          name: admission.applicantName,
-          email: studentEmail,
-          passwordHash,
-          role: "STUDENT"
+    return db_default.$transaction(
+      async (tx) => {
+        const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
+        if (!admission) throw new Error("Admission record not found");
+        if (admission.studentId) return admission;
+        const studentEmail = admission.studentEmail;
+        if (!studentEmail) throw new Error("Student email is required to create account");
+        let user = await tx.user.findUnique({ where: { email: studentEmail } });
+        let tempPassword = null;
+        if (!user) {
+          tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+          const passwordHash = await import_bcryptjs5.default.hash(tempPassword, 10);
+          user = await tx.user.create({
+            data: {
+              name: admission.applicantName,
+              email: studentEmail,
+              passwordHash,
+              role: "STUDENT"
+            }
+          });
         }
-      });
-      console.log(` User created: ${user.email}`);
-      console.log(` Temp password: ${tempPassword}`);
-      try {
-        const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
-        await mailService.sendStudentCredentials(
-          studentEmail,
-          admission.applicantName,
-          tempPassword,
-          loginUrl
-        );
-        console.log(` Welcome email sent`);
-      } catch (emailError) {
-        console.warn(`  Email failed (but continuing):`, emailError?.message);
+        const sections = await tx.section.findMany({
+          where: { classId: admission.targetClassId },
+          include: { _count: { select: { students: true } } },
+          orderBy: { name: "asc" }
+        });
+        const section = sections.find((s) => s._count.students < s.maxCapacity);
+        if (!section) throw new Error("No available section with capacity for this class");
+        const rollAggregate = await tx.student.aggregate({
+          where: { sectionId: section.id },
+          _max: { rollNumber: true }
+        });
+        const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
+        const studentId = `STD-${(0, import_node_crypto3.randomBytes)(4).toString("hex").toUpperCase()}`;
+        let studentProfile = await tx.student.findFirst({ where: { userId: user.id } });
+        if (!studentProfile) {
+          studentProfile = await tx.student.create({
+            data: {
+              studentId,
+              name: admission.applicantName,
+              dob: admission.dob,
+              gender: admission.gender,
+              bloodGroup: admission.bloodGroup,
+              religion: admission.religion,
+              address: admission.address,
+              photo: admission.photoUrl,
+              rollNumber: nextRoll,
+              classId: admission.targetClassId,
+              sectionId: section.id,
+              userId: user.id
+            }
+          });
+        }
+        const parentResult = await this._ensureParentFromAdmission(tx, admission);
+        if (parentResult && !studentProfile.parentId) {
+          studentProfile = await tx.student.update({
+            where: { id: studentProfile.id },
+            data: { parentId: parentResult.parent.id }
+          });
+        }
+        await tx.admissionApplication.update({
+          where: { id: admission.id },
+          data: { studentId: studentProfile.id }
+        });
+        return {
+          ...studentProfile,
+          __tempPassword: tempPassword,
+          __email: studentEmail,
+          __guardianName: admission.guardianName,
+          __parentTempPassword: parentResult?.tempPassword ?? null,
+          __parentEmail: parentResult?.email ?? null
+        };
+      },
+      { isolationLevel: "Serializable" }
+    ).then(async (result) => {
+      const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
+      if (result.__tempPassword) {
+        mailService.sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl).catch((err) => console.warn("Student welcome email failed:", err?.message));
       }
-    } else {
-      console.log(`User already exists`);
+      if (result.__parentTempPassword) {
+        mailService.sendParentCredentials(
+          result.__parentEmail,
+          result.__guardianName,
+          result.name,
+          result.__parentTempPassword,
+          loginUrl
+        ).catch((err) => console.warn("Parent welcome email failed:", err?.message));
+      }
+      return result;
+    });
+  }
+  // Creates (or reuses) the guardian's User + Parent account and returns
+  // it. Reuses an existing parent account when the guardianEmail already
+  // has one (multi-child families). Returns null when no guardianEmail.
+  async _ensureParentFromAdmission(tx, admission) {
+    const guardianEmail = admission.guardianEmail;
+    if (!guardianEmail) return null;
+    const existingParent = await tx.parent.findFirst({
+      where: { user: { email: guardianEmail } }
+    });
+    if (existingParent) {
+      return { parent: existingParent, email: guardianEmail, tempPassword: null };
     }
-    const section = await db_default.section.findFirst({
-      where: { classId: admission.targetClassId },
-      orderBy: { name: "asc" }
-    });
-    if (!section) throw new Error("Section not found for class");
-    console.log(` Section: ${section.name}`);
-    const rollAggregate = await db_default.student.aggregate({
-      where: { sectionId: section.id },
-      _max: { rollNumber: true }
-    });
-    const nextRoll = (rollAggregate._max.rollNumber ?? 0) + 1;
-    const studentId = `STD-${(0, import_node_crypto3.randomBytes)(4).toString("hex").toUpperCase()}`;
-    let studentProfile = await db_default.student.findFirst({
-      where: { userId: user.id }
-    });
-    if (!studentProfile) {
-      console.log(` Creating student profile (roll #${nextRoll})...`);
-      studentProfile = await db_default.student.create({
+    let user = await tx.user.findUnique({ where: { email: guardianEmail } });
+    let tempPassword = null;
+    if (!user) {
+      tempPassword = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+      const passwordHash = await import_bcryptjs5.default.hash(tempPassword, 10);
+      user = await tx.user.create({
         data: {
-          studentId,
-          name: admission.applicantName,
-          dob: admission.dob,
-          gender: admission.gender,
-          bloodGroup: admission.bloodGroup,
-          religion: admission.religion,
-          address: admission.address,
-          photo: admission.photoUrl,
-          rollNumber: nextRoll,
-          classId: admission.targetClassId,
-          sectionId: section.id,
-          userId: user.id
+          name: admission.guardianName,
+          email: guardianEmail,
+          passwordHash,
+          role: "PARENT"
         }
       });
-      console.log(`Student profile created`);
     }
-    if (studentProfile?.id) {
-      await db_default.admissionApplication.update({
-        where: { id: admission.id },
-        data: { studentId: studentProfile.id }
-      });
-      console.log(`Admission linked to student`);
-    }
-    console.log(`
- READY: Student ${studentEmail} can now login and access dashboard
-`);
-    return admission;
+    const parent = await tx.parent.create({
+      data: {
+        userId: user.id,
+        name: admission.guardianName,
+        phone: admission.guardianPhone,
+        address: admission.address,
+        relation: "Guardian"
+      }
+    });
+    return { parent, email: guardianEmail, tempPassword };
   }
 };
 
@@ -20261,13 +21081,24 @@ var striPe_default = stripe;
 
 // src/modules/admission/admission.controller.ts
 var admissionService = new AdmissionService();
+var REQUIRED_APPLY_FIELDS = [
+  "applicantName",
+  "studentEmail",
+  "dob",
+  "gender",
+  "address",
+  "guardianName",
+  "guardianPhone",
+  "guardianEmail",
+  "targetClassId"
+];
 var AdmissionController = class {
   /** Public — no auth required */
   async apply(req, res, next) {
     try {
-      const { applicantName, studentEmail, guardianName, guardianEmail, guardianPhone, targetClassId, address, gender, dob } = req.body;
-      if (!studentEmail) {
-        const err = new Error("studentEmail is required for login after approval");
+      const missing = REQUIRED_APPLY_FIELDS.filter((f) => !req.body?.[f]);
+      if (missing.length) {
+        const err = new Error(`Missing required field(s): ${missing.join(", ")}`);
         err.status = 400;
         throw err;
       }
@@ -20305,7 +21136,8 @@ var AdmissionController = class {
     try {
       const admission = await admissionService.updateStatus(
         String(req.params.id),
-        req.body
+        req.body,
+        req.user.id
       );
       sendSuccess(res, admission, "Admission status updated");
     } catch (err) {
@@ -20322,7 +21154,7 @@ var AdmissionController = class {
   }
   async delete(req, res, next) {
     try {
-      await admissionService.delete(String(req.params.id));
+      await admissionService.delete(String(req.params.id), req.user.id);
       sendSuccess(res, null, "Admission deleted");
     } catch (err) {
       next(err);
@@ -20417,60 +21249,83 @@ var AdmissionController = class {
 
 // src/modules/admission/admission.routes.ts
 var router9 = (0, import_express9.Router)();
-var c = new AdmissionController();
-router9.post("/apply", c.apply.bind(c));
-router9.get("/classes", c.getPublicClasses.bind(c));
-router9.post("/stripe/checkout", c.createStripeCheckout.bind(c));
-router9.get("/stripe/verify", c.verifyStripeSession.bind(c));
+var c2 = new AdmissionController();
+router9.post("/apply", c2.apply.bind(c2));
+router9.get("/classes", c2.getPublicClasses.bind(c2));
+router9.post("/stripe/checkout", c2.createStripeCheckout.bind(c2));
+router9.get("/stripe/verify", c2.verifyStripeSession.bind(c2));
 router9.post(
   "/upload-document",
   upload.single("document"),
-  c.uploadDocument.bind(c)
+  c2.uploadDocument.bind(c2)
 );
-router9.get("/my-applications", authenticate, c.getMyApplications.bind(c));
-router9.use(authenticate, authorizeRoles("ADMIN"));
-router9.get("/stats", c.getStats.bind(c));
-router9.get("/", c.findAll.bind(c));
-router9.get("/:id", c.findById.bind(c));
-router9.patch("/:id", c.update.bind(c));
-router9.patch("/:id/status", c.updateStatus.bind(c));
-router9.post("/convert-to-student", c.convertToStudent.bind(c));
-router9.delete("/:id", c.delete.bind(c));
+router9.get("/my-applications", authenticate, c2.getMyApplications.bind(c2));
+router9.use(authenticate, authorizeRoles("SCHOOL_ADMIN"));
+router9.get("/stats", c2.getStats.bind(c2));
+router9.post("/convert-to-student", c2.convertToStudent.bind(c2));
+router9.patch("/:id/status", c2.updateStatus.bind(c2));
+router9.get("/", c2.findAll.bind(c2));
+router9.post("/", c2.apply.bind(c2));
+router9.get("/:id", c2.findById.bind(c2));
+router9.patch("/:id", c2.update.bind(c2));
+router9.delete("/:id", c2.delete.bind(c2));
 var admission_routes_default = router9;
 
 // src/modules/fee/router.ts
 var import_express10 = require("express");
 
 // src/modules/fee/fee.service.ts
+init_db();
+init_pagination_util();
+function deriveMonthYear(date) {
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+function deriveAcademicYear(year, month) {
+  if (month >= 7) return `${year}-${year + 1}`;
+  return `${year - 1}-${year}`;
+}
+function monthRange(month) {
+  const start = /* @__PURE__ */ new Date(`${month}-01`);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  return { start, end };
+}
 var createfee = async (dto) => {
-  const student = await db_default.student.findUnique({
-    where: { id: dto.studentId }
-  });
-  if (!student) {
-    throw new Error("Student not found");
+  if (dto.studentId) {
+    const student = await db_default.student.findUnique({
+      where: { id: dto.studentId },
+      select: { id: true }
+    });
+    if (!student) throw new Error("Student not found");
   }
-  const { title, type, ...rest } = dto;
-  return await db_default.feeStructure.create({
+  const dueDate = new Date(dto.dueDate);
+  if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
+  const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
+  return db_default.feeStructure.create({
     data: {
-      ...rest,
-      dueDate: new Date(dto.dueDate),
-      status: "PENDING",
-      Paidamount: 0,
+      studentId: dto.studentId,
       classId: dto.classId,
-      feeType: type,
-      dueDay: dto.dueDay
+      feeType: dto.type,
+      title: dto.title,
+      description: dto.description,
+      amount: dto.amount,
+      dueDate,
+      dueDay: dto.dueDay,
+      year,
+      month,
+      academicYear,
+      status: "PENDING",
+      Paidamount: 0
     },
-    include: {
-      student: {
-        include: {
-          user: {
-            select: {
-              name: true,
-              email: true
-            }
-          }
-        }
-      }
+    select: {
+      id: true,
+      studentId: true,
+      classId: true,
+      feeType: true,
+      amount: true,
+      dueDate: true,
+      status: true,
+      student: { select: { user: { select: { name: true, email: true } } } }
     }
   });
 };
@@ -20479,21 +21334,30 @@ var bulkcreate = async (dto) => {
     where: { classId: dto.classId },
     select: { id: true }
   });
+  const dueDate = new Date(dto.dueDate);
+  if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
+  const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
   const fees = students.map((student) => ({
-    title: dto.title,
-    feeType: dto.type,
-    // Updated to use `feeType` as required by Prisma
-    amount: dto.amount,
-    dueDate: dto.dueDate,
-    dueDay: new Date(dto.dueDate).getDate(),
-    description: dto.description,
-    status: "PENDING",
-    paidAmount: 0,
     studentId: student.id,
-    classId: dto.classId
+    classId: dto.classId,
+    feeType: dto.type,
+    title: dto.title,
+    description: dto.description,
+    amount: dto.amount,
+    dueDate,
+    dueDay: dueDate.getDate(),
+    year,
+    month,
+    academicYear,
+    status: "PENDING",
+    Paidamount: 0
   }));
-  await db_default.feeStructure.createMany({ data: fees });
-  return { created: students.length };
+  const result = await db_default.feeStructure.createMany({
+    data: fees,
+    skipDuplicates: true
+  });
+  return { created: result.count, skippedExisting: students.length - result.count };
 };
 var findAll = async (dto) => {
   const { page = "1", limit = "10", studentId, classId, type, status, month } = dto;
@@ -20504,14 +21368,10 @@ var findAll = async (dto) => {
     ...status && { status }
   };
   if (month) {
-    const start = /* @__PURE__ */ new Date(`${month}-01`);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-    where.dueDate = {
-      gte: start,
-      lt: end
-    };
+    const { start, end } = monthRange(month);
+    where.dueDate = { gte: start, lt: end };
   }
-  const { skip, take, meta } = await paginate2(
+  const { skip, take, meta } = await paginate(
     db_default.feeStructure,
     where,
     parseInt(page),
@@ -20521,26 +21381,23 @@ var findAll = async (dto) => {
     where,
     skip,
     take,
-    include: {
+    select: {
+      id: true,
+      feeType: true,
+      title: true,
+      amount: true,
+      Paidamount: true,
+      status: true,
+      dueDate: true,
       student: {
         select: {
           id: true,
           rollNumber: true,
-          user: {
-            select: {
-              name: true,
-              email: true
-            }
-          },
-          class: {
-            select: {
-              name: true,
-              sections: true
-            }
-          }
+          user: { select: { name: true, email: true } },
+          class: { select: { name: true } }
         }
       },
-      payments: true
+      payments: { select: { id: true, amount: true, method: true, createdAt: true } }
     },
     orderBy: { dueDate: "asc" }
   });
@@ -20552,221 +21409,393 @@ var findByid = async (id) => {
     include: {
       student: {
         include: {
-          user: {
-            select: {
-              name: true,
-              email: true
-            }
-          },
-          class: {
-            select: {
-              name: true,
-              sections: true
-            }
-          }
+          user: { select: { name: true, email: true } },
+          class: { select: { name: true } }
         }
       },
       payments: { orderBy: { createdAt: "desc" } }
     }
   });
-  if (!fee) {
-    throw new Error("Fee not found");
-  }
-  const payments = fee.payments ?? [];
-  return { ...fee, payments };
+  if (!fee) throw new Error("Fee not found");
+  return { ...fee, payments: fee.payments ?? [] };
 };
 var updateFee = async (id, dto) => {
-  const existing = await db_default.feeStructure.findUnique({
-    where: { id }
-  });
-  if (!existing) {
-    throw new Error("Fee not found");
-  }
-  return await db_default.feeStructure.update({
+  await _exists(id);
+  return db_default.feeStructure.update({
     where: { id },
     data: {
-      ...dto,
+      title: dto.title,
+      description: dto.description,
+      amount: dto.amount,
+      status: dto.status,
       ...dto.dueDate && { dueDate: new Date(dto.dueDate) }
     },
-    include: {
-      payments: true
-    }
+    include: { payments: true }
   });
 };
 var deleteFee = async (id) => {
-  await db_default.feeStructure.delete({ where: { id } });
+  await _exists(id);
+  const paymentCount = await db_default.payment.count({ where: { feeStructureId: id } });
+  if (paymentCount > 0) {
+    throw {
+      status: 409,
+      message: "Cannot delete fee with existing payments; consider marking it as WAIVED instead."
+    };
+  }
+  return db_default.feeStructure.delete({ where: { id } });
 };
-var recordPayment = async (dto) => {
-  const fee = await db_default.feeStructure.findUnique({
-    where: { id: dto.feeId }
-  });
-  if (!fee) {
-    throw new Error("Fee not found");
-  }
-  if (fee.status === "PAID") {
-    throw new Error("Fee is already paid");
-  }
-  const totalPaid = fee.Paidamount + dto.amountPaid;
-  if (totalPaid > fee.amount) {
-    throw new Error("Payment exceeds fee amount");
-  }
-  const student = await db_default.student.findUnique({
-    where: { id: fee.studentId ?? void 0 }
-  });
-  if (!student) {
-    throw new Error("Student not found");
-  }
-  const invoice = await db_default.invoice.findFirst({
-    where: { feeStructureId: fee.id }
-  });
-  if (!invoice) {
-    throw new Error("Invoice not found for the fee structure");
-  }
-  const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
-  const [payment] = await db_default.$transaction([
-    db_default.payment.create({
-      data: {
-        feeStructureId: dto.feeId,
-        amount: dto.amountPaid,
-        method: dto.method,
-        transactionId: dto.transactionId ?? void 0,
-        // Convert null to undefined
-        note: dto.note ?? void 0,
-        // Convert null to undefined
-        invoiceId: invoice.id,
-        // Required field
-        studentId: student.id
-        // Required field
+var recordPayment = async (dto, actorUserId) => {
+  return db_default.$transaction(
+    async (tx) => {
+      const fee = await tx.feeStructure.findUnique({ where: { id: dto.feeId } });
+      if (!fee) throw new Error("Fee not found");
+      if (fee.status === "PAID") throw new Error("Fee is already paid");
+      if (!fee.studentId) throw new Error("Fee has no associated student");
+      const totalPaid = fee.Paidamount + dto.amountPaid;
+      if (totalPaid > fee.amount) throw new Error("Payment exceeds fee amount");
+      let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
+      if (!invoice) {
+        invoice = await tx.invoice.create({
+          data: {
+            studentId: fee.studentId,
+            feeStructureId: fee.id,
+            amount: fee.amount,
+            dueDate: fee.dueDate,
+            year: fee.year,
+            month: fee.month,
+            status: "PENDING"
+          }
+        });
       }
-    }),
-    db_default.feeStructure.update({
-      where: { id: dto.feeId },
-      data: {
-        paidAmount: totalPaid,
-        status: newStatus
+      const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
+      const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const payment = await tx.payment.create({
+        data: {
+          feeStructureId: dto.feeId,
+          amount: dto.amountPaid,
+          method: dto.method,
+          status: "PAID",
+          transactionId,
+          note: dto.note ?? void 0,
+          invoiceId: invoice.id,
+          studentId: fee.studentId
+        }
+      });
+      await tx.feeStructure.update({
+        where: { id: dto.feeId },
+        data: { Paidamount: totalPaid, status: newStatus }
+      });
+      if (newStatus === "PAID") {
+        await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
       }
-    })
-  ]);
-  return payment;
+      tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: "FEE_PAYMENT_RECORDED",
+          targetId: fee.id,
+          metadata: { amount: dto.amountPaid, method: dto.method, newStatus, transactionId }
+        }
+      }).catch((err) => console.warn("Audit log failed:", err?.message));
+      return payment;
+    },
+    { isolationLevel: "Serializable" }
+  );
 };
-var recordCashPayment = async (dto) => {
+var recordCashPayment = async (dto, actorUserId) => {
   const student = await db_default.student.findUnique({
     where: { id: dto.studentId },
     select: { id: true, classId: true }
   });
-  if (!student) {
-    throw new Error("Student not found");
-  }
+  if (!student) throw new Error("Student not found");
   const now = /* @__PURE__ */ new Date();
   const dueDate = dto.dueDate ? new Date(dto.dueDate) : now;
-  if (Number.isNaN(dueDate.getTime())) {
-    throw new Error("Invalid dueDate");
-  }
-  const dueDay = dueDate.getDate();
-  const year = dueDate.getFullYear();
-  const month = dueDate.getMonth() + 1;
-  return db_default.$transaction(async (tx) => {
-    const fee = await tx.feeStructure.create({
-      data: {
-        studentId: student.id,
-        classId: student.classId,
-        feeType: dto.type,
-        amount: dto.amountPaid,
-        dueDate,
-        dueDay,
-        status: "PAID",
-        Paidamount: dto.amountPaid
+  if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
+  const { year, month } = deriveMonthYear(dueDate);
+  const academicYear = deriveAcademicYear(year, month);
+  return db_default.$transaction(
+    async (tx) => {
+      let fee = await tx.feeStructure.findFirst({
+        where: {
+          studentId: student.id,
+          feeType: dto.type,
+          year,
+          month,
+          academicYear,
+          status: { in: ["PENDING", "PARTIAL"] }
+        }
+      });
+      const isNewFee = !fee;
+      if (!fee) {
+        fee = await tx.feeStructure.create({
+          data: {
+            studentId: student.id,
+            classId: student.classId,
+            feeType: dto.type,
+            amount: dto.amountPaid,
+            dueDate,
+            dueDay: dueDate.getDate(),
+            year,
+            month,
+            academicYear,
+            status: "PENDING",
+            Paidamount: 0
+          }
+        });
       }
-    });
-    const invoice = await tx.invoice.create({
-      data: {
-        studentId: student.id,
-        feeStructureId: fee.id,
-        amount: dto.amountPaid,
-        dueDate,
-        year,
-        month,
-        status: "PAID"
+      const totalPaid = fee.Paidamount + dto.amountPaid;
+      if (totalPaid > fee.amount) {
+        throw new Error("Payment exceeds outstanding fee amount");
       }
-    });
-    const payment = await tx.payment.create({
-      data: {
-        feeStructureId: fee.id,
-        invoiceId: invoice.id,
-        studentId: student.id,
-        amount: dto.amountPaid,
-        method: "CASH",
-        status: "PAID",
-        paidAt: now,
-        transactionId: dto.transactionId ?? void 0,
-        note: dto.note ?? void 0
+      const newStatus = totalPaid === fee.amount ? "PAID" : "PARTIAL";
+      const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
+      if (!invoice) {
+        invoice = await tx.invoice.create({
+          data: {
+            studentId: student.id,
+            feeStructureId: fee.id,
+            amount: fee.amount,
+            dueDate: fee.dueDate,
+            year,
+            month,
+            status: newStatus
+          }
+        });
+      } else {
+        invoice = await tx.invoice.update({ where: { id: invoice.id }, data: { status: newStatus } });
       }
-    });
-    return { fee, invoice, payment };
-  });
+      const payment = await tx.payment.create({
+        data: {
+          feeStructureId: fee.id,
+          invoiceId: invoice.id,
+          studentId: student.id,
+          amount: dto.amountPaid,
+          method: "CASH",
+          status: "PAID",
+          paidAt: now,
+          transactionId,
+          note: dto.note ?? void 0
+        }
+      });
+      await tx.feeStructure.update({
+        where: { id: fee.id },
+        data: { Paidamount: totalPaid, status: newStatus }
+      });
+      tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: "FEE_CASH_PAYMENT",
+          targetId: fee.id,
+          metadata: { amount: dto.amountPaid, isNewFee }
+        }
+      }).catch((err) => console.warn("Audit log failed:", err?.message));
+      return { fee, invoice, payment };
+    },
+    { isolationLevel: "Serializable" }
+  );
 };
 var getstudentFeeSummary = async (studentId) => {
-  const fees = await db_default.feeStructure.findMany({
-    where: { studentId },
-    include: {
-      payments: true
-    }
-  });
-  const totalFees = fees.reduce((sum, fee) => sum + fee.amount, 0);
-  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
-  const outstanding = totalFees - totalPaid;
-  const overDue = fees.filter((f) => f.status === "PENDING" && new Date(f.dueDate) < /* @__PURE__ */ new Date()).length;
-  return {
-    totalFees,
-    totalPaid,
-    outstanding,
-    overDue
-  };
+  const [totals, overDue] = await Promise.all([
+    db_default.feeStructure.aggregate({
+      where: { studentId },
+      _sum: { amount: true, Paidamount: true }
+    }),
+    db_default.feeStructure.count({
+      where: { studentId, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } }
+    })
+  ]);
+  const totalFees = totals._sum.amount ?? 0;
+  const totalPaid = totals._sum.Paidamount ?? 0;
+  return { totalFees, totalPaid, outstanding: totalFees - totalPaid, overDue };
 };
 var getCollectionReport = async (month, type) => {
-  const start = /* @__PURE__ */ new Date(`${month}-01`);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-  const payments = await db_default.payment.findMany({
-    where: {
-      createdAt: {
-        gte: start,
-        lt: end
-      },
-      ...type ? { feeStructure: { feeType: type } } : {}
-    },
-    include: {
-      feeStructure: {
-        select: {
-          feeType: true,
-          title: true
-        }
-      }
-    }
-  });
-  const totalCollected = payments.reduce((s, p) => s + p.amount, 0);
-  const byType = payments.reduce((acc, p) => {
-    const key = p.feeStructure?.feeType || "UNKNOWN";
-    acc[key] = (acc[key] || 0) + p.amount;
-    return acc;
-  }, {});
-  return { month, totalCollected, byType, totalTransactions: payments.length };
+  const { start, end } = monthRange(month);
+  const baseWhere = {
+    createdAt: { gte: start, lt: end },
+    ...type ? { feeStructure: { feeType: type } } : {}
+  };
+  const [totalAgg, byMethodGroups, byTypeGroups] = await Promise.all([
+    db_default.payment.aggregate({ where: baseWhere, _sum: { amount: true }, _count: true }),
+    db_default.payment.groupBy({
+      by: ["method"],
+      where: baseWhere,
+      _sum: { amount: true }
+    }),
+    // feeType lives on FeeStructure, not Payment, so it can't be grouped
+    // directly — resolve the small, fixed set of fee types in parallel
+    // aggregate queries instead of pulling every payment row into JS.
+    db_default.feeStructure.findMany({ where: {}, select: { feeType: true }, distinct: ["feeType"] }).then(
+      (types) => Promise.all(
+        types.map(async ({ feeType }) => {
+          const agg = await db_default.payment.aggregate({
+            where: { ...baseWhere, feeStructure: { feeType } },
+            _sum: { amount: true }
+          });
+          return [feeType, agg._sum.amount ?? 0];
+        })
+      )
+    )
+  ]);
+  const byMethod = Object.fromEntries(
+    byMethodGroups.map((g) => [g.method === "STRIPE" ? "ONLINE" : "OFFLINE", g._sum.amount ?? 0])
+  );
+  const byType = Object.fromEntries(byTypeGroups.filter(([, sum]) => sum > 0));
+  return {
+    month,
+    totalCollected: totalAgg._sum.amount ?? 0,
+    totalTransactions: totalAgg._count,
+    byType,
+    byMethod
+  };
 };
 var getFeeSummary = async (month) => {
   const where = {};
   if (month) {
-    const start = /* @__PURE__ */ new Date(`${month}-01`);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    const { start, end } = monthRange(month);
     where.dueDate = { gte: start, lt: end };
   }
-  const fees = await db_default.feeStructure.findMany({ where });
-  const totalAmount = fees.reduce((sum, fee) => sum + fee.amount, 0);
-  const totalPaid = fees.reduce((sum, fee) => sum + fee.Paidamount, 0);
-  const outstanding = totalAmount - totalPaid;
-  const pendingCount = fees.filter((f) => f.status === "PENDING").length;
-  const overdueCount = fees.filter(
-    (f) => f.status === "PENDING" && new Date(f.dueDate) < /* @__PURE__ */ new Date()
-  ).length;
-  return { totalAmount, totalPaid, outstanding, pendingCount, overdueCount, overDue: overdueCount };
+  const [totals, pendingCount, overdueCount] = await Promise.all([
+    db_default.feeStructure.aggregate({ where, _sum: { amount: true, Paidamount: true } }),
+    db_default.feeStructure.count({ where: { ...where, status: "PENDING" } }),
+    db_default.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } } })
+  ]);
+  const totalAmount = totals._sum.amount ?? 0;
+  const totalPaid = totals._sum.Paidamount ?? 0;
+  return {
+    totalAmount,
+    totalPaid,
+    outstanding: totalAmount - totalPaid,
+    pendingCount,
+    overdueCount,
+    overDue: overdueCount
+  };
+};
+var getOverdueFees = async (dto) => {
+  const { page = "1", limit = "10", classId } = dto;
+  const where = {
+    status: { in: ["PENDING", "PARTIAL"] },
+    dueDate: { lt: /* @__PURE__ */ new Date() },
+    ...classId && { classId }
+  };
+  const { skip, take, meta } = await paginate(
+    db_default.feeStructure,
+    where,
+    parseInt(page),
+    parseInt(limit)
+  );
+  const fees = await db_default.feeStructure.findMany({
+    where,
+    skip,
+    take,
+    select: {
+      id: true,
+      feeType: true,
+      amount: true,
+      Paidamount: true,
+      dueDate: true,
+      student: {
+        select: { id: true, rollNumber: true, user: { select: { name: true } } }
+      }
+    },
+    orderBy: { dueDate: "asc" }
+  });
+  return { data: fees, meta };
+};
+var _exists = async (id) => {
+  const fee = await db_default.feeStructure.findUnique({ where: { id }, select: { id: true } });
+  if (!fee) throw new Error("Fee record not found");
+  return fee;
+};
+var getAllPayments = async (dto) => {
+  const page = Number(dto.page);
+  const limit = Number(dto.limit);
+  const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
+  const safeLimit = Number.isNaN(limit) || limit < 1 ? 20 : limit;
+  const skip = (safePage - 1) * safeLimit;
+  const take = safeLimit;
+  const where = {};
+  if (dto.method && ["STRIPE", "CASH"].includes(dto.method)) {
+    where.method = dto.method;
+  }
+  if (dto.status && ["PENDING", "PAID", "FAILED", "REFUNDED"].includes(dto.status)) {
+    where.status = dto.status;
+  }
+  if (dto.month) {
+    const monthStr = String(dto.month).trim();
+    const monthRegex = /^\d{4}-\d{2}$/;
+    if (monthRegex.test(monthStr)) {
+      const [yearStr, monthNumStr] = monthStr.split("-");
+      const year = Number(yearStr);
+      const monthNum = Number(monthNumStr);
+      if (year >= 2e3 && year <= 2100 && monthNum >= 1 && monthNum <= 12) {
+        const start = new Date(Date.UTC(year, monthNum - 1, 1));
+        const end = new Date(Date.UTC(year, monthNum, 1));
+        where.createdAt = { gte: start, lt: end };
+      }
+    }
+  }
+  const [payments, total] = await Promise.all([
+    db_default.payment.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        amount: true,
+        method: true,
+        status: true,
+        transactionId: true,
+        note: true,
+        paidAt: true,
+        createdAt: true,
+        student: { select: { id: true, rollNumber: true, user: { select: { name: true, email: true } } } },
+        feeStructure: { select: { id: true, feeType: true, title: true, amount: true } }
+      }
+    }),
+    db_default.payment.count({ where })
+  ]);
+  return {
+    data: payments,
+    meta: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit) || 1
+    }
+  };
+};
+var getMonthlyAnalytics = async (year) => {
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const [byMonth, byMethodYear, typeBreakdown] = await Promise.all([
+    Promise.all(
+      months.map(async (m) => {
+        const start = new Date(year, m - 1, 1);
+        const end = new Date(year, m, 1);
+        const agg = await db_default.payment.aggregate({
+          where: { createdAt: { gte: start, lt: end }, status: "PAID" },
+          _sum: { amount: true },
+          _count: { id: true }
+        });
+        return { month: m, total: agg._sum.amount ?? 0, count: agg._count.id ?? 0 };
+      })
+    ),
+    db_default.payment.groupBy({
+      by: ["method"],
+      where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) }, status: "PAID" },
+      _sum: { amount: true }
+    }),
+    db_default.feeStructure.groupBy({
+      by: ["feeType"],
+      _sum: { amount: true, Paidamount: true }
+    })
+  ]);
+  return {
+    year,
+    byMonth,
+    byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
+    byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }]))
+  };
 };
 
 // src/modules/fee/fee.controller.ts
@@ -20801,6 +21830,9 @@ var FeesController = class {
       const idStr = Array.isArray(id) ? id[0] : id;
       if (!idStr) throw new Error("id param required");
       const fee = await findByid(idStr);
+      if (req.user?.role === "STUDENT" && fee.studentId !== req.user.studentId) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
       sendSuccess(res, fee, "Fee fetched");
     } catch (err) {
       next(err);
@@ -20830,7 +21862,8 @@ var FeesController = class {
   }
   async recordPayment(req, res, next) {
     try {
-      const payment = await recordPayment(req.body);
+      if (!req.user?.id) throw new Error("Authenticated user not found on request");
+      const payment = await recordPayment(req.body, req.user.id);
       sendSuccess(res, payment, "Payment recorded", 201);
     } catch (err) {
       next(err);
@@ -20838,7 +21871,8 @@ var FeesController = class {
   }
   async recordCashPayment(req, res, next) {
     try {
-      const payment = await recordCashPayment(req.body);
+      if (!req.user?.id) throw new Error("Authenticated user not found on request");
+      const payment = await recordCashPayment(req.body, req.user.id);
       sendSuccess(res, payment, "Cash payment recorded", 201);
     } catch (err) {
       next(err);
@@ -20849,6 +21883,9 @@ var FeesController = class {
       let { studentId } = req.params;
       const studentIdStr = Array.isArray(studentId) ? studentId[0] : studentId;
       if (!studentIdStr) throw new Error("studentId param required");
+      if (req.user?.role === "STUDENT" && req.user.studentId !== studentIdStr) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
       const data = await getstudentFeeSummary(studentIdStr);
       sendSuccess(res, data, "Fee summary fetched");
     } catch (err) {
@@ -20877,40 +21914,101 @@ var FeesController = class {
       next(err);
     }
   }
+  async getOverdueFees(req, res, next) {
+    try {
+      const data = await getOverdueFees(req.query);
+      sendSuccess(res, data, "Overdue fees fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMyFees(req, res, next) {
+    try {
+      if (!req.user?.studentId) {
+        throw new Error("Student ID not found in token");
+      }
+      const data = await getstudentFeeSummary(req.user.studentId);
+      sendSuccess(res, data, "Your fees fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getTransactions(req, res, next) {
+    try {
+      const data = await getAllPayments(req.query);
+      sendSuccess(res, data, "Transactions fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMonthlyAnalytics(req, res, next) {
+    try {
+      const yearStr = req.query.year;
+      const year = yearStr ? parseInt(yearStr) : (/* @__PURE__ */ new Date()).getFullYear();
+      const data = await getMonthlyAnalytics(year);
+      sendSuccess(res, data, "Analytics fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/modules/fee/router.ts
 var router10 = (0, import_express10.Router)();
-var c2 = new FeesController();
+var c3 = new FeesController();
 router10.use(authenticate);
-router10.get("/report/collection", authorizeRoles("ADMIN"), c2.getCollectionReport.bind(c2));
-router10.get("/summary", authorizeRoles("ADMIN"), c2.getSummary.bind(c2));
-router10.get("/student/:studentId", authorizeRoles("ADMIN", "STUDENT"), c2.getStudentSummary.bind(c2));
-router10.post("/", authorizeRoles("ADMIN"), c2.create.bind(c2));
-router10.post("/bulk", authorizeRoles("ADMIN"), c2.bulkCreate.bind(c2));
-router10.get("/", authorizeRoles("ADMIN"), c2.findAll.bind(c2));
-router10.get("/:id", authorizeRoles("ADMIN", "STUDENT"), c2.findById.bind(c2));
-router10.patch("/:id", authorizeRoles("ADMIN"), c2.update.bind(c2));
-router10.delete("/:id", authorizeRoles("ADMIN"), c2.delete.bind(c2));
-router10.post("/pay", authorizeRoles("ADMIN"), c2.recordPayment.bind(c2));
-router10.post("/cash", authorizeRoles("ADMIN"), c2.recordCashPayment.bind(c2));
+router10.get("/my-fees", authorizeRoles("STUDENT"), c3.getMyFees.bind(c3));
+router10.get("/report/collection", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getCollectionReport.bind(c3));
+router10.get("/report/overdue", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getOverdueFees.bind(c3));
+router10.get("/summary", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getSummary.bind(c3));
+router10.get("/transactions", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getTransactions.bind(c3));
+router10.get("/analytics/monthly", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getMonthlyAnalytics.bind(c3));
+router10.get("/student/:studentId", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.getStudentSummary.bind(c3));
+router10.post("/", authorizeRoles("ACCOUNTANT"), c3.create.bind(c3));
+router10.post("/bulk", authorizeRoles("ACCOUNTANT"), c3.bulkCreate.bind(c3));
+router10.get("/", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.findAll.bind(c3));
+router10.get("/:id", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.findById.bind(c3));
+router10.patch("/:id", authorizeRoles("ACCOUNTANT"), c3.update.bind(c3));
+router10.delete("/:id", authorizeRoles("ACCOUNTANT"), c3.delete.bind(c3));
+router10.patch("/:id/pay", authorizeRoles("ACCOUNTANT"), c3.recordPayment.bind(c3));
+router10.post("/cash", authorizeRoles("ACCOUNTANT"), c3.recordCashPayment.bind(c3));
 var router_default = router10;
 
 // src/modules/teachingApplication/teachingApplication.routes.ts
 var import_express11 = require("express");
 
 // src/modules/teachingApplication/teachingApplication.service.ts
+init_db();
+var import_bcryptjs6 = __toESM(require("bcryptjs"));
 var import_node_crypto4 = require("crypto");
+var APPLICATION_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  gender: true,
+  dob: true,
+  address: true,
+  designation: true,
+  department: true,
+  qualification: true,
+  experience: true,
+  subjectSpecialization: true,
+  expectedSalary: true,
+  resumeUrl: true,
+  coverLetter: true,
+  status: true,
+  reviewedAt: true,
+  rejectionReason: true,
+  createdAt: true
+};
 var applyForTeaching = async (dto) => {
-  const existing = await db_default.teachingApplication.findFirst({
-    where: {
-      email: dto.email,
-      status: "PENDING"
-    }
-  });
-  if (existing) {
-    throw new Error("An application with this email is already pending");
-  }
+  const [pendingApplication, activeTeacher] = await Promise.all([
+    db_default.teachingApplication.findFirst({ where: { email: dto.email, status: "PENDING" }, select: { id: true } }),
+    db_default.teacher.findFirst({ where: { email: dto.email, isActive: true }, select: { id: true } })
+  ]);
+  if (pendingApplication) throw new Error("An application with this email is already pending");
+  if (activeTeacher) throw new Error("This email already belongs to an active teacher account");
   return db_default.teachingApplication.create({
     data: {
       name: dto.name,
@@ -20927,150 +22025,255 @@ var applyForTeaching = async (dto) => {
       expectedSalary: dto.expectedSalary,
       resumeUrl: dto.resumeUrl,
       coverLetter: dto.coverLetter
-    }
+    },
+    select: APPLICATION_SELECT
   });
 };
-var listTeachingApplications = async () => {
-  return db_default.teachingApplication.findMany({
-    orderBy: { createdAt: "desc" }
-  });
+var listTeachingApplications = async (query = {}) => {
+  const page = query.page ?? 1;
+  const pageSize = Math.min(query.pageSize ?? 20, 100);
+  const where = {
+    ...query.status && { status: query.status },
+    ...query.search && {
+      OR: [
+        { name: { contains: query.search, mode: "insensitive" } },
+        { email: { contains: query.search, mode: "insensitive" } }
+      ]
+    }
+  };
+  const [total, data] = await Promise.all([
+    db_default.teachingApplication.count({ where }),
+    db_default.teachingApplication.findMany({
+      where,
+      select: APPLICATION_SELECT,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    })
+  ]);
+  return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
 };
 var getTeachingApplicationById = async (id) => {
-  const application = await db_default.teachingApplication.findUnique({
-    where: { id }
-  });
+  const application = await db_default.teachingApplication.findUnique({ where: { id }, select: APPLICATION_SELECT });
   if (!application) throw { status: 404, message: "Application not found" };
   return application;
 };
 var updateTeachingApplicationStatus = async (id, dto) => {
-  const application = await getTeachingApplicationById(id);
-  if (dto.status === "APPROVED" && application.status !== "APPROVED") {
-    const existingTeacher = await db_default.teacher.findFirst({
-      where: { email: application.email },
-      select: { id: true }
+  const application = await db_default.teachingApplication.findUnique({ where: { id } });
+  if (!application) throw { status: 404, message: "Application not found" };
+  if (dto.status === "REJECTED" && !dto.rejectionReason) {
+    throw new Error("A rejection reason is required");
+  }
+  if (dto.status !== "APPROVED" || application.status === "APPROVED") {
+    return db_default.teachingApplication.update({
+      where: { id },
+      data: { status: dto.status, rejectionReason: dto.rejectionReason, reviewedAt: /* @__PURE__ */ new Date() },
+      select: APPLICATION_SELECT
     });
-    if (!existingTeacher) {
-      const generatedId = `TCH-${(0, import_node_crypto4.randomBytes)(3).toString("hex")}`.toUpperCase();
-      await TeachersService.create({
-        name: application.name,
-        email: application.email,
-        TeachersId: generatedId,
-        designation: application.designation,
-        department: application.department ?? void 0,
-        qualification: application.qualification,
-        experience: application.experience,
-        phone: application.phone,
-        address: application.address,
-        gender: application.gender,
-        dateOfBirth: application.dob.toISOString().split("T")[0],
-        dateOfJoining: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-        salary: application.expectedSalary ?? void 0
+  }
+  let tempPassword = null;
+  const result = await db_default.$transaction(async (tx) => {
+    let user = await tx.user.findUnique({ where: { email: application.email }, select: { id: true, role: true } });
+    if (!user) {
+      tempPassword = (0, import_node_crypto4.randomBytes)(6).toString("base64url");
+      const passwordHash = await import_bcryptjs6.default.hash(tempPassword, 10);
+      user = await tx.user.create({
+        data: { name: application.name, email: application.email, passwordHash, role: "TEACHER" },
+        select: { id: true, role: true }
+      });
+    } else if (user.role !== "TEACHER") {
+      user = await tx.user.update({ where: { id: user.id }, data: { role: "TEACHER" }, select: { id: true, role: true } });
+    }
+    let teacher = await tx.teacher.findFirst({ where: { userId: user.id }, select: { id: true } });
+    if (!teacher) {
+      const employeeId = await _generateUniqueEmployeeId(tx);
+      teacher = await tx.teacher.create({
+        data: {
+          userId: user.id,
+          employeeId,
+          name: application.name,
+          email: application.email,
+          phone: application.phone,
+          gender: application.gender,
+          address: application.address,
+          designation: application.designation,
+          department: application.department,
+          qualification: application.qualification,
+          experience: application.experience,
+          subjectSpecialization: application.subjectSpecialization,
+          salary: application.expectedSalary,
+          dateOfBirth: application.dob,
+          joiningDate: /* @__PURE__ */ new Date(),
+          isActive: true
+        },
+        select: { id: true }
       });
     }
-  }
-  return db_default.teachingApplication.update({
-    where: { id },
-    data: {
-      status: dto.status,
-      rejectionReason: dto.rejectionReason,
-      reviewedAt: /* @__PURE__ */ new Date()
-    }
+    const updatedApplication = await tx.teachingApplication.update({
+      where: { id },
+      data: { status: "APPROVED", reviewedAt: /* @__PURE__ */ new Date(), rejectionReason: null },
+      select: APPLICATION_SELECT
+    });
+    return { application: updatedApplication, teacherId: teacher.id, isNewAccount: !!tempPassword };
   });
+  return { ...result, tempPassword };
 };
+async function _generateUniqueEmployeeId(tx) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = `TCH-${(0, import_node_crypto4.randomBytes)(3).toString("hex")}`.toUpperCase();
+    const clash = await tx.teacher.findFirst({ where: { employeeId: candidate }, select: { id: true } });
+    if (!clash) return candidate;
+  }
+  throw new Error("Could not generate a unique employee ID, please retry");
+}
 
 // src/modules/teachingApplication/teachingApplication.controller.ts
-var apply = async (req, res, next) => {
-  try {
-    const data = await applyForTeaching(req.body);
-    sendSuccess(res, data, "Teaching application submitted", 201);
-  } catch (err) {
-    next(err);
+var TeachingApplicationController = class {
+  // ── PUBLIC: job application form submission, no auth required ─────
+  async apply(req, res, next) {
+    try {
+      const application = await applyForTeaching(req.body);
+      sendSuccess(res, application, "Application submitted", 201);
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var list = async (_req, res, next) => {
-  try {
-    const data = await listTeachingApplications();
-    sendSuccess(res, data);
-  } catch (err) {
-    next(err);
+  // ── HR: paginated / filterable applicant list 
+  async findAll(req, res, next) {
+    try {
+      const { status, search, page, pageSize } = req.query;
+      const result = await listTeachingApplications({
+        status,
+        search,
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, result, "Applications fetched");
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var getById = async (req, res, next) => {
-  try {
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const data = await getTeachingApplicationById(id);
-    sendSuccess(res, data);
-  } catch (err) {
-    next(err);
+  // ── HR: single application 
+  async findById(req, res, next) {
+    try {
+      const application = await getTeachingApplicationById(req.params.id);
+      sendSuccess(res, application, "Application fetched");
+    } catch (err) {
+      next(err);
+    }
   }
-};
-var updateStatus = async (req, res, next) => {
-  try {
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const data = await updateTeachingApplicationStatus(id, req.body);
-    sendSuccess(res, data, "Teaching application updated");
-  } catch (err) {
-    next(err);
+  // ── HR: approve or reject 
+  async updateStatus(req, res, next) {
+    try {
+      const result = await updateTeachingApplicationStatus(
+        req.params.id,
+        req.body
+      );
+      sendSuccess(res, result, "Application status updated");
+    } catch (err) {
+      next(err);
+    }
   }
 };
 
 // src/modules/teachingApplication/teachingApplication.routes.ts
 var router11 = (0, import_express11.Router)();
-router11.post("/apply", apply);
-router11.get("/", authenticate, authorizeRoles("ADMIN"), list);
-router11.get("/:id", authenticate, authorizeRoles("ADMIN"), getById);
-router11.patch("/:id/status", authenticate, authorizeRoles("ADMIN"), updateStatus);
+var c4 = new TeachingApplicationController();
+router11.post("/apply", c4.apply.bind(c4));
+router11.use(authenticate);
+router11.get("/", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findAll.bind(c4));
+router11.get("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findById.bind(c4));
+router11.patch("/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.updateStatus.bind(c4));
 var teachingApplication_routes_default = router11;
 
 // src/modules/notice/notice.route.ts
 var import_express12 = require("express");
 
 // src/modules/notice/notice.service.ts
-var audienceToRoles = {
-  ALL: ["ADMIN", "TEACHER", "STUDENT", "PARENT"],
-  TEACHERS: ["TEACHER"],
-  STUDENTS: ["STUDENT"],
-  PARENTS: ["PARENT"],
-  STAFF: ["ADMIN"]
+init_db();
+init_pagination_util();
+var import_client3 = require("@prisma/client");
+var ALL_STAFF_ROLES = [
+  import_client3.Role.SUPER_ADMIN,
+  import_client3.Role.SCHOOL_ADMIN,
+  import_client3.Role.ACCOUNTANT,
+  import_client3.Role.EXAM_CONTROLLER,
+  import_client3.Role.HR,
+  import_client3.Role.TEACHER
+];
+var audienceToUserRoles = {
+  TEACHERS: [import_client3.Role.TEACHER],
+  STAFF: ALL_STAFF_ROLES,
+  SUPER_ADMIN: [import_client3.Role.SUPER_ADMIN],
+  SCHOOL_ADMIN: [import_client3.Role.SCHOOL_ADMIN],
+  ACCOUNTANT: [import_client3.Role.ACCOUNTANT],
+  EXAM_CONTROLLER: [import_client3.Role.EXAM_CONTROLLER],
+  HR: [import_client3.Role.HR]
 };
-var createNotice = async (dto, authorId) => {
-  const notice = await db_default.notice.create({
-    data: {
-      title: dto.title,
-      content: dto.content,
-      audience: dto.audience,
-      priority: dto.priority || "NORMAL",
-      publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : /* @__PURE__ */ new Date(),
-      authorId,
-      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : void 0,
-      attachmentUrl: dto.attachmentUrl,
-      isActive: true
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true
-        }
-      }
-    }
-  });
-  try {
-    const roles = audienceToRoles[dto.audience] ?? ["ADMIN"];
-    roles.forEach((role) => {
-      emitToRole(role, "notification:new", {
-        title: notice.title,
-        body: notice.content,
-        type: "NOTICE",
-        referenceId: notice.id,
-        createdAt: notice.createdAt
-      });
+async function resolveRecipients(audience, sectionIds) {
+  const studentWhere = sectionIds?.length ? { sectionId: { in: sectionIds } } : {};
+  let studentIds = [];
+  let parentIds = [];
+  let userIds = [];
+  if (audience === "STUDENTS" || audience === "PARENTS" || audience === "ALL") {
+    const students = await db_default.student.findMany({
+      where: studentWhere,
+      select: { id: true, parentId: true }
     });
-  } catch (err) {
-    console.error("Failed to emit notice notification:", err);
+    if (audience === "STUDENTS" || audience === "ALL") {
+      studentIds = students.map((s) => s.id);
+    }
+    if (audience === "PARENTS" || audience === "ALL") {
+      parentIds = [...new Set(students.map((s) => s.parentId).filter((id) => !!id))];
+    }
   }
+  const roleTargets = audience === "ALL" ? ALL_STAFF_ROLES : audienceToUserRoles[audience];
+  if (roleTargets?.length) {
+    const users = await db_default.user.findMany({
+      where: { role: { in: roleTargets } },
+      select: { id: true }
+    });
+    userIds = users.map((u) => u.id);
+  }
+  return { studentIds, parentIds, userIds };
+}
+var createNotice = async (dto, authorId) => {
+  const { studentIds, parentIds, userIds } = await resolveRecipients(dto.audience, dto.sectionIds);
+  const notice = await db_default.$transaction(async (tx) => {
+    const created = await tx.notice.create({
+      data: {
+        title: dto.title,
+        content: dto.content,
+        audience: dto.audience,
+        priority: dto.priority || "NORMAL",
+        publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : /* @__PURE__ */ new Date(),
+        authorId,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : void 0,
+        attachmentUrl: dto.attachmentUrl,
+        isActive: true
+      },
+      include: {
+        author: { select: { id: true, name: true, email: true, role: true } }
+      }
+    });
+    if (dto.sectionIds?.length) {
+      await tx.noticeSectionTarget.createMany({
+        data: dto.sectionIds.map((sectionId) => ({ noticeId: created.id, sectionId })),
+        skipDuplicates: true
+      });
+    }
+    if (studentIds.length || parentIds.length || userIds.length) {
+      await tx.noticeRecipient.createMany({
+        data: [
+          ...studentIds.map((studentId) => ({ noticeId: created.id, studentId })),
+          ...parentIds.map((parentId) => ({ noticeId: created.id, parentId })),
+          ...userIds.map((userId) => ({ noticeId: created.id, userId }))
+        ],
+        skipDuplicates: true
+      });
+    }
+    return created;
+  });
   return notice;
 };
 var findAll2 = async (query) => {
@@ -21086,7 +22289,7 @@ var findAll2 = async (query) => {
       ]
     }
   };
-  const { skip, take, meta } = await paginate2(
+  const { skip, take, meta } = await paginate(
     db_default.notice,
     where,
     parseInt(page, 10),
@@ -21097,78 +22300,61 @@ var findAll2 = async (query) => {
     skip,
     take,
     include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true
-        }
-      }
+      author: { select: { id: true, name: true, email: true, role: true } }
     },
     orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
   });
-  return {
-    data: notices,
-    meta
-  };
+  return { data: notices, meta };
 };
-var findPublic = (role, studentSectionId) => {
+var findMyNotices = async (opts) => {
+  if (!opts.studentId && !opts.parentId && !opts.userId) {
+    throw new Error("studentId, parentId, or userId is required");
+  }
   const now = /* @__PURE__ */ new Date();
-  if (role === "STUDENTS" && studentSectionId) {
-    return db_default.notice.findMany({
-      where: {
+  const recipientRows = await db_default.noticeRecipient.findMany({
+    where: {
+      ...opts.studentId && { studentId: opts.studentId },
+      ...opts.parentId && { parentId: opts.parentId },
+      ...opts.userId && { userId: opts.userId },
+      notice: {
         isActive: true,
         publishedAt: { lte: now },
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-        audience: { in: ["ALL", "STUDENTS"] }
-        // Filter by section: either no section target (broadcast) or student's section is targeted
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true
-          }
-        }
-      },
-      orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
-    });
-  }
-  return db_default.notice.findMany({
-    where: {
-      isActive: true,
-      publishedAt: { lte: now },
-      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-      audience: { in: ["ALL", role] }
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }]
+      }
     },
     include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true
+      notice: {
+        include: {
+          author: { select: { id: true, name: true, email: true, role: true } }
         }
       }
     },
-    orderBy: [{ priority: "desc" }, { publishedAt: "desc" }]
+    orderBy: [{ notice: { priority: "desc" } }, { notice: { publishedAt: "desc" } }]
+  });
+  return recipientRows.map((r) => ({
+    ...r.notice,
+    isRead: r.isRead,
+    readAt: r.readAt,
+    recipientId: r.id
+  }));
+};
+var markAsRead = async (recipientId, ownerId) => {
+  const recipient = await db_default.noticeRecipient.findUnique({ where: { id: recipientId } });
+  if (!recipient) throw new Error("Notice recipient record not found");
+  const isOwner = recipient.studentId === ownerId || recipient.parentId === ownerId || recipient.userId === ownerId;
+  if (!isOwner) {
+    throw { status: 403, message: "Not your notice" };
+  }
+  return db_default.noticeRecipient.update({
+    where: { id: recipientId },
+    data: { isRead: true, readAt: /* @__PURE__ */ new Date() }
   });
 };
 var findById = async (id) => {
   const notice = await db_default.notice.findUnique({
     where: { id },
     include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true
-        }
-      }
+      author: { select: { id: true, name: true, email: true, role: true } }
     }
   });
   if (!notice) {
@@ -21186,40 +22372,48 @@ var update = async (dto, id) => {
       ...dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }
     },
     include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true
-        }
-      }
+      author: { select: { id: true, name: true, email: true, role: true } }
     }
   });
 };
 var deleteNotice = async (id) => {
   await findById(id);
-  return db_default.notice.delete({
-    where: { id }
-  });
+  return db_default.notice.delete({ where: { id } });
 };
 var toggleActive = async (id) => {
   const notice = await findById(id);
   return db_default.notice.update({
     where: { id },
-    data: {
-      isActive: !notice.isActive
-    }
+    data: { isActive: !notice.isActive }
   });
+};
+var getFeedForUser = async (opts) => {
+  const { role, userId } = opts;
+  if (ALL_STAFF_ROLES.includes(role)) {
+    return findMyNotices({ userId });
+  }
+  if (role === import_client3.Role.STUDENT || role === "STUDENT") {
+    const student = await db_default.student.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+    if (student) {
+      return findMyNotices({ studentId: student.id });
+    }
+  }
+  if (role === import_client3.Role.PARENT || role === "PARENT") {
+    const parent = await db_default.parent.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+    if (parent) {
+      return findMyNotices({ parentId: parent.id });
+    }
+  }
+  return [];
 };
 
 // src/modules/notice/notice.controller.ts
-var roleToAudience = {
-  STUDENT: "STUDENTS",
-  TEACHER: "TEACHERS",
-  PARENT: "PARENTS",
-  ADMIN: "ALL"
-};
 var NoticeController = class {
   async create(req, res, next) {
     try {
@@ -21237,20 +22431,28 @@ var NoticeController = class {
       next(err);
     }
   }
-  /** Authenticated user sees only notices relevant to their role */
-  async findPublic(req, res, next) {
+  /**
+   * Authenticated user sees only the notices actually created for them —
+   * backed by their own NoticeRecipient rows now, not a broad role match.
+   * FIX: this used to call a getFeedForUser that didn't exist in
+   * notice.service.ts at all; that function is added there now.
+   */
+  async feed(req, res, next) {
     try {
-      const audience = roleToAudience[req.user.role] ?? "ALL";
-      let sectionId;
-      if (req.user.role === "STUDENT") {
-        const student = await db_default.student.findUnique({
-          where: { userId: req.user.id },
-          select: { sectionId: true }
-        });
-        sectionId = student?.sectionId;
-      }
-      const notices = await findPublic(audience, sectionId);
+      const notices = await getFeedForUser({ role: req.user.role, userId: req.user.id });
       sendSuccess(res, notices, "Notices fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  /** Mark any actor's personal notice recipient row as read — ownership
+   * is enforced inside markAsRead (student/parent/staff userId all
+   * checked there), so no role restriction is needed at the route level. */
+  async markRead(req, res, next) {
+    try {
+      const { recipientId } = req.params;
+      const recipient = await markAsRead(recipientId, req.user.id);
+      sendSuccess(res, recipient, "Notice marked as read");
     } catch (err) {
       next(err);
     }
@@ -21303,59 +22505,2916 @@ var NoticeController = class {
 
 // src/modules/notice/notice.route.ts
 var router12 = (0, import_express12.Router)();
-var c3 = new NoticeController();
+var c5 = new NoticeController();
 router12.use(authenticate);
-router12.get("/feed", c3.findPublic.bind(c3));
-router12.post("/", authorizeRoles("ADMIN"), c3.create.bind(c3));
-router12.get("/", authorizeRoles("ADMIN"), c3.findAll.bind(c3));
-router12.get("/:id", authorizeRoles("ADMIN"), c3.findById.bind(c3));
-router12.patch("/:id", authorizeRoles("ADMIN"), c3.update.bind(c3));
-router12.delete("/:id", authorizeRoles("ADMIN"), c3.delete.bind(c3));
-router12.patch("/:id/toggle", authorizeRoles("ADMIN"), c3.toggleActive.bind(c3));
+router12.get("/feed", c5.feed.bind(c5));
+router12.patch("/read/:recipientId", c5.markRead.bind(c5));
+router12.post("/", authorizeRoles("SCHOOL_ADMIN"), c5.create.bind(c5));
+router12.get("/", authorizeRoles("SCHOOL_ADMIN"), c5.findAll.bind(c5));
+router12.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.findById.bind(c5));
+router12.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.update.bind(c5));
+router12.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.delete.bind(c5));
+router12.patch("/:id/toggle", authorizeRoles("SCHOOL_ADMIN"), c5.toggleActive.bind(c5));
 var notice_route_default = router12;
 
+// src/modules/timetable/timetable.routes.ts
+var import_express13 = require("express");
+
+// src/modules/timetable/timetable.service.ts
+init_db();
+var SLOT_SELECT = {
+  id: true,
+  dayOfWeek: true,
+  startTime: true,
+  endTime: true,
+  roomNumber: true,
+  class: { select: { id: true, name: true } },
+  section: { select: { id: true, name: true } },
+  subject: { select: { id: true, name: true, code: true } },
+  teacher: {
+    select: {
+      id: true,
+      employeeId: true,
+      user: { select: { name: true } }
+    }
+  }
+};
+var CACHE_TTL_MS = 3e4;
+var weeklyViewCache = /* @__PURE__ */ new Map();
+function cacheGet(key) {
+  const entry = weeklyViewCache.get(key);
+  if (!entry) return void 0;
+  if (Date.now() > entry.expiresAt) {
+    weeklyViewCache.delete(key);
+    return void 0;
+  }
+  return entry.value;
+}
+function cacheSet(key, value) {
+  weeklyViewCache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+function cacheClearForClass(classId) {
+  weeklyViewCache.delete(`class:${classId}`);
+}
+function cacheClearForTeacher(teacherId) {
+  weeklyViewCache.delete(`teacher:${teacherId}`);
+}
+function cacheClearAll() {
+  weeklyViewCache.clear();
+}
+var createSlot = async (dto) => {
+  const { classId, subjectId, teacherId, dayOfWeek, startTime, endTime, roomNumber } = dto;
+  const [cls, subject, teacher, section] = await Promise.all([
+    db_default.class.findUnique({ where: { id: classId }, select: { id: true } }),
+    db_default.subject.findUnique({ where: { id: subjectId }, select: { id: true } }),
+    db_default.teacher.findUnique({ where: { id: teacherId }, select: { id: true } }),
+    db_default.section.findFirst({ where: { classId }, orderBy: { name: "asc" }, select: { id: true } })
+  ]);
+  if (!cls) throw new Error("Class not found");
+  if (!subject) throw new Error("Subject not found");
+  if (!teacher) throw new Error("Teacher not found");
+  if (!section) throw new Error("No section found for this class");
+  await _checkConflicts({ classId, teacherId, dayOfWeek, startTime, endTime });
+  try {
+    const slot = await db_default.timetable.create({
+      data: { classId, sectionId: section.id, subjectId, teacherId, dayOfWeek, startTime, endTime, roomNumber },
+      select: SLOT_SELECT
+    });
+    cacheClearForClass(classId);
+    cacheClearForTeacher(teacherId);
+    return slot;
+  } catch (err) {
+    if (err?.code === "P2002") {
+      throw new Error("Schedule conflict: the class or teacher already has a slot during this time");
+    }
+    throw err;
+  }
+};
+var bulkCreate = async (dto) => {
+  const classExists = await db_default.class.findUnique({ where: { id: dto.classId }, select: { id: true } });
+  if (!classExists) throw new Error("Class not found");
+  const section = await db_default.section.findFirst({
+    where: { classId: dto.classId },
+    orderBy: { name: "asc" },
+    select: { id: true }
+  });
+  if (!section) throw new Error("No section found for this class");
+  const subjectIds = [...new Set(dto.slots.map((s) => s.subjectId))];
+  const teacherIds = [...new Set(dto.slots.map((s) => s.teacherId))];
+  const [subjects, teachers, otherClassSlots] = await Promise.all([
+    db_default.subject.findMany({ where: { id: { in: subjectIds } }, select: { id: true } }),
+    db_default.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true } }),
+    //       never checked if a teacher was already teaching another class
+    //       at the same time — a teacher could end up double-booked.
+    db_default.timetable.findMany({
+      where: { teacherId: { in: teacherIds }, classId: { not: dto.classId } },
+      select: { teacherId: true, dayOfWeek: true, startTime: true, endTime: true }
+    })
+  ]);
+  const missingSubject = subjectIds.find((id) => !subjects.some((s) => s.id === id));
+  if (missingSubject) throw new Error(`Subject not found: ${missingSubject}`);
+  const missingTeacher = teacherIds.find((id) => !teachers.some((t) => t.id === id));
+  if (missingTeacher) throw new Error(`Teacher not found: ${missingTeacher}`);
+  _checkBatchConflicts(dto.slots, otherClassSlots);
+  const result = await db_default.$transaction(async (tx) => {
+    await tx.timetable.deleteMany({ where: { classId: dto.classId } });
+    await tx.timetable.createMany({
+      data: dto.slots.map((slot) => ({ ...slot, classId: dto.classId, sectionId: section.id }))
+    });
+    return tx.timetable.findMany({
+      where: { classId: dto.classId },
+      select: SLOT_SELECT,
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+    });
+  });
+  cacheClearForClass(dto.classId);
+  teacherIds.forEach(cacheClearForTeacher);
+  return result;
+};
+var finAll = async (query, pagination = {}) => {
+  const { classId, teacherId, dayOfWeek } = query;
+  const page = pagination.page ?? 1;
+  const pageSize = Math.min(pagination.pageSize ?? 50, 100);
+  const where = {
+    ...classId && { classId },
+    ...teacherId && { teacherId },
+    ...dayOfWeek && { dayOfWeek }
+  };
+  return db_default.timetable.findMany({
+    where,
+    select: SLOT_SELECT,
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+    skip: (page - 1) * pageSize,
+    take: pageSize
+  });
+};
+var getClassWeeklyView = async (classId) => {
+  const cached = cacheGet(`class:${classId}`);
+  if (cached) return cached;
+  const classExists = await db_default.class.findUnique({ where: { id: classId }, select: { id: true } });
+  if (!classExists) throw new Error("Class not found");
+  const slots = await db_default.timetable.findMany({
+    where: { classId },
+    select: SLOT_SELECT,
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+  });
+  const week = _groupByDay(slots);
+  cacheSet(`class:${classId}`, week);
+  return week;
+};
+var getTeacherWeeklyView = async (teacherId) => {
+  const cached = cacheGet(`teacher:${teacherId}`);
+  if (cached) return cached;
+  const teacherExists = await db_default.teacher.findUnique({ where: { id: teacherId }, select: { id: true } });
+  if (!teacherExists) throw new Error("Teacher not found");
+  const slots = await db_default.timetable.findMany({
+    where: { teacherId },
+    select: SLOT_SELECT,
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+  });
+  const week = _groupByDay(slots);
+  cacheSet(`teacher:${teacherId}`, week);
+  return week;
+};
+var findById2 = async (id) => {
+  const slot = await db_default.timetable.findUnique({ where: { id }, select: SLOT_SELECT });
+  if (!slot) throw new Error("Slot not found");
+  return slot;
+};
+var update2 = async (id, dto) => {
+  const existing = await db_default.timetable.findUnique({ where: { id } });
+  if (!existing) throw new Error("Slot not found");
+  const merged = {
+    classId: existing.classId,
+    subjectId: dto.subjectId || existing.subjectId,
+    teacherId: dto.teacherId || existing.teacherId,
+    dayOfWeek: dto.dayOfWeek || existing.dayOfWeek,
+    startTime: dto.startTime || existing.startTime,
+    endTime: dto.endTime || existing.endTime
+  };
+  await _checkConflicts(merged, id);
+  try {
+    const updated = await db_default.timetable.update({ where: { id }, data: dto, select: SLOT_SELECT });
+    cacheClearForClass(existing.classId);
+    cacheClearForTeacher(existing.teacherId);
+    if (dto.teacherId) cacheClearForTeacher(dto.teacherId);
+    return updated;
+  } catch (err) {
+    if (err?.code === "P2002") {
+      throw new Error("Schedule conflict: the class or teacher already has a slot during this time");
+    }
+    throw err;
+  }
+};
+var deleteSlot = async (id) => {
+  const existing = await db_default.timetable.findUnique({ where: { id }, select: { classId: true, teacherId: true } });
+  const result = await db_default.timetable.delete({ where: { id } });
+  if (existing) {
+    cacheClearForClass(existing.classId);
+    cacheClearForTeacher(existing.teacherId);
+  }
+  return result;
+};
+var deleteClassSchefule = async (classId) => {
+  const classexits = await db_default.class.findUnique({ where: { id: classId }, select: { id: true } });
+  if (!classexits) throw new Error("Class not found");
+  const { count } = await db_default.timetable.deleteMany({ where: { classId } });
+  cacheClearForClass(classId);
+  cacheClearAll();
+  return { deletedSlots: count };
+};
+var getMyClassTimetable = async (studentId) => {
+  const student = await db_default.student.findUnique({
+    where: { id: studentId },
+    select: { classId: true }
+  });
+  if (!student) throw new Error("Student not found");
+  return getClassWeeklyView(student.classId);
+};
+var getChildClassTimetable = async (parentId, studentId) => {
+  const student = await db_default.student.findFirst({
+    where: { id: studentId, parentId },
+    select: { classId: true }
+  });
+  if (!student) throw new Error("Child not found for this parent");
+  return getClassWeeklyView(student.classId);
+};
+var teacherTeachesClass = async (teacherId, classId) => {
+  if (!teacherId) return false;
+  const slot = await db_default.timetable.findFirst({
+    where: { teacherId, classId },
+    select: { id: true }
+  });
+  return Boolean(slot);
+};
+function _todayDayOfWeek() {
+  const days = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+  return days[(/* @__PURE__ */ new Date()).getDay()];
+}
+var getTodaysClassesForStudent = async (studentId) => {
+  const student = await db_default.student.findUnique({
+    where: { id: studentId },
+    select: { classId: true, sectionId: true }
+  });
+  if (!student) throw new Error("Student not found");
+  return db_default.timetable.findMany({
+    where: { classId: student.classId, sectionId: student.sectionId, dayOfWeek: _todayDayOfWeek() },
+    select: SLOT_SELECT,
+    orderBy: { startTime: "asc" }
+  });
+};
+var getTodaysClassesForChild = async (parentId, studentId) => {
+  const student = await db_default.student.findFirst({
+    where: { id: studentId, parentId },
+    select: { classId: true, sectionId: true }
+  });
+  if (!student) throw new Error("Child not found for this parent");
+  return db_default.timetable.findMany({
+    where: { classId: student.classId, sectionId: student.sectionId, dayOfWeek: _todayDayOfWeek() },
+    select: SLOT_SELECT,
+    orderBy: { startTime: "asc" }
+  });
+};
+function _groupByDay(slots) {
+  const week = {};
+  for (const slot of slots) {
+    (week[slot.dayOfWeek] ??= []).push(slot);
+  }
+  return week;
+}
+function _overlaps(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && aEnd > bStart;
+}
+async function _checkConflicts(dto, excludeId) {
+  const overlap = await db_default.timetable.findFirst({
+    where: {
+      id: excludeId ? { not: excludeId } : void 0,
+      dayOfWeek: dto.dayOfWeek,
+      OR: [{ classId: dto.classId }, { teacherId: dto.teacherId }],
+      AND: [{ startTime: { lt: dto.endTime } }, { endTime: { gt: dto.startTime } }]
+    },
+    select: { id: true }
+  });
+  if (overlap) {
+    throw new Error("Schedule conflict: the class or teacher already has a slot during this time");
+  }
+}
+function _checkBatchConflicts(newSlots, existingOtherClassSlots) {
+  for (let i = 0; i < newSlots.length; i++) {
+    const a = newSlots[i];
+    for (const b of existingOtherClassSlots) {
+      if (a.teacherId === b.teacherId && a.dayOfWeek === b.dayOfWeek && _overlaps(a.startTime, a.endTime, b.startTime, b.endTime)) {
+        throw new Error(`Schedule conflict: teacher already booked elsewhere on ${a.dayOfWeek} at ${a.startTime}`);
+      }
+    }
+    for (let j = i + 1; j < newSlots.length; j++) {
+      const b = newSlots[j];
+      if (a.teacherId === b.teacherId && a.dayOfWeek === b.dayOfWeek && _overlaps(a.startTime, a.endTime, b.startTime, b.endTime)) {
+        throw new Error(`Schedule conflict within submitted batch: ${a.dayOfWeek} ${a.startTime}-${a.endTime}`);
+      }
+    }
+  }
+}
+
+// src/modules/parents/parents.service.ts
+init_db();
+var PARENT_SELECT = {
+  id: true,
+  name: true,
+  phone: true,
+  address: true,
+  occupation: true,
+  relation: true,
+  createdAt: true,
+  user: { select: { id: true, email: true } }
+};
+var ParentsService = class {
+  static async createParent(dto) {
+    const [user, existingParent] = await Promise.all([
+      db_default.user.findUnique({ where: { id: dto.userId }, select: { id: true } }),
+      db_default.parent.findUnique({ where: { userId: dto.userId }, select: { id: true } })
+    ]);
+    if (!user) throw new Error("User not found");
+    if (existingParent) throw new Error("A parent profile already exists for this user");
+    return db_default.parent.create({
+      data: {
+        userId: dto.userId,
+        name: dto.name,
+        phone: dto.phone,
+        address: dto.address,
+        occupation: dto.occupation,
+        relation: dto.relation
+      },
+      select: PARENT_SELECT
+    });
+  }
+  // ─── ADMIN: update any parent's profile ─────────────────────────
+  static async updateParent(parentId, dto) {
+    const existing = await db_default.parent.findUnique({ where: { id: parentId }, select: { id: true } });
+    if (!existing) throw new Error("Parent not found");
+    return db_default.parent.update({ where: { id: parentId }, data: dto, select: PARENT_SELECT });
+  }
+  // ─── ADMIN: delete a parent profile ──────────────────────────────
+  static async deleteParent(parentId) {
+    const existing = await db_default.parent.findUnique({
+      where: { id: parentId },
+      select: { id: true, children: { select: { id: true } } }
+    });
+    if (!existing) throw new Error("Parent not found");
+    if (existing.children.length > 0) {
+      throw new Error("Unlink all children from this parent before deleting the profile");
+    }
+    return db_default.parent.delete({ where: { id: parentId } });
+  }
+  // ─── ADMIN: paginated list, optional search by name/phone ───────
+  static async getAllParents(query) {
+    const page = query.page ?? 1;
+    const pageSize = Math.min(query.pageSize ?? 20, 100);
+    const where = query.search ? {
+      OR: [
+        { name: { contains: query.search, mode: "insensitive" } },
+        { phone: { contains: query.search } }
+      ]
+    } : {};
+    const [total, data] = await Promise.all([
+      db_default.parent.count({ where }),
+      db_default.parent.findMany({
+        where,
+        select: { ...PARENT_SELECT, children: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      })
+    ]);
+    return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+  // ─── ADMIN: single parent, with children list ────────────────────
+  static async getParentById(parentId) {
+    const parent = await db_default.parent.findUnique({
+      where: { id: parentId },
+      select: {
+        ...PARENT_SELECT,
+        children: { select: { id: true, name: true, classId: true, sectionId: true } }
+      }
+    });
+    if (!parent) throw new Error("Parent not found");
+    return parent;
+  }
+  // ─── ADMIN: link a student to this parent ────────────────────────
+  static async linkChild(parentId, studentId) {
+    const [parent, student] = await Promise.all([
+      db_default.parent.findUnique({ where: { id: parentId }, select: { id: true } }),
+      db_default.student.findUnique({ where: { id: studentId }, select: { id: true, parentId: true } })
+    ]);
+    if (!parent) throw new Error("Parent not found");
+    if (!student) throw new Error("Student not found");
+    if (student.parentId === parentId) throw new Error("This student is already linked to this parent");
+    return db_default.student.update({ where: { id: studentId }, data: { parentId } });
+  }
+  // ─── ADMIN: unlink a student from this parent ────────────────────
+  static async unlinkChild(parentId, studentId) {
+    const student = await db_default.student.findFirst({ where: { id: studentId, parentId }, select: { id: true } });
+    if (!student) throw new Error("This student is not linked to this parent");
+    return db_default.student.update({ where: { id: studentId }, data: { parentId: null } });
+  }
+  // =====================================================================
+  // PARENT SELF-SERVICE
+  // =====================================================================
+  // WHAT: resolves the logged-in User's own Parent id.
+  // WHY: used by the timetable module and every method below — since
+  //      Parent.userId is @unique, this is a single indexed lookup.
+  static async getParentIdByUserId(userId) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: { id: true } });
+    return parent?.id ?? null;
+  }
+  static async getMyProfile(userId) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: PARENT_SELECT });
+    if (!parent) throw new Error("Parent profile not found");
+    return parent;
+  }
+  static async updateMyProfile(userId, dto) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    return db_default.parent.update({ where: { id: parent.id }, data: dto, select: PARENT_SELECT });
+  }
+  // WHAT: list of this parent's own children (basic info only —
+  //       full academic detail comes from the students/timetable
+  //       modules, this just confirms who the children are).
+  static async getMyChildren(userId) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    return db_default.student.findMany({
+      where: { parentId: parent.id },
+      select: { id: true, name: true, classId: true, sectionId: true, rollNumber: true },
+      orderBy: { name: "asc" }
+    });
+  }
+  // WHAT: this parent's own payment history (Stripe + offline records).
+  static async getMyPayments(userId, pagination = {}) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    const page = pagination.page ?? 1;
+    const pageSize = Math.min(pagination.pageSize ?? 20, 100);
+    return db_default.payment.findMany({
+      where: { parentId: parent.id },
+      select: { id: true, amount: true, status: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    });
+  }
+  // WHAT: notices addressed to this parent (school-wide or class-specific
+  //       notices get fanned out into NoticeRecipient rows elsewhere).
+  static async getMyNotices(userId, pagination = {}) {
+    const parent = await db_default.parent.findUnique({ where: { userId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    const page = pagination.page ?? 1;
+    const pageSize = Math.min(pagination.pageSize ?? 20, 100);
+    return db_default.noticeRecipient.findMany({
+      where: { parentId: parent.id },
+      select: {
+        id: true,
+        read: true,
+        notice: { select: { id: true, title: true, content: true, createdAt: true } }
+      },
+      orderBy: { notice: { createdAt: "desc" } },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    });
+  }
+};
+
+// src/modules/timetable/timetable.controller.ts
+var TimetableController = class {
+  // ── ADMIN: create a single slot ─────────────────────────────────
+  async createSlot(req, res, next) {
+    try {
+      const slot = await createSlot(req.body);
+      sendSuccess(res, slot, "Timetable slot created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: replace a class's full weekly timetable ───────────────
+  async bulkCreate(req, res, next) {
+    try {
+      const slots = await bulkCreate(req.body);
+      sendSuccess(res, slots, "Timetable created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN / TEACHER: filtered/paginated list ──────────────────────
+  // NOTE: STUDENT was removed from this route's roles (see routes file).
+  // A raw filter list isn't something a student should be able to query
+  // freely with arbitrary classId/teacherId — they use /my-routine instead.
+  async findAll(req, res, next) {
+    try {
+      const query = { ...req.query };
+      const userRole = req.user?.role;
+      if (userRole === "TEACHER") {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+        query.teacherId = myTeacherId;
+      }
+      const page = query.page ? Number(query.page) : void 0;
+      const pageSize = query.pageSize ? Number(query.pageSize) : void 0;
+      delete query.page;
+      delete query.pageSize;
+      const data = await finAll(query, { page, pageSize });
+      sendSuccess(res, data, "Timetable fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN / TEACHER: any class's weekly view, by classId ──────────
+  // NOTE: STUDENT no longer allowed here (see routes file) — this is the
+  // "browse any class" route, meant for staff use.
+  async getClassWeeklyView(req, res, next) {
+    try {
+      const classId = req.params.classId;
+      const userRole = req.user?.role;
+      if (userRole === "TEACHER") {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+        const teachesThisClass = await teacherTeachesClass(myTeacherId, classId);
+        if (!teachesThisClass) {
+          return res.status(403).json({ success: false, message: "You can only view classes you teach" });
+        }
+      }
+      const data = await getClassWeeklyView(classId);
+      sendSuccess(res, data, "Class weekly timetable fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN / TEACHER: a teacher's own weekly view ──────────────────
+  async getTeacherWeeklyView(req, res, next) {
+    try {
+      const requestedTeacherId = req.params.teacherId;
+      const userRole = req.user?.role;
+      if (userRole === "TEACHER") {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+        if (!myTeacherId || myTeacherId !== requestedTeacherId) {
+          return res.status(403).json({ success: false, message: "You can only view your own timetable" });
+        }
+      }
+      const data = await getTeacherWeeklyView(requestedTeacherId);
+      sendSuccess(res, data, "Teacher weekly timetable fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── STUDENT: "my routine" — classId resolved server-side ──────────
+  // WHAT: student never supplies a classId — we look it up from their
+  //       own profile, so there is nothing to fake or guess.
+  async getMyRoutine(req, res, next) {
+    try {
+      const studentId = await StudentsService.getStudentIdByUserId(req.user?.id);
+      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      const data = await getMyClassTimetable(studentId);
+      sendSuccess(res, data, "Your weekly routine fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── STUDENT dashboard widget: today's classes only ────────────────
+  async getMyTodayRoutine(req, res, next) {
+    try {
+      const studentId = await StudentsService.getStudentIdByUserId(req.user?.id);
+      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      const data = await getTodaysClassesForStudent(studentId);
+      sendSuccess(res, data, "Today's classes fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── PARENT: routine for one of their children ──────────────────────
+  // WHAT: ownership is verified inside the service (student must belong
+  //       to this parent) before any data is returned.
+  async getChildRoutine(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) return res.status(404).json({ success: false, message: "Parent profile not found" });
+      const studentId = req.params.studentId;
+      const data = await getChildClassTimetable(parentId, studentId);
+      sendSuccess(res, data, "Child's weekly routine fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── PARENT dashboard widget: today's classes for one child ────────
+  async getChildTodayRoutine(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) return res.status(404).json({ success: false, message: "Parent profile not found" });
+      const studentId = req.params.studentId;
+      const data = await getTodaysClassesForChild(parentId, studentId);
+      sendSuccess(res, data, "Child's classes for today fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN / TEACHER: single slot by id ─────────────────────────────
+  async findById(req, res, next) {
+    try {
+      const slotId = req.params.id;
+      const userRole = req.user?.role;
+      const slot = await findById2(slotId);
+      if (userRole === "TEACHER") {
+        const myTeacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+        if (slot.teacher.id !== myTeacherId) {
+          return res.status(403).json({ success: false, message: "You can only view your own timetable slots" });
+        }
+      }
+      sendSuccess(res, slot, "Slot fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: update a slot ────────────────────────────────────────────
+  async update(req, res, next) {
+    try {
+      const slot = await update2(req.params.id, req.body);
+      sendSuccess(res, slot, "Slot updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: delete one slot ──────────────────────────────────────────
+  async delete(req, res, next) {
+    try {
+      await deleteSlot(req.params.id);
+      sendSuccess(res, null, "Slot deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: wipe a class's entire schedule ───────────────────────────
+  async deleteClassSchedule(req, res, next) {
+    try {
+      const result = await deleteClassSchefule(req.params.classId);
+      sendSuccess(res, result, "Class schedule cleared");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/timetable/timetable.routes.ts
+var router13 = (0, import_express13.Router)();
+var c6 = new TimetableController();
+router13.use(authenticate);
+router13.get("/my-routine", authorizeRoles("STUDENT"), c6.getMyRoutine.bind(c6));
+router13.get("/my-routine/today", authorizeRoles("STUDENT"), c6.getMyTodayRoutine.bind(c6));
+router13.get("/parent/child/:studentId", authorizeRoles("PARENT"), c6.getChildRoutine.bind(c6));
+router13.get("/parent/child/:studentId/today", authorizeRoles("PARENT"), c6.getChildTodayRoutine.bind(c6));
+router13.get("/", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.findAll.bind(c6));
+router13.get("/class/:classId", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.getClassWeeklyView.bind(c6));
+router13.get("/teacher/:teacherId", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.getTeacherWeeklyView.bind(c6));
+router13.get("/:id", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.findById.bind(c6));
+router13.post("/", authorizeRoles("EXAM_CONTROLLER"), c6.createSlot.bind(c6));
+router13.post("/bulk", authorizeRoles("EXAM_CONTROLLER"), c6.bulkCreate.bind(c6));
+router13.patch("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.update.bind(c6));
+router13.delete("/class/:classId", authorizeRoles("EXAM_CONTROLLER"), c6.deleteClassSchedule.bind(c6));
+router13.delete("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.delete.bind(c6));
+var timetable_routes_default = router13;
+
+// src/modules/parents/parents.routes.ts
+var import_express14 = require("express");
+
+// src/modules/parents/parents.controller.ts
+var ParentsController = class {
+  // ── ADMIN: create a parent profile ────────────────────────────────
+  async create(req, res, next) {
+    try {
+      const parent = await ParentsService.createParent(req.body);
+      sendSuccess(res, parent, "Parent profile created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: update any parent by id ────────────────────────────────
+  async update(req, res, next) {
+    try {
+      const parent = await ParentsService.updateParent(req.params.id, req.body);
+      sendSuccess(res, parent, "Parent profile updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: delete a parent profile ────────────────────────────────
+  async delete(req, res, next) {
+    try {
+      await ParentsService.deleteParent(req.params.id);
+      sendSuccess(res, null, "Parent profile deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: paginated list, optional ?search= ──────────────────────
+  async findAll(req, res, next) {
+    try {
+      const { search, page, pageSize } = req.query;
+      const result = await ParentsService.getAllParents({
+        search,
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, result, "Parents fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: single parent by id, with children ─────────────────────
+  async findById(req, res, next) {
+    try {
+      const parent = await ParentsService.getParentById(req.params.id);
+      sendSuccess(res, parent, "Parent fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: link a student to a parent ─────────────────────────────
+  async linkChild(req, res, next) {
+    try {
+      const { studentId } = req.body;
+      const result = await ParentsService.linkChild(req.params.id, studentId);
+      sendSuccess(res, result, "Child linked to parent");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN: unlink a student from a parent ─────────────────────────
+  async unlinkChild(req, res, next) {
+    try {
+      const result = await ParentsService.unlinkChild(req.params.id, req.params.studentId);
+      sendSuccess(res, result, "Child unlinked from parent");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // =====================================================================
+  // PARENT SELF-SERVICE — resolves everything from the logged-in user,
+  // never trusts a parentId from the client.
+  // =====================================================================
+  async getMyProfile(req, res, next) {
+    try {
+      const profile = await ParentsService.getMyProfile(req.user?.id);
+      sendSuccess(res, profile, "Your profile fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateMyProfile(req, res, next) {
+    try {
+      const profile = await ParentsService.updateMyProfile(req.user?.id, req.body);
+      sendSuccess(res, profile, "Your profile updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMyChildren(req, res, next) {
+    try {
+      const children = await ParentsService.getMyChildren(req.user?.id);
+      sendSuccess(res, children, "Your children fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMyPayments(req, res, next) {
+    try {
+      const { page, pageSize } = req.query;
+      const payments = await ParentsService.getMyPayments(req.user?.id, {
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, payments, "Your payment history fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMyNotices(req, res, next) {
+    try {
+      const { page, pageSize } = req.query;
+      const notices = await ParentsService.getMyNotices(req.user?.id, {
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, notices, "Your notices fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/parents/parents.routes.ts
+var router14 = (0, import_express14.Router)();
+var c7 = new ParentsController();
+router14.use(authenticate);
+router14.get("/me", authorizeRoles("PARENT"), c7.getMyProfile.bind(c7));
+router14.patch("/me", authorizeRoles("PARENT"), c7.updateMyProfile.bind(c7));
+router14.get("/me/children", authorizeRoles("PARENT"), c7.getMyChildren.bind(c7));
+router14.get("/me/payments", authorizeRoles("PARENT"), c7.getMyPayments.bind(c7));
+router14.get("/me/notices", authorizeRoles("PARENT"), c7.getMyNotices.bind(c7));
+router14.get("/", authorizeRoles("SCHOOL_ADMIN"), c7.findAll.bind(c7));
+router14.post("/", authorizeRoles("SCHOOL_ADMIN"), c7.create.bind(c7));
+router14.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.findById.bind(c7));
+router14.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.update.bind(c7));
+router14.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.delete.bind(c7));
+router14.post("/:id/children", authorizeRoles("SCHOOL_ADMIN"), c7.linkChild.bind(c7));
+router14.delete(
+  "/:id/children/:studentId",
+  authorizeRoles("SCHOOL_ADMIN"),
+  c7.unlinkChild.bind(c7)
+);
+var parents_routes_default = router14;
+
+// src/modules/notifiction/notifictaion.routes.ts
+var import_express15 = require("express");
+
+// src/modules/notifiction/notification.controller.ts
+init_notification_service();
+var NotificationController = class {
+  /** Admin: manually send to a single user */
+  async send(req, res, next) {
+    try {
+      const notification = await send(req.body);
+      sendSuccess(res, notification, "Notification sent", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  /** Admin: broadcast to a role or everyone */
+  async broadcast(req, res, next) {
+    try {
+      const result = await broadcast(req.body);
+      sendSuccess(res, result, `Notification broadcast to ${result.sent} users`);
+    } catch (err) {
+      next(err);
+    }
+  }
+  /** User: get own notifications */
+  async findAll(req, res, next) {
+    try {
+      const data = await findAll3(req.user.id, req.query);
+      sendSuccess(res, data, "Notifications fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getUnreadCount(req, res, next) {
+    try {
+      const data = await getUnreadCount(req.user.id);
+      sendSuccess(res, data, "Unread count fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async markRead(req, res, next) {
+    try {
+      const notification = await markRead(req.params.id, req.user.id);
+      sendSuccess(res, notification, "Marked as read");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async markAllRead(req, res, next) {
+    try {
+      const result = await markAllRead(req.user.id);
+      sendSuccess(res, result, "All notifications marked as read");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async delete(req, res, next) {
+    try {
+      await deleteNotification(req.params.id, req.user.id);
+      sendSuccess(res, null, "Notification deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async deleteAll(req, res, next) {
+    try {
+      const result = await deleteAll(req.user.id);
+      sendSuccess(res, result, "All notifications deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/notifiction/notifictaion.routes.ts
+var router15 = (0, import_express15.Router)();
+var c8 = new NotificationController();
+router15.use(authenticate);
+router15.post("/", authorizeRoles("SCHOOL_ADMIN"), c8.send.bind(c8));
+router15.post("/broadcast", authorizeRoles("SCHOOL_ADMIN"), c8.broadcast.bind(c8));
+router15.get("/", c8.findAll.bind(c8));
+router15.get("/unread-count", c8.getUnreadCount.bind(c8));
+router15.patch("/mark-all-read", c8.markAllRead.bind(c8));
+router15.delete("/clear-all", c8.deleteAll.bind(c8));
+router15.patch("/:id/read", c8.markRead.bind(c8));
+router15.delete("/:id", c8.delete.bind(c8));
+var notifictaion_routes_default = router15;
+
+// src/modules/homework/howework.routes.ts
+var import_express16 = require("express");
+
+// src/modules/homework/homework.service.ts
+init_db();
+var HOMEWORK_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  dueDate: true,
+  isReviewed: true,
+  createdAt: true,
+  section: { select: { id: true, name: true } },
+  subject: { select: { id: true, name: true, code: true } },
+  teacher: { select: { id: true, employeeId: true, user: { select: { name: true } } } }
+};
+var CACHE_TTL_MS2 = 3e4;
+var sectionHomeworkCache = /* @__PURE__ */ new Map();
+function _cacheGet(sectionId) {
+  const entry = sectionHomeworkCache.get(sectionId);
+  if (!entry) return void 0;
+  if (Date.now() > entry.expiresAt) {
+    sectionHomeworkCache.delete(sectionId);
+    return void 0;
+  }
+  return entry.value;
+}
+function _cacheSet(sectionId, value) {
+  sectionHomeworkCache.set(sectionId, { value, expiresAt: Date.now() + CACHE_TTL_MS2 });
+}
+function _cacheClear(sectionId) {
+  sectionHomeworkCache.delete(sectionId);
+}
+function _isOverdue(dueDate) {
+  return dueDate.getTime() < Date.now();
+}
+function _withComputedStatus(hw) {
+  return { ...hw, isOverdue: _isOverdue(hw.dueDate) };
+}
+var HomeworkService = class {
+  static async create(teacherId, dto) {
+    const [section, subject, teaches] = await Promise.all([
+      db_default.section.findUnique({ where: { id: dto.sectionId }, select: { id: true } }),
+      db_default.subject.findUnique({ where: { id: dto.subjectId }, select: { id: true } }),
+      // WHAT: confirm this teacher is actually assigned to teach this
+      //       subject in this section (via the Timetable relation).
+      db_default.timetable.findFirst({
+        where: { teacherId, sectionId: dto.sectionId, subjectId: dto.subjectId },
+        select: { id: true }
+      })
+    ]);
+    if (!section) throw new Error("Section not found");
+    if (!subject) throw new Error("Subject not found");
+    if (!teaches) throw new Error("You are not assigned to teach this subject for this section");
+    const homework = await db_default.homework.create({
+      data: {
+        teacherId,
+        sectionId: dto.sectionId,
+        subjectId: dto.subjectId,
+        title: dto.title,
+        description: dto.description,
+        dueDate: new Date(dto.dueDate)
+      },
+      select: HOMEWORK_SELECT
+    });
+    _cacheClear(dto.sectionId);
+    return _withComputedStatus(homework);
+  }
+  static async update(teacherId, id, dto) {
+    const existing = await db_default.homework.findUnique({ where: { id }, select: { id: true, teacherId: true, sectionId: true } });
+    if (!existing) throw new Error("Homework not found");
+    if (existing.teacherId !== teacherId) throw new Error("You can only edit your own homework");
+    const homework = await db_default.homework.update({
+      where: { id },
+      data: {
+        ...dto.title !== void 0 && { title: dto.title },
+        ...dto.description !== void 0 && { description: dto.description },
+        ...dto.dueDate !== void 0 && { dueDate: new Date(dto.dueDate) }
+      },
+      select: HOMEWORK_SELECT
+    });
+    _cacheClear(existing.sectionId);
+    return _withComputedStatus(homework);
+  }
+  // WHAT: marks the whole homework item as reviewed by the teacher
+  //       (this schema tracks review at the homework level, not a
+  //       per-student submission — there's no separate submission model).
+  static async markReviewed(teacherId, id) {
+    const existing = await db_default.homework.findUnique({ where: { id }, select: { teacherId: true, sectionId: true } });
+    if (!existing) throw new Error("Homework not found");
+    if (existing.teacherId !== teacherId) throw new Error("You can only review your own homework");
+    const homework = await db_default.homework.update({ where: { id }, data: { isReviewed: true }, select: HOMEWORK_SELECT });
+    _cacheClear(existing.sectionId);
+    return _withComputedStatus(homework);
+  }
+  static async delete(teacherId, id) {
+    const existing = await db_default.homework.findUnique({ where: { id }, select: { teacherId: true, sectionId: true } });
+    if (!existing) throw new Error("Homework not found");
+    if (existing.teacherId !== teacherId) throw new Error("You can only delete your own homework");
+    await db_default.$transaction([
+      db_default.homeworkView.deleteMany({ where: { homeworkId: id } }),
+      db_default.homework.delete({ where: { id } })
+    ]);
+    _cacheClear(existing.sectionId);
+  }
+  // WHAT: paginated list of a teacher's own homework, with optional
+  //       status filter (PENDING / REVIEWED / OVERDUE) computed in JS
+  //       since these aren't stored columns.
+  static async listMine(teacherId, query) {
+    const page = query.page ?? 1;
+    const pageSize = Math.min(query.pageSize ?? 20, 100);
+    const where = {
+      teacherId,
+      ...query.sectionId && { sectionId: query.sectionId },
+      ...query.subjectId && { subjectId: query.subjectId }
+    };
+    const all = await db_default.homework.findMany({
+      where,
+      select: HOMEWORK_SELECT,
+      orderBy: { dueDate: "desc" }
+    });
+    let withStatus = all.map(_withComputedStatus);
+    if (query.status === "PENDING") withStatus = withStatus.filter((h) => !h.isReviewed && !h.isOverdue);
+    if (query.status === "REVIEWED") withStatus = withStatus.filter((h) => h.isReviewed);
+    if (query.status === "OVERDUE") withStatus = withStatus.filter((h) => !h.isReviewed && h.isOverdue);
+    const total = withStatus.length;
+    const data = withStatus.slice((page - 1) * pageSize, page * pageSize);
+    return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+  // WHAT: single homework item with view stats — how many students in
+  //       the section have viewed it vs. the section's total headcount.
+  static async getById(id) {
+    const homework = await db_default.homework.findUnique({ where: { id }, select: HOMEWORK_SELECT });
+    if (!homework) throw new Error("Homework not found");
+    const [viewedCount, totalStudents] = await Promise.all([
+      db_default.homeworkView.count({ where: { homeworkId: id } }),
+      db_default.student.count({ where: { sectionId: homework.section.id } })
+    ]);
+    return { ..._withComputedStatus(homework), viewedCount, totalStudents };
+  }
+  // ── TEACHER dashboard widget: own overdue-and-unreviewed homework ──
+  static async listOverdue(teacherId) {
+    const homework = await db_default.homework.findMany({
+      where: { teacherId, isReviewed: false, dueDate: { lt: /* @__PURE__ */ new Date() } },
+      select: HOMEWORK_SELECT,
+      orderBy: { dueDate: "asc" }
+    });
+    return homework.map(_withComputedStatus);
+  }
+  // =====================================================================
+  // STUDENT / PARENT (shared internal logic)
+  // =====================================================================
+  // WHAT: cached list of ALL homework for a section (no per-student data).
+  static async _getSectionHomework(sectionId) {
+    const cached = _cacheGet(sectionId);
+    if (cached) return cached;
+    const homework = await db_default.homework.findMany({
+      where: { sectionId },
+      select: HOMEWORK_SELECT,
+      orderBy: { dueDate: "desc" }
+    });
+    const withStatus = homework.map(_withComputedStatus);
+    _cacheSet(sectionId, withStatus);
+    return withStatus;
+  }
+  // WHAT: merges the shared section-level cached list with THIS
+  //       student's own "viewed" flags (one small extra query).
+  static async _getHomeworkForStudent(sectionId, studentId, query) {
+    const [sectionHomework, myViews] = await Promise.all([
+      this._getSectionHomework(sectionId),
+      db_default.homeworkView.findMany({ where: { studentId }, select: { homeworkId: true } })
+    ]);
+    const viewedSet = new Set(myViews.map((v) => v.homeworkId));
+    let list = sectionHomework.map((hw) => ({ ...hw, viewed: viewedSet.has(hw.id) }));
+    if (query.status === "UPCOMING") list = list.filter((h) => !h.isOverdue);
+    if (query.status === "OVERDUE") list = list.filter((h) => h.isOverdue);
+    const page = query.page ?? 1;
+    const pageSize = Math.min(query.pageSize ?? 20, 100);
+    const total = list.length;
+    const data = list.slice((page - 1) * pageSize, page * pageSize);
+    return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+  // ── STUDENT: own homework, classId/sectionId resolved server-side ──
+  static async getMyHomework(studentId, query) {
+    const student = await db_default.student.findUnique({ where: { id: studentId }, select: { sectionId: true } });
+    if (!student) throw new Error("Student not found");
+    return this._getHomeworkForStudent(student.sectionId, studentId, query);
+  }
+  // WHAT: student opens a homework item — records that they've seen it.
+  // Uses upsert so calling it twice is harmless (unique constraint on
+  // [homeworkId, studentId] would otherwise throw P2002 on a repeat view).
+  static async markViewed(studentId, homeworkId) {
+    const [student, homework] = await Promise.all([
+      db_default.student.findUnique({ where: { id: studentId }, select: { sectionId: true } }),
+      db_default.homework.findUnique({ where: { id: homeworkId }, select: { sectionId: true } })
+    ]);
+    if (!student) throw new Error("Student not found");
+    if (!homework) throw new Error("Homework not found");
+    if (homework.sectionId !== student.sectionId) throw new Error("This homework is not assigned to your section");
+    return db_default.homeworkView.upsert({
+      where: { homeworkId_studentId: { homeworkId, studentId } },
+      update: {},
+      // already viewed — no-op, just confirms it's recorded
+      create: { homeworkId, studentId }
+    });
+  }
+  // ── PARENT: a child's homework, ownership verified first ───────────
+  static async getChildHomework(parentId, studentId, query) {
+    const student = await db_default.student.findFirst({
+      where: { id: studentId, parentId },
+      select: { sectionId: true }
+    });
+    if (!student) throw new Error("Child not found for this parent");
+    return this._getHomeworkForStudent(student.sectionId, studentId, query);
+  }
+};
+
+// src/modules/homework/homework.controller.ts
+var HomeworkController = class {
+  // ── TEACHER: create 
+  async create(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      const homework = await HomeworkService.create(teacherId, req.body);
+      sendSuccess(res, homework, "Homework created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── TEACHER: update 
+  async update(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      const homework = await HomeworkService.update(teacherId, req.params.id, req.body);
+      sendSuccess(res, homework, "Homework updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── TEACHER: mark reviewed 
+  async markReviewed(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      const homework = await HomeworkService.markReviewed(teacherId, req.params.id);
+      sendSuccess(res, homework, "Homework marked as reviewed");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── TEACHER: delete ─
+  async delete(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      await HomeworkService.delete(teacherId, req.params.id);
+      sendSuccess(res, null, "Homework deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── TEACHER: list own homework, filterable 
+  async listMine(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      const { sectionId, subjectId, status, page, pageSize } = req.query;
+      const result = await HomeworkService.listMine(teacherId, {
+        sectionId,
+        subjectId,
+        status,
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, result, "Homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── TEACHER dashboard widget: overdue & unreviewed 
+  async listOverdue(req, res, next) {
+    try {
+      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
+      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      const data = await HomeworkService.listOverdue(teacherId);
+      sendSuccess(res, data, "Overdue homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── ADMIN / TEACHER: single item with view stats 
+  async getById(req, res, next) {
+    try {
+      const homework = await HomeworkService.getById(req.params.id);
+      sendSuccess(res, homework, "Homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── STUDENT: own homework 
+  async getMyHomework(req, res, next) {
+    try {
+      const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
+      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      const { status, page, pageSize } = req.query;
+      const result = await HomeworkService.getMyHomework(studentId, {
+        status,
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, result, "Your homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── STUDENT: mark one item as viewed 
+  async markViewed(req, res, next) {
+    try {
+      const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
+      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      const result = await HomeworkService.markViewed(studentId, req.params.id);
+      sendSuccess(res, result, "Marked as viewed");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ── PARENT: a specific child's homework 
+  async getChildHomework(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) return res.status(404).json({ success: false, message: "Parent profile not found" });
+      const { status, page, pageSize } = req.query;
+      const result = await HomeworkService.getChildHomework(parentId, req.params.studentId, {
+        status,
+        page: page ? Number(page) : void 0,
+        pageSize: pageSize ? Number(pageSize) : void 0
+      });
+      sendSuccess(res, result, "Child's homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/homework/howework.routes.ts
+var router16 = (0, import_express16.Router)();
+var c9 = new HomeworkController();
+router16.use(authenticate);
+router16.get("/my-homework", authorizeRoles("STUDENT"), c9.getMyHomework.bind(c9));
+router16.patch("/:id/viewed", authorizeRoles("STUDENT"), c9.markViewed.bind(c9));
+router16.get("/child/:studentId", authorizeRoles("PARENT"), c9.getChildHomework.bind(c9));
+router16.get("/my", authorizeRoles("TEACHER"), c9.listMine.bind(c9));
+router16.get("/my/overdue", authorizeRoles("TEACHER"), c9.listOverdue.bind(c9));
+router16.post("/", authorizeRoles("TEACHER"), c9.create.bind(c9));
+router16.patch("/:id", authorizeRoles("TEACHER"), c9.update.bind(c9));
+router16.patch("/:id/review", authorizeRoles("TEACHER"), c9.markReviewed.bind(c9));
+router16.delete("/:id", authorizeRoles("TEACHER"), c9.delete.bind(c9));
+router16.get("/:id", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c9.getById.bind(c9));
+var howework_routes_default = router16;
+
+// src/modules/superAdmin/superAdmin.route.ts
+var import_express17 = require("express");
+
+// src/modules/superAdmin/superAdmin.controller.ts
+init_db();
+var SuperAdminController = class {
+  async getSchools(req, res, next) {
+    try {
+      const totalStudents = await db_default.student.count();
+      const totalTeachers = await db_default.teacher.count();
+      const schoolData = [
+        {
+          id: 1,
+          name: "Greenwood High",
+          students: totalStudents,
+          teachers: totalTeachers,
+          status: "Active"
+        }
+      ];
+      sendSuccess(res, schoolData, "Schools data fetched successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/superAdmin/superAdmin.route.ts
+var router17 = (0, import_express17.Router)();
+var superAdminController = new SuperAdminController();
+router17.use(authenticate);
+router17.get(
+  "/schools",
+  authorizeRoles("SUPER_ADMIN"),
+  superAdminController.getSchools.bind(superAdminController)
+);
+var superAdmin_route_default = router17;
+
+// src/modules/hr/hr.routes.ts
+var import_express18 = require("express");
+
+// src/modules/hr/hr.service.ts
+init_db();
+init_pagination_util();
+var import_pdfkit = __toESM(require("pdfkit"));
+async function createDepartment(dto) {
+  const existing = await db_default.department.findFirst({
+    where: { OR: [{ name: dto.name }, ...dto.code ? [{ code: dto.code }] : []] }
+  });
+  if (existing) {
+    throw { status: 409, message: "Department with this name or code already exists" };
+  }
+  return db_default.department.create({ data: dto });
+}
+async function findAllDepartments() {
+  return db_default.department.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" }
+  });
+}
+async function updateDepartment(id, dto) {
+  const dept = await db_default.department.findUnique({ where: { id } });
+  if (!dept) throw { status: 404, message: "Department not found" };
+  if (dto.name || dto.code) {
+    const duplicate = await db_default.department.findFirst({
+      where: {
+        OR: [
+          ...dto.name ? [{ name: dto.name }] : [],
+          ...dto.code ? [{ code: dto.code }] : []
+        ],
+        NOT: { id }
+      }
+    });
+    if (duplicate) throw { status: 409, message: "Department name or code already in use" };
+  }
+  return db_default.department.update({ where: { id }, data: dto });
+}
+async function deleteDepartment(id) {
+  const dept = await db_default.department.findUnique({ where: { id } });
+  if (!dept) throw { status: 404, message: "Department not found" };
+  return db_default.department.update({ where: { id }, data: { isActive: false } });
+}
+async function nextAutoStaffId() {
+  const all = await db_default.staff.findMany({ select: { employeeId: true } });
+  const maxNumeric = all.reduce((max, s) => {
+    const n = Number(s.employeeId);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return String(maxNumeric + 1).padStart(2, "0");
+}
+async function createStaff(dto, actorId) {
+  const emailExists = await db_default.user.findUnique({ where: { email: dto.email } });
+  if (emailExists) {
+    throw { status: 409, message: "A user with this email already exists" };
+  }
+  const emailDuplicate = await db_default.staff.findUnique({ where: { email: dto.email } });
+  if (emailDuplicate) {
+    throw { status: 409, message: "A staff record with this email already exists" };
+  }
+  let employeeId;
+  const staffCode = dto.employeeId;
+  if (staffCode) {
+    const exists = await db_default.staff.findUnique({ where: { employeeId: staffCode } });
+    if (exists) throw { status: 409, message: "Staff ID already exists" };
+    employeeId = staffCode;
+  } else {
+    employeeId = await nextAutoStaffId();
+  }
+  const buildData = (id) => ({
+    employeeId: id,
+    name: dto.name,
+    email: dto.email,
+    phone: dto.phone,
+    designation: dto.designation,
+    departmentId: dto.departmentId,
+    staffType: dto.staffType ?? "NON_TEACHING",
+    qualification: dto.qualification,
+    experience: dto.experience,
+    address: dto.address,
+    gender: dto.gender,
+    dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : void 0,
+    joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : void 0,
+    bloodGroup: dto.bloodGroup,
+    idProofUrl: dto.idProofUrl,
+    certificates: dto.certificates ?? [],
+    contractUrl: dto.contractUrl,
+    reportingTo: dto.reportingTo
+  });
+  let newStaff;
+  try {
+    newStaff = await db_default.staff.create({ data: buildData(employeeId) });
+  } catch (err) {
+    if (err?.code === "P2002" && !staffCode) {
+      employeeId = await nextAutoStaffId();
+      newStaff = await db_default.staff.create({ data: buildData(employeeId) });
+    } else {
+      throw err;
+    }
+  }
+  await initializeDefaultLeaveBalances(newStaff.id, (/* @__PURE__ */ new Date()).getFullYear());
+  return newStaff;
+}
+async function findAllStaff(query) {
+  const {
+    page = "1",
+    limit = "10",
+    search,
+    departmentId,
+    designation,
+    staffType,
+    isActive
+  } = query;
+  const where = {
+    ...isActive !== void 0 ? { isActive: isActive === "true" } : {},
+    ...departmentId && { departmentId },
+    ...designation && { designation: { contains: designation, mode: "insensitive" } },
+    ...staffType && { staffType },
+    ...search && {
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { employeeId: { contains: search, mode: "insensitive" } }
+      ]
+    }
+  };
+  const { skip, take, meta } = await paginate(db_default.staff, where, parseInt(page, 10), parseInt(limit, 10));
+  const [staff, total] = await Promise.all([
+    db_default.staff.findMany({
+      where,
+      skip,
+      take,
+      include: { department: { select: { id: true, name: true, code: true } } },
+      orderBy: { createdAt: "desc" }
+    }),
+    db_default.staff.count({ where })
+  ]);
+  return {
+    staff,
+    meta: { ...meta, total }
+  };
+}
+async function findStaffById(id) {
+  const staff = await db_default.staff.findUnique({
+    where: { id },
+    include: {
+      department: { select: { id: true, name: true, code: true } }
+    }
+  });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  return staff;
+}
+async function updateStaff(id, dto) {
+  const staff = await db_default.staff.findUnique({ where: { id } });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  if (dto.email && dto.email !== staff.email) {
+    const emailExists = await db_default.staff.findFirst({
+      where: { email: dto.email, NOT: { id } }
+    });
+    if (emailExists) throw { status: 409, message: "Email already in use by another staff member" };
+  }
+  return db_default.staff.update({
+    where: { id },
+    data: dto,
+    include: { department: { select: { id: true, name: true, code: true } } }
+  });
+}
+async function archiveStaff(id) {
+  const staff = await db_default.staff.findUnique({ where: { id } });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  return db_default.staff.update({ where: { id }, data: { isActive: false } });
+}
+async function restoreStaff(id) {
+  const staff = await db_default.staff.findUnique({ where: { id } });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  return db_default.staff.update({ where: { id }, data: { isActive: true } });
+}
+async function getStaffDirectory() {
+  const staff = await db_default.staff.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      employeeId: true,
+      name: true,
+      email: true,
+      phone: true,
+      designation: true,
+      staffType: true,
+      department: { select: { id: true, name: true, code: true } },
+      joiningDate: true
+    },
+    orderBy: { name: "asc" }
+  });
+  return staff;
+}
+async function recordAttendance(dto, actorId) {
+  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId } });
+  if (!staff) throw { status: 404, message: "Staff member not found" };
+  const date = new Date(dto.date);
+  date.setHours(0, 0, 0, 0);
+  return db_default.staffAttendance.upsert({
+    where: {
+      staffId_date: { staffId: dto.staffId, date }
+    },
+    create: {
+      staffId: dto.staffId,
+      date,
+      status: dto.status ?? "PRESENT",
+      note: dto.note
+    },
+    update: {
+      status: dto.status ?? "PRESENT",
+      note: dto.note
+    }
+  });
+}
+async function recordBulkAttendance(dto, actorId) {
+  const date = new Date(dto.date);
+  date.setHours(0, 0, 0, 0);
+  const results = [];
+  for (const entry of dto.attendances) {
+    const staff = await db_default.staff.findUnique({ where: { id: entry.staffId } });
+    if (!staff) continue;
+    const record = await db_default.staffAttendance.upsert({
+      where: {
+        staffId_date: { staffId: entry.staffId, date }
+      },
+      create: {
+        staffId: entry.staffId,
+        date,
+        status: entry.status,
+        note: entry.note
+      },
+      update: {
+        status: entry.status,
+        note: entry.note
+      }
+    });
+    results.push(record);
+  }
+  return { date: dto.date, count: results.length, records: results };
+}
+async function getStaffAttendance(staffId, from, to) {
+  const staff = await db_default.staff.findUnique({ where: { id: staffId } });
+  if (!staff) throw { status: 404, message: "Staff member not found" };
+  const where = { staffId };
+  if (from) where.date = { gte: new Date(from) };
+  if (to) where.date = { ...where.date, lte: new Date(to) };
+  return db_default.staffAttendance.findMany({
+    where,
+    orderBy: { date: "desc" }
+  });
+}
+async function getDailyAttendance(date) {
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+  const records = await db_default.staffAttendance.findMany({
+    where: { date: targetDate },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, staffType: true, department: { select: { name: true } } } } },
+    orderBy: { staff: { name: "asc" } }
+  });
+  return {
+    date,
+    total: records.length,
+    present: records.filter((r) => r.status === "PRESENT").length,
+    absent: records.filter((r) => r.status === "ABSENT").length,
+    late: records.filter((r) => r.status === "LATE").length,
+    records: records.map((r) => ({
+      id: r.id,
+      staffId: r.staffId,
+      staffName: r.staff.name,
+      employeeId: r.staff.employeeId,
+      designation: r.staff.designation,
+      staffType: r.staff.staffType,
+      department: r.staff.department?.name,
+      status: r.status,
+      note: r.note
+    }))
+  };
+}
+async function getAttendanceMonthlySummary(year, month) {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59);
+  const allStaff = await db_default.staff.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, employeeId: true, designation: true }
+  });
+  const summaries = [];
+  for (const staff of allStaff) {
+    const attendances = await db_default.staffAttendance.findMany({
+      where: { staffId: staff.id, date: { gte: start, lte: end } }
+    });
+    const totalDays = attendances.length;
+    const present = attendances.filter((a) => a.status === "PRESENT").length;
+    const absent = attendances.filter((a) => a.status === "ABSENT").length;
+    const late = attendances.filter((a) => a.status === "LATE").length;
+    const leaves = await db_default.leave.findMany({
+      where: {
+        staffId: staff.id,
+        status: "APPROVED",
+        startDate: { lte: end },
+        endDate: { gte: start }
+      }
+    });
+    summaries.push({
+      staffId: staff.id,
+      employeeId: staff.employeeId,
+      name: staff.name,
+      designation: staff.designation,
+      totalWorkingDays: totalDays,
+      present,
+      absent,
+      late,
+      leaveDays: leaves.length,
+      attendancePercent: totalDays > 0 ? Math.round(present / totalDays * 100) : 0
+    });
+  }
+  return { month, year, summaries };
+}
+async function createLeaveRequest(dto, staffId) {
+  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId || staffId } });
+  if (!staff) throw { status: 404, message: "Staff member not found" };
+  const leave = await db_default.leave.create({
+    data: {
+      staffId: dto.staffId || staffId,
+      leaveType: dto.leaveType,
+      startDate: new Date(dto.startDate),
+      endDate: new Date(dto.endDate),
+      reason: dto.reason
+    }
+  });
+  return leave;
+}
+async function findAllLeaveRequests(query) {
+  const { page = "1", limit = "10", status, staffId, leaveType } = query;
+  const where = {};
+  if (status) where.status = status;
+  if (staffId) where.staffId = staffId;
+  if (leaveType) where.leaveType = leaveType;
+  const { skip, take, meta } = await paginate(
+    db_default.leave,
+    where,
+    parseInt(page, 10),
+    parseInt(limit, 10)
+  );
+  const [leaves, total] = await Promise.all([
+    db_default.leave.findMany({
+      where,
+      skip,
+      take,
+      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+      orderBy: { createdAt: "desc" }
+    }),
+    db_default.leave.count({ where })
+  ]);
+  return {
+    leaves,
+    meta: { ...meta, total }
+  };
+}
+async function approveLeaveRequest(id, dto, actorId) {
+  const leave = await db_default.leave.findUnique({ where: { id } });
+  if (!leave) throw { status: 404, message: "Leave request not found" };
+  if (leave.status !== "PENDING") throw { status: 400, message: "Leave request is not pending" };
+  const approved = dto.approved;
+  const updatedLeave = await db_default.leave.update({
+    where: { id },
+    data: {
+      status: approved ? "APPROVED" : "REJECTED",
+      approvedBy: actorId,
+      rejectionReason: approved ? null : dto.rejectionReason
+    },
+    include: { staff: true }
+  });
+  if (approved) {
+    const leaveDays = Math.ceil(
+      (new Date(updatedLeave.endDate).getTime() - new Date(updatedLeave.startDate).getTime()) / (1e3 * 60 * 60 * 24)
+    ) + 1;
+    const year = new Date(updatedLeave.startDate).getFullYear();
+    const balance = await db_default.leaveBalance.findFirst({
+      where: { staffId: leave.staffId, leaveType: updatedLeave.leaveType, year }
+    });
+    if (balance) {
+      await db_default.leaveBalance.update({
+        where: { id: balance.id },
+        data: { usedDays: balance.usedDays + leaveDays }
+      });
+    }
+    const isTeacher = await db_default.teacher.findUnique({ where: { id: leave.staffId } });
+    if (isTeacher) {
+      try {
+        const { broadcast: broadcast2 } = await Promise.resolve().then(() => (init_notification_service(), notification_service_exports));
+        await broadcast2({
+          role: "EXAM_CONTROLLER",
+          title: "Teacher Leave Approved - Reschedule Needed",
+          body: `${isTeacher.name} (${isTeacher.designation ?? "Teacher"}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
+          type: "LEAVE",
+          referenceId: leave.id
+        });
+      } catch (notifErr) {
+        console.error("Failed to broadcast leave notification:", notifErr);
+      }
+    }
+  }
+  return updatedLeave;
+}
+async function getLeaveBalance(staffId, year) {
+  const targetYear = year ?? (/* @__PURE__ */ new Date()).getFullYear();
+  return db_default.leaveBalance.findMany({
+    where: { staffId, year: targetYear },
+    orderBy: { leaveType: "asc" }
+  });
+}
+async function initializeDefaultLeaveBalances(staffId, year) {
+  const leaveTypes = ["CASUAL", "SICK", "EARNED"];
+  const defaults = {
+    CASUAL: 10,
+    SICK: 14,
+    EARNED: 20
+  };
+  await db_default.leaveBalance.createMany({
+    data: leaveTypes.map((lt) => ({
+      staffId,
+      leaveType: lt,
+      totalDays: defaults[lt],
+      year
+    })),
+    skipDuplicates: true
+  });
+}
+async function calculateLeaveDaysInMonth(staffId, month, year) {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59);
+  return db_default.leave.count({
+    where: {
+      staffId,
+      status: "APPROVED",
+      startDate: { lte: end },
+      endDate: { gte: start }
+    }
+  });
+}
+function calculateAttendanceDays(staffId, month, year) {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59);
+  return db_default.staffAttendance.count({
+    where: {
+      staffId,
+      date: { gte: start, lte: end },
+      status: { in: ["PRESENT", "LATE"] }
+    }
+  });
+}
+async function generatePayroll(dto, actorId) {
+  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId } });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  const existing = await db_default.payroll.findFirst({
+    where: { staffId: dto.staffId, month: dto.month, year: dto.year }
+  });
+  if (existing) {
+    throw { status: 409, message: "Payroll for this period already exists" };
+  }
+  const [attendanceDays, leaveDays] = await Promise.all([
+    calculateAttendanceDays(dto.staffId, dto.month, dto.year),
+    calculateLeaveDaysInMonth(dto.staffId, dto.month, dto.year)
+  ]);
+  const dailyRate = dto.basicPay / 26;
+  const leaveDeduction = dailyRate * leaveDays;
+  const netSalary = dto.basicPay + (dto.allowances ?? 0) - (dto.deductions ?? 0) - leaveDeduction;
+  return db_default.payroll.create({
+    data: {
+      staffId: dto.staffId,
+      month: dto.month,
+      year: dto.year,
+      basicPay: dto.basicPay,
+      allowances: dto.allowances ?? 0,
+      deductions: dto.deductions ?? 0,
+      netSalary: Math.max(netSalary, 0),
+      attendanceDays,
+      leaveDays,
+      generatedBy: actorId
+    },
+    include: { staff: { select: { id: true, name: true, employeeId: true } } }
+  });
+}
+async function findAllPayrolls(query) {
+  const { page = "1", limit = "10", month, year, staffId, status } = query;
+  const where = {};
+  if (month) where.month = parseInt(month);
+  if (year) where.year = parseInt(year);
+  if (staffId) where.staffId = staffId;
+  if (status) where.status = status;
+  const { skip, take, meta } = await paginate(
+    db_default.payroll,
+    where,
+    parseInt(page, 10),
+    parseInt(limit, 10)
+  );
+  const [payrolls, total] = await Promise.all([
+    db_default.payroll.findMany({
+      where,
+      skip,
+      take,
+      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+      orderBy: [{ year: "desc" }, { month: "desc" }]
+    }),
+    db_default.payroll.count({ where })
+  ]);
+  return {
+    payrolls,
+    meta: { ...meta, total }
+  };
+}
+async function getPayrollHistory(staffId) {
+  return db_default.payroll.findMany({
+    where: { staffId },
+    orderBy: [{ year: "desc" }, { month: "desc" }]
+  });
+}
+async function markPayrollPaid(id) {
+  const payroll = await db_default.payroll.findUnique({ where: { id } });
+  if (!payroll) throw { status: 404, message: "Payroll not found" };
+  if (payroll.status === "PAID") throw { status: 400, message: "Payroll already marked as paid" };
+  return db_default.payroll.update({
+    where: { id },
+    data: { status: "PAID", paidAt: /* @__PURE__ */ new Date() }
+  });
+}
+async function getPendingPayrolls() {
+  return db_default.payroll.findMany({
+    where: { status: "PENDING" },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+    orderBy: [{ year: "asc" }, { month: "asc" }]
+  });
+}
+async function createPerformanceReview(dto, reviewerId) {
+  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId } });
+  if (!staff) throw { status: 404, message: "Staff not found" };
+  return db_default.performanceReview.create({
+    data: {
+      staffId: dto.staffId,
+      reviewDate: new Date(dto.reviewDate),
+      rating: dto.rating,
+      strengths: dto.strengths,
+      areasToImprove: dto.areasToImprove,
+      comments: dto.comments,
+      reviewedBy: reviewerId
+    },
+    include: { staff: { select: { id: true, name: true, employeeId: true } } }
+  });
+}
+async function findPerformanceReviews(staffId) {
+  return db_default.performanceReview.findMany({
+    where: { staffId },
+    orderBy: { reviewDate: "desc" },
+    include: { staff: { select: { id: true, name: true, employeeId: true } } }
+  });
+}
+async function requestCriticalAction(dto, actorId) {
+  return db_default.criticalAction.create({
+    data: {
+      actionType: dto.actionType,
+      staffId: dto.staffId,
+      staffName: dto.staffName,
+      reason: dto.reason,
+      details: dto.details ?? {},
+      requestedBy: actorId
+    }
+  });
+}
+async function findPendingCriticalActions() {
+  return db_default.criticalAction.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" }
+  });
+}
+async function findCriticalActionById(id) {
+  const action = await db_default.criticalAction.findUnique({ where: { id } });
+  if (!action) throw { status: 404, message: "Critical action not found" };
+  return action;
+}
+async function approveCriticalAction(id, reviewerId, reviewComment) {
+  const action = await db_default.criticalAction.findUnique({ where: { id } });
+  if (!action) throw { status: 404, message: "Critical action not found" };
+  if (action.status !== "PENDING") throw { status: 400, message: "Action is not pending" };
+  const updated = await db_default.criticalAction.update({
+    where: { id },
+    data: {
+      status: "APPROVED",
+      reviewedBy: reviewerId,
+      reviewComment
+    }
+  });
+  if (action.actionType === "TERMINATION") {
+    await db_default.staff.update({ where: { id: action.staffId }, data: { isActive: false } });
+  }
+  return updated;
+}
+async function rejectCriticalAction(id, reviewerId, reviewComment) {
+  const action = await db_default.criticalAction.findUnique({ where: { id } });
+  if (!action) throw { status: 404, message: "Critical action not found" };
+  if (action.status !== "PENDING") throw { status: 400, message: "Action is not pending" };
+  return db_default.criticalAction.update({
+    where: { id },
+    data: {
+      status: "REJECTED",
+      reviewedBy: reviewerId,
+      reviewComment
+    }
+  });
+}
+async function getHRDashboardStats() {
+  const [totalStaff, activeStaff, pendingLeaves, pendingPayrolls, pendingCriticalActions] = await Promise.all([
+    db_default.staff.count(),
+    db_default.staff.count({ where: { isActive: true } }),
+    db_default.leave.count({ where: { status: "PENDING" } }),
+    db_default.payroll.count({ where: { status: "PENDING" } }),
+    db_default.criticalAction.count({ where: { status: "PENDING" } })
+  ]);
+  const now = /* @__PURE__ */ new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const [attendanceStats] = await Promise.all([
+    getAttendanceMonthlySummary(currentYear, currentMonth)
+  ]);
+  const avgAttendance = attendanceStats.summaries.length > 0 ? Math.round(
+    attendanceStats.summaries.reduce((sum, s) => sum + s.attendancePercent, 0) / attendanceStats.summaries.length
+  ) : 0;
+  return {
+    totalStaff,
+    activeStaff,
+    inactiveStaff: totalStaff - activeStaff,
+    pendingLeaves,
+    pendingPayrolls,
+    pendingCriticalActions,
+    avgAttendance,
+    currentMonth,
+    currentYear
+  };
+}
+async function generatePayslipPdf(payrollId) {
+  const payroll = await db_default.payroll.findUnique({
+    where: { id: payrollId },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, department: { select: { name: true } } } } }
+  });
+  if (!payroll) throw { status: 404, message: "Payroll not found" };
+  const doc = new import_pdfkit.default({ size: "A4", margin: 50 });
+  const chunks = [];
+  return new Promise((resolve, reject) => {
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    doc.fontSize(20).text("PAYSLIP", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(10).text(`Period: ${monthNames[payroll.month - 1]} ${payroll.year}`, { align: "center" });
+    doc.moveDown(1);
+    doc.fontSize(14).text("Greenwood School", { align: "center" });
+    doc.fontSize(10).text("123 Education Lane, City", { align: "center" });
+    doc.moveDown(1);
+    doc.fontSize(12).text("Employee Details", { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10);
+    doc.text(`Name: ${payroll.staff.name}`);
+    doc.text(`Employee ID: ${payroll.staff.employeeId}`);
+    doc.text(`Designation: ${payroll.staff.designation ?? "\u2014"}`);
+    doc.text(`Department: ${payroll.staff.department?.name ?? "\u2014"}`);
+    doc.moveDown(1);
+    doc.fontSize(12).text("Salary Breakdown", { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10);
+    const rows = [
+      ["Basic Pay", `\u09F3${payroll.basicPay.toLocaleString()}`],
+      ["Allowances", `\u09F3${payroll.allowances.toLocaleString()}`],
+      ["Deductions", `-\u09F3${payroll.deductions.toLocaleString()}`],
+      ["Attendance Days", String(payroll.attendanceDays)],
+      ["Leave Days", String(payroll.leaveDays)],
+      ["Net Salary", `\u09F3${payroll.netSalary.toLocaleString()}`]
+    ];
+    rows.forEach(([label, value]) => {
+      doc.text(`${label}: ${value}`);
+    });
+    doc.moveDown(1);
+    doc.text(`Status: ${payroll.status}`);
+    doc.text(`Generated: ${new Date(payroll.createdAt).toLocaleDateString()}`);
+    doc.end();
+  });
+}
+
+// src/modules/hr/hr.controller.ts
+var HRController = class {
+  // ─── Dashboard ──────────────────────────────────────────────────
+  async getDashboardStats(req, res, next) {
+    try {
+      const data = await getHRDashboardStats();
+      sendSuccess(res, data, "Dashboard stats fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Departments ────────────────────────────────────────────────
+  async createDepartment(req, res, next) {
+    try {
+      const dept = await createDepartment(req.body);
+      sendSuccess(res, dept, "Department created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllDepartments(req, res, next) {
+    try {
+      const departments = await findAllDepartments();
+      sendSuccess(res, departments, "Departments fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateDepartment(req, res, next) {
+    try {
+      const dept = await updateDepartment(String(req.params.id), req.body);
+      sendSuccess(res, dept, "Department updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async deleteDepartment(req, res, next) {
+    try {
+      const dept = await deleteDepartment(String(req.params.id));
+      sendSuccess(res, dept, "Department deactivated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Staff management ───────────────────────────────────────────
+  async createStaff(req, res, next) {
+    try {
+      const staff = await createStaff(req.body, req.user.id);
+      sendSuccess(res, staff, "Staff created successfully", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllStaff(req, res, next) {
+    try {
+      const data = await findAllStaff(req.query);
+      sendSuccess(res, data, "Staff list fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findStaffById(req, res, next) {
+    try {
+      const staff = await findStaffById(String(req.params.id));
+      sendSuccess(res, staff, "Staff fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateStaff(req, res, next) {
+    try {
+      const staff = await updateStaff(String(req.params.id), req.body);
+      sendSuccess(res, staff, "Staff updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async archiveStaff(req, res, next) {
+    try {
+      const staff = await archiveStaff(String(req.params.id));
+      sendSuccess(res, staff, "Staff profile deactivated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async restoreStaff(req, res, next) {
+    try {
+      const staff = await restoreStaff(String(req.params.id));
+      sendSuccess(res, staff, "Staff profile restored");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getStaffDirectory(req, res, next) {
+    try {
+      const directory = await getStaffDirectory();
+      sendSuccess(res, directory, "Staff directory fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Attendance management ──────────────────────────────────────
+  async recordAttendance(req, res, next) {
+    try {
+      const record = await recordAttendance(req.body, req.user.id);
+      sendSuccess(res, record, "Attendance recorded", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async recordBulkAttendance(req, res, next) {
+    try {
+      const result = await recordBulkAttendance(req.body, req.user.id);
+      sendSuccess(res, result, "Bulk attendance recorded");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getStaffAttendance(req, res, next) {
+    try {
+      const { from, to } = req.query;
+      const records = await getStaffAttendance(String(req.params.id), from, to);
+      sendSuccess(res, records, "Attendance records fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getDailyAttendance(req, res, next) {
+    try {
+      const { date } = req.query;
+      const result = await getDailyAttendance(date || (/* @__PURE__ */ new Date()).toISOString());
+      sendSuccess(res, result, "Daily attendance fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getAttendanceMonthlySummary(req, res, next) {
+    try {
+      const { year, month } = req.query;
+      const y = year ? parseInt(year) : (/* @__PURE__ */ new Date()).getFullYear();
+      const m = month ? parseInt(month) : (/* @__PURE__ */ new Date()).getMonth() + 1;
+      const summary = await getAttendanceMonthlySummary(y, m);
+      sendSuccess(res, summary, "Monthly attendance summary fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Leave management ───────────────────────────────────────────
+  async createLeaveRequest(req, res, next) {
+    try {
+      const leave = await createLeaveRequest(req.body, req.user.id);
+      sendSuccess(res, leave, "Leave request submitted", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllLeaveRequests(req, res, next) {
+    try {
+      const data = await findAllLeaveRequests(req.query);
+      sendSuccess(res, data, "Leave requests fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async approveLeaveRequest(req, res, next) {
+    try {
+      const leave = await approveLeaveRequest(String(req.params.id), req.body, req.user.id);
+      sendSuccess(res, leave, req.body.approved ? "Leave approved" : "Leave rejected");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getLeaveBalance(req, res, next) {
+    try {
+      const { year } = req.query;
+      const balances = await getLeaveBalance(String(req.params.id), year ? parseInt(year) : void 0);
+      sendSuccess(res, balances, "Leave balance fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async initializeLeaveBalances(req, res, next) {
+    try {
+      const { year } = req.body;
+      const y = year ?? (/* @__PURE__ */ new Date()).getFullYear();
+      await initializeDefaultLeaveBalances(String(req.params.id), y);
+      sendSuccess(res, null, "Leave balances initialized");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Payroll management ─────────────────────────────────────────
+  async generatePayroll(req, res, next) {
+    try {
+      const payroll = await generatePayroll(req.body, req.user.id);
+      sendSuccess(res, payroll, "Payroll generated", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllPayrolls(req, res, next) {
+    try {
+      const data = await findAllPayrolls(req.query);
+      sendSuccess(res, data, "Payroll records fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getPayrollHistory(req, res, next) {
+    try {
+      const history = await getPayrollHistory(String(req.params.id));
+      sendSuccess(res, history, "Payroll history fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async markPayrollPaid(req, res, next) {
+    try {
+      const payroll = await markPayrollPaid(String(req.params.id));
+      sendSuccess(res, payroll, "Payroll marked as paid");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getPendingPayrolls(req, res, next) {
+    try {
+      const pending = await getPendingPayrolls();
+      sendSuccess(res, pending, "Pending payrolls fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async downloadPayslip(req, res, next) {
+    try {
+      const pdfBuffer = await generatePayslipPdf(String(req.params.id));
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="payslip-${req.params.id}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Performance Reviews ────────────────────────────────────────
+  async createPerformanceReview(req, res, next) {
+    try {
+      const review = await createPerformanceReview(req.body, req.user.id);
+      sendSuccess(res, review, "Performance review recorded", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findPerformanceReviews(req, res, next) {
+    try {
+      const reviews = await findPerformanceReviews(String(req.params.id));
+      sendSuccess(res, reviews, "Performance reviews fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Critical Actions ───────────────────────────────────────────
+  async requestCriticalAction(req, res, next) {
+    try {
+      const action = await requestCriticalAction(req.body, req.user.id);
+      sendSuccess(res, action, "Critical action requested", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findPendingCriticalActions(req, res, next) {
+    try {
+      const actions = await findPendingCriticalActions();
+      sendSuccess(res, actions, "Pending critical actions fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findCriticalActionById(req, res, next) {
+    try {
+      const action = await findCriticalActionById(String(req.params.id));
+      sendSuccess(res, action, "Critical action fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async approveCriticalAction(req, res, next) {
+    try {
+      const action = await approveCriticalAction(
+        String(req.params.id),
+        req.user.id,
+        req.body.reviewComment
+      );
+      sendSuccess(res, action, "Critical action approved");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async rejectCriticalAction(req, res, next) {
+    try {
+      const action = await rejectCriticalAction(
+        String(req.params.id),
+        req.user.id,
+        req.body.reviewComment || "No comment provided"
+      );
+      sendSuccess(res, action, "Critical action rejected");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/hr/hr.routes.ts
+var router18 = (0, import_express18.Router)();
+var c10 = new HRController();
+router18.use(authenticate);
+router18.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.getDashboardStats.bind(c10));
+router18.post("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createDepartment.bind(c10));
+router18.get("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllDepartments.bind(c10));
+router18.patch("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateDepartment.bind(c10));
+router18.delete("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.deleteDepartment.bind(c10));
+router18.post("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createStaff.bind(c10));
+router18.get("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllStaff.bind(c10));
+router18.get("/staff/directory", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.getStaffDirectory.bind(c10));
+router18.get("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findStaffById.bind(c10));
+router18.patch("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateStaff.bind(c10));
+router18.delete("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.archiveStaff.bind(c10));
+router18.patch("/staff/:id/restore", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.restoreStaff.bind(c10));
+router18.post("/attendance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordAttendance.bind(c10));
+router18.post("/attendance/bulk", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordBulkAttendance.bind(c10));
+router18.get("/attendance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getStaffAttendance.bind(c10));
+router18.get("/attendance/daily", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getDailyAttendance.bind(c10));
+router18.get("/attendance/monthly-summary", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getAttendanceMonthlySummary.bind(c10));
+router18.post("/leave", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.createLeaveRequest.bind(c10));
+router18.get("/leave", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllLeaveRequests.bind(c10));
+router18.patch("/leave/:id/approve", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.approveLeaveRequest.bind(c10));
+router18.get("/leave/staff/:id/balance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getLeaveBalance.bind(c10));
+router18.post("/leave/staff/:id/balance/init", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.initializeLeaveBalances.bind(c10));
+router18.post("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.generatePayroll.bind(c10));
+router18.get("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.findAllPayrolls.bind(c10));
+router18.get("/payroll/pending", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPendingPayrolls.bind(c10));
+router18.get("/payroll/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPayrollHistory.bind(c10));
+router18.get("/payroll/:id/download", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.downloadPayslip.bind(c10));
+router18.patch("/payroll/:id/mark-paid", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.markPayrollPaid.bind(c10));
+router18.post("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.createPerformanceReview.bind(c10));
+router18.get("/performance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findPerformanceReviews.bind(c10));
+router18.post("/critical-actions", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.requestCriticalAction.bind(c10));
+router18.get("/critical-actions", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findPendingCriticalActions.bind(c10));
+router18.get("/critical-actions/:id", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findCriticalActionById.bind(c10));
+router18.patch("/critical-actions/:id/approve", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.approveCriticalAction.bind(c10));
+router18.patch("/critical-actions/:id/reject", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.rejectCriticalAction.bind(c10));
+var hr_routes_default = router18;
+
+// src/modules/recruitment/recruitment.routes.ts
+var import_express19 = require("express");
+
+// src/modules/recruitment/recruitment.service.ts
+init_db();
+init_pagination_util();
+async function createJobPosting(dto, actorId) {
+  return db_default.jobPosting.create({
+    data: {
+      title: dto.title,
+      departmentId: dto.departmentId,
+      designation: dto.designation,
+      vacancies: dto.vacancies,
+      description: dto.description,
+      requirements: dto.requirements,
+      deadline: new Date(dto.deadline),
+      createdBy: actorId
+    },
+    include: { department: { select: { id: true, name: true } } }
+  });
+}
+async function findAllJobPostings(query) {
+  const { page = "1", limit = "10", status, departmentId } = query;
+  const where = {};
+  if (status) where.status = status;
+  if (departmentId) where.departmentId = departmentId;
+  const { skip, take, meta } = await paginate(db_default.jobPosting, where, parseInt(page, 10), parseInt(limit, 10));
+  const [postings, total] = await Promise.all([
+    db_default.jobPosting.findMany({
+      where,
+      skip,
+      take,
+      include: {
+        department: { select: { id: true, name: true, code: true } },
+        applicants: { select: { id: true, name: true, status: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    db_default.jobPosting.count({ where })
+  ]);
+  return {
+    postings: postings.map((p) => ({
+      ...p,
+      applicantCount: p.applicants.length,
+      applicants: void 0
+    })),
+    meta: { ...meta, total }
+  };
+}
+async function findJobPostingById(id) {
+  const posting = await db_default.jobPosting.findUnique({
+    where: { id },
+    include: {
+      department: { select: { id: true, name: true, code: true } },
+      applicants: {
+        include: {
+          interviews: true,
+          offers: true
+        },
+        orderBy: { createdAt: "desc" }
+      }
+    }
+  });
+  if (!posting) throw { status: 404, message: "Job posting not found" };
+  return posting;
+}
+async function updateJobPosting(id, dto) {
+  const posting = await db_default.jobPosting.findUnique({ where: { id } });
+  if (!posting) throw { status: 404, message: "Job posting not found" };
+  const data = { ...dto };
+  if (dto.deadline) {
+    data.deadline = new Date(dto.deadline);
+  }
+  return db_default.jobPosting.update({
+    where: { id },
+    data,
+    include: { department: { select: { id: true, name: true } } }
+  });
+}
+async function closeJobPosting(id) {
+  const posting = await db_default.jobPosting.findUnique({ where: { id } });
+  if (!posting) throw { status: 404, message: "Job posting not found" };
+  return db_default.jobPosting.update({
+    where: { id },
+    data: { status: "CLOSED" }
+  });
+}
+async function createApplicant(dto) {
+  const posting = await db_default.jobPosting.findUnique({ where: { id: dto.jobPostingId } });
+  if (!posting) throw { status: 404, message: "Job posting not found" };
+  return db_default.applicant.create({
+    data: {
+      jobPostingId: dto.jobPostingId,
+      name: dto.name,
+      email: dto.email,
+      phone: dto.phone,
+      resumeUrl: dto.resumeUrl,
+      coverLetter: dto.coverLetter,
+      notes: dto.notes
+    },
+    include: {
+      jobPosting: { select: { id: true, title: true, designation: true } }
+    }
+  });
+}
+async function findAllApplicants(query) {
+  const { page = "1", limit = "10", jobPostingId, status } = query;
+  const where = {};
+  if (jobPostingId) where.jobPostingId = jobPostingId;
+  if (status) where.status = status;
+  const { skip, take, meta } = await paginate(db_default.applicant, where, parseInt(page, 10), parseInt(limit, 10));
+  const [applicants, total] = await Promise.all([
+    db_default.applicant.findMany({
+      where,
+      skip,
+      take,
+      include: {
+        jobPosting: { select: { id: true, title: true, designation: true } },
+        interviews: { orderBy: { scheduledAt: "desc" } },
+        offers: true
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    db_default.applicant.count({ where })
+  ]);
+  return { applicants, meta: { ...meta, total } };
+}
+async function updateApplicantStatus(id, dto) {
+  const applicant = await db_default.applicant.findUnique({ where: { id } });
+  if (!applicant) throw { status: 404, message: "Applicant not found" };
+  return db_default.applicant.update({
+    where: { id },
+    data: { status: dto.status },
+    include: { jobPosting: { select: { id: true, title: true } } }
+  });
+}
+async function findApplicantById(id) {
+  const applicant = await db_default.applicant.findUnique({
+    where: { id },
+    include: {
+      jobPosting: { select: { id: true, title: true, designation: true, department: { select: { id: true, name: true } } } },
+      interviews: { orderBy: { scheduledAt: "desc" } },
+      offers: true
+    }
+  });
+  if (!applicant) throw { status: 404, message: "Applicant not found" };
+  return applicant;
+}
+async function createInterview(dto) {
+  const applicant = await db_default.applicant.findUnique({ where: { id: dto.applicantId } });
+  if (!applicant) throw { status: 404, message: "Applicant not found" };
+  return db_default.interview.create({
+    data: {
+      applicantId: dto.applicantId,
+      scheduledAt: new Date(dto.scheduledAt),
+      location: dto.location,
+      interviewers: dto.interviewers ?? []
+    },
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          jobPosting: { select: { id: true, title: true, designation: true } }
+        }
+      }
+    }
+  });
+}
+async function updateInterview(id, dto) {
+  const interview = await db_default.interview.findUnique({ where: { id } });
+  if (!interview) throw { status: 404, message: "Interview not found" };
+  const data = { ...dto };
+  if (dto.scheduledAt) {
+    data.scheduledAt = new Date(dto.scheduledAt);
+  }
+  return db_default.interview.update({
+    where: { id },
+    data,
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          jobPosting: { select: { id: true, title: true, designation: true } }
+        }
+      }
+    }
+  });
+}
+async function createOffer(dto) {
+  const applicant = await db_default.applicant.findUnique({ where: { id: dto.applicantId } });
+  if (!applicant) throw { status: 404, message: "Applicant not found" };
+  return db_default.offer.create({
+    data: {
+      applicantId: dto.applicantId,
+      position: dto.position,
+      departmentId: dto.departmentId,
+      salary: dto.salary,
+      joiningDate: new Date(dto.joiningDate),
+      validUntil: new Date(dto.validUntil),
+      terms: dto.terms
+    },
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          jobPosting: { select: { id: true, title: true, designation: true } }
+        }
+      }
+    }
+  });
+}
+async function findOfferById(id) {
+  const offer = await db_default.offer.findUnique({
+    where: { id },
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          jobPosting: { select: { id: true, title: true, designation: true, department: { select: { id: true, name: true } } } }
+        }
+      }
+    }
+  });
+  if (!offer) throw { status: 404, message: "Offer not found" };
+  return offer;
+}
+async function acceptOffer(id) {
+  const offer = await db_default.offer.findUnique({
+    where: { id },
+    include: { applicant: true }
+  });
+  if (!offer) throw { status: 404, message: "Offer not found" };
+  if (offer.status === "ACCEPTED") throw { status: 400, message: "Offer already accepted" };
+  const updatedOffer = await db_default.offer.update({
+    where: { id },
+    data: {
+      status: "ACCEPTED",
+      acceptedAt: /* @__PURE__ */ new Date()
+    }
+  });
+  await db_default.applicant.update({
+    where: { id: offer.applicantId },
+    data: { status: "ACCEPTED" }
+  });
+  await db_default.jobPosting.update({
+    where: { id: offer.applicant.jobPostingId },
+    data: { status: "FILLED" }
+  });
+  return updatedOffer;
+}
+async function rejectOffer(id) {
+  const offer = await db_default.offer.findUnique({ where: { id } });
+  if (!offer) throw { status: 404, message: "Offer not found" };
+  return db_default.offer.update({
+    where: { id },
+    data: { status: "DECLINED" }
+  });
+}
+async function createDesignationSalary(dto) {
+  return db_default.designationSalary.create({
+    data: {
+      designation: dto.designation,
+      departmentId: dto.departmentId,
+      basicPay: dto.basicPay,
+      allowances: dto.allowances ?? 0,
+      deductions: dto.deductions ?? 0
+    },
+    include: { department: { select: { id: true, name: true } } }
+  });
+}
+async function findAllDesignationSalaries() {
+  return db_default.designationSalary.findMany({
+    include: { department: { select: { id: true, name: true, code: true } } },
+    orderBy: { designation: "asc" }
+  });
+}
+async function getDesignationSalary(designation) {
+  return db_default.designationSalary.findFirst({
+    where: { designation: { equals: designation, mode: "insensitive" } },
+    include: { department: { select: { id: true, name: true } } }
+  });
+}
+async function getRecruitmentDashboardStats() {
+  const [totalPostings, openPostings, totalApplicants, shortlisted, offersSent, offersAccepted] = await Promise.all([
+    db_default.jobPosting.count(),
+    db_default.jobPosting.count({ where: { status: "OPEN" } }),
+    db_default.applicant.count(),
+    db_default.applicant.count({ where: { status: "SHORTLISTED" } }),
+    db_default.applicant.count({ where: { status: "OFFERED" } }),
+    db_default.applicant.count({ where: { status: "ACCEPTED" } })
+  ]);
+  return {
+    totalPostings,
+    openPostings,
+    totalApplicants,
+    shortlisted,
+    offersSent,
+    offersAccepted
+  };
+}
+
+// src/modules/recruitment/recruitment.controller.ts
+var RecruitmentController = class {
+  async getDashboardStats(req, res, next) {
+    try {
+      const data = await getRecruitmentDashboardStats();
+      sendSuccess(res, data, "Recruitment stats fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Job Postings ───────────────────────────────────────────────
+  async createJobPosting(req, res, next) {
+    try {
+      const posting = await createJobPosting(req.body, req.user.id);
+      sendSuccess(res, posting, "Job posting created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllJobPostings(req, res, next) {
+    try {
+      const data = await findAllJobPostings(req.query);
+      sendSuccess(res, data, "Job postings fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findJobPostingById(req, res, next) {
+    try {
+      const posting = await findJobPostingById(String(req.params.id));
+      sendSuccess(res, posting, "Job posting fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateJobPosting(req, res, next) {
+    try {
+      const posting = await updateJobPosting(String(req.params.id), req.body);
+      sendSuccess(res, posting, "Job posting updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async closeJobPosting(req, res, next) {
+    try {
+      const posting = await closeJobPosting(String(req.params.id));
+      sendSuccess(res, posting, "Job posting closed");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Applicants ────────────────────────────────────────────────
+  async createApplicant(req, res, next) {
+    try {
+      const applicant = await createApplicant(req.body);
+      sendSuccess(res, applicant, "Applicant created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllApplicants(req, res, next) {
+    try {
+      const data = await findAllApplicants(req.query);
+      sendSuccess(res, data, "Applicants fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findApplicantById(req, res, next) {
+    try {
+      const applicant = await findApplicantById(String(req.params.id));
+      sendSuccess(res, applicant, "Applicant fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateApplicantStatus(req, res, next) {
+    try {
+      const applicant = await updateApplicantStatus(String(req.params.id), req.body);
+      sendSuccess(res, applicant, "Applicant status updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Interviews ────────────────────────────────────────────────
+  async createInterview(req, res, next) {
+    try {
+      const interview = await createInterview(req.body);
+      sendSuccess(res, interview, "Interview scheduled", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateInterview(req, res, next) {
+    try {
+      const interview = await updateInterview(String(req.params.id), req.body);
+      sendSuccess(res, interview, "Interview updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Offers ────────────────────────────────────────────────────
+  async createOffer(req, res, next) {
+    try {
+      const offer = await createOffer(req.body);
+      sendSuccess(res, offer, "Offer created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findOfferById(req, res, next) {
+    try {
+      const offer = await findOfferById(String(req.params.id));
+      sendSuccess(res, offer, "Offer fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async acceptOffer(req, res, next) {
+    try {
+      const offer = await acceptOffer(String(req.params.id));
+      sendSuccess(res, offer, "Offer accepted");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async rejectOffer(req, res, next) {
+    try {
+      const offer = await rejectOffer(String(req.params.id));
+      sendSuccess(res, offer, "Offer rejected");
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Designation Salaries ──────────────────────────────────────
+  async createDesignationSalary(req, res, next) {
+    try {
+      const salary = await createDesignationSalary(req.body);
+      sendSuccess(res, salary, "Designation salary created", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async findAllDesignationSalaries(req, res, next) {
+    try {
+      const salaries = await findAllDesignationSalaries();
+      sendSuccess(res, salaries, "Designation salaries fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getDesignationSalary(req, res, next) {
+    try {
+      const salary = await getDesignationSalary(String(req.params.designation));
+      sendSuccess(res, salary, "Designation salary fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/recruitment/recruitment.routes.ts
+var router19 = (0, import_express19.Router)();
+var c11 = new RecruitmentController();
+router19.use(authenticate);
+router19.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.getDashboardStats.bind(c11));
+router19.post("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createJobPosting.bind(c11));
+router19.get("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllJobPostings.bind(c11));
+router19.get("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findJobPostingById.bind(c11));
+router19.patch("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateJobPosting.bind(c11));
+router19.patch("/jobs/:id/close", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.closeJobPosting.bind(c11));
+router19.post("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createApplicant.bind(c11));
+router19.get("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllApplicants.bind(c11));
+router19.get("/applicants/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findApplicantById.bind(c11));
+router19.patch("/applicants/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateApplicantStatus.bind(c11));
+router19.post("/interviews", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createInterview.bind(c11));
+router19.patch("/interviews/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateInterview.bind(c11));
+router19.post("/offers", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createOffer.bind(c11));
+router19.get("/offers/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findOfferById.bind(c11));
+router19.patch("/offers/:id/accept", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.acceptOffer.bind(c11));
+router19.patch("/offers/:id/reject", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.rejectOffer.bind(c11));
+router19.post("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createDesignationSalary.bind(c11));
+router19.get("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllDesignationSalaries.bind(c11));
+router19.get("/designation-salaries/:designation", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.getDesignationSalary.bind(c11));
+var recruitment_routes_default = router19;
+
 // src/routes/index.ts
-var router13 = import_express13.default.Router();
-router13.get("/health", (req, res) => {
+var router20 = import_express20.default.Router();
+router20.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router13.use("/auth", auth_route_default);
-router13.use("/students", students_route_default);
-router13.use("/subjects", subject_router_default);
-router13.use("/classes", class_route_default);
-router13.use("/exams", exam_route_default);
-router13.use("/attendance", attendacne_router_default);
-router13.use("/teachers", teacher_routes_default);
-router13.use("/results", result_router_default);
-router13.use("/admission", admission_routes_default);
-router13.use("/fees", router_default);
-router13.use("/teaching", teachingApplication_routes_default);
-router13.use("/notices", notice_route_default);
-var routes_default = router13;
+router20.use("/auth", auth_route_default);
+router20.use("/students", students_route_default);
+router20.use("/subjects", subject_router_default);
+router20.use("/classes", class_route_default);
+router20.use("/exams", exam_route_default);
+router20.use("/attendance", attendacne_router_default);
+router20.use("/teachers", teacher_routes_default);
+router20.use("/results", result_router_default);
+router20.use("/admission", admission_routes_default);
+router20.use("/fees", router_default);
+router20.use("/teaching", teachingApplication_routes_default);
+router20.use("/notices", notice_route_default);
+router20.use("/timetable", timetable_routes_default);
+router20.use("/homework", howework_routes_default);
+router20.use("/parents", parents_routes_default);
+router20.use("/notifications", notifictaion_routes_default);
+router20.use("/super-admin", superAdmin_route_default);
+router20.use("/hr", hr_routes_default);
+router20.use("/recruitment", recruitment_routes_default);
+var routes_default = router20;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express14.default)();
+var app = (0, import_express21.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
 var allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:3000",
-  "http://127.0.0.1:3000"
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001"
 ].filter((origin) => Boolean(origin));
+var allowedOriginSet = new Set(allowedOrigins);
+var isLocalhost = (origin) => origin.includes("localhost") || origin.includes("127.0.0.1");
 app.use(
   (0, import_cors.default)({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
         return callback(null, true);
       }
+      if (allowedOriginSet.has(origin) || isLocalhost(origin)) {
+        return callback(null, true);
+      }
+      logger_default.warn(`CORS blocked for origin: ${origin}`);
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true
   })
 );
-app.use(import_express14.default.json());
+if (process.env.NODE_ENV !== "production") {
+  app.use((req, res, next) => {
+    logger_default.info(`[REQUEST] ${req.method} ${req.path}`);
+    next();
+  });
+}
+app.use(import_express21.default.json({ limit: "1mb" }));
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -21365,7 +25424,7 @@ app.get("/", (req, res) => {
 });
 app.use("/api/v1", routes_default);
 app.use(errorMiddleware);
-var PORT = process.env.PORT || 5001;
+var PORT = process.env.PORT || 5e3;
 server.listen(PORT, () => {
   console.log(`
  Server running on port ${PORT}

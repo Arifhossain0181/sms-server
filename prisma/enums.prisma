@@ -179,3 +179,8 @@ enum ApplicantStatus {
   ACCEPTED
   DECLINED
 }
+enum MarkStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
