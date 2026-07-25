@@ -19,6 +19,7 @@ import superAdminRoutes from '../modules/superAdmin/superAdmin.route';
 import hrRoutes from '../modules/hr/hr.routes';
 import dashboardRoutes from '../modules/dashboard/dashboard.route';
 import recruitmentRoutes from '../modules/recruitment/recruitment.routes';
+import { gradingRoutes } from '../modules/grading/grading.route';
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/super-admin', superAdminRoutes);
 router.use('/hr', hrRoutes);
 router.use('/recruitment', recruitmentRoutes);
+router.use('/grading-rules', gradingRoutes);
 router.use('/dashboard', dashboardRoutes);
-
 
 export default router;

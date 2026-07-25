@@ -6,6 +6,8 @@ import { authorizeRoles } from '../../middleware/role.middleware';
 const router = Router();
 const c = new TimetableController();
 
+const VIEWERS = ['SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'] as const;
+
 router.use(authenticate);
 
 /**
@@ -33,11 +35,11 @@ router.get('/my-routine/today',         authorizeRoles('STUDENT'), c.getMyTodayR
 router.get('/parent/child/:studentId',        authorizeRoles('PARENT'), c.getChildRoutine.bind(c));
 router.get('/parent/child/:studentId/today',  authorizeRoles('PARENT'), c.getChildTodayRoutine.bind(c));
 
-// ── ADMIN / TEACHER: staff-facing browse & filter ────────────────────
-router.get('/',                         authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.findAll.bind(c));
-router.get('/class/:classId',           authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getClassWeeklyView.bind(c));
-router.get('/teacher/:teacherId',       authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getTeacherWeeklyView.bind(c));
-router.get('/:id',                      authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.findById.bind(c));
+// ── ADMIN / TEACHER / EXAM_CONTROLLER: staff-facing browse & filter ────────────────────
+router.get('/',                         authorizeRoles(...VIEWERS), c.findAll.bind(c));
+router.get('/class/:classId',           authorizeRoles(...VIEWERS), c.getClassWeeklyView.bind(c));
+router.get('/teacher/:teacherId',       authorizeRoles(...VIEWERS), c.getTeacherWeeklyView.bind(c));
+router.get('/:id',                      authorizeRoles(...VIEWERS), c.findById.bind(c));
 
 // ── Write: EXAM_CONTROLLER only 
 router.post('/',                        authorizeRoles('EXAM_CONTROLLER'), c.createSlot.bind(c));

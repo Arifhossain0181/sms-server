@@ -19,7 +19,7 @@ router.get('/dashboard/my-dashboard', authorizeRoles('STUDENT'), studentControll
 // Student: view own class routine
 router.get('/routine/my-routine', authorizeRoles('STUDENT'), studentController.getClassRoutine.bind(studentController));
 
-// Admin / Teacher access
+// Admin / Exam Controller / Teacher / Accountant access
 router.post(
   '/',
   authorizeRoles('SCHOOL_ADMIN'),
@@ -28,7 +28,7 @@ router.post(
 
 router.get(
   '/',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'EXAM_CONTROLLER'),
   studentController.findAll.bind(studentController)
 );
 
@@ -40,7 +40,7 @@ router.get(
 
 router.get(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'EXAM_CONTROLLER'),
   studentController.findById.bind(studentController)
 );
 
@@ -65,13 +65,13 @@ router.patch(
 
 router.get(
   '/:id/attendance',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   studentController.getAttendanceSummary.bind(studentController)
 );
 
 router.get(
   '/:id/results',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   studentController.getResultSummary.bind(studentController)
 );
 

@@ -14,6 +14,7 @@ router.use(authenticate);
 
 router.post('/',                        authorizeRoles(...EXAM_STAFF), examController.createExam);
 router.get('/',                         authorizeRoles(...EXAM_VIEWERS), examController.getAllExams);
+router.get('/publishing',               authorizeRoles(...EXAM_VIEWERS), examController.getExamsForPublishing);
 router.get('/:id',                      authorizeRoles(...EXAM_VIEWERS), examController.getExamById);
 router.put('/:id',                      authorizeRoles(...EXAM_STAFF), examController.updateExam);
 router.delete('/:id',                   authorizeRoles(...EXAM_STAFF), examController.deleteExam);
@@ -42,13 +43,13 @@ router.get('/child/:studentId/results',  authorizeRoles('PARENT'), examControlle
 
 router.use('/grading-rules', gradingRoutes);
 router.get(
-    '/exams/:examId/students/:studentId/admit-card',
+    '/:examId/students/:studentId/admit-card',
     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN', 'STUDENT', 'PARENT'),
     examController.downloadAdmitCard
 );
 
 router.get(
-    '/exams/:examId/classes/:classId/admit-cards',
+    '/:examId/classes/:classId/admit-cards',
     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'),
     examController.listAdmitCardDataForClass
 );

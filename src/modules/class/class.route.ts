@@ -7,7 +7,7 @@ const router = Router();
 
 // Class/section management is School Admin's job (doc Req 1.5);
 // Super Admin included as an override, same pattern used in the attendance module.
-const CLASS_MANAGERS = ['SCHOOL_ADMIN', 'SUPER_ADMIN'] as const;
+const CLASS_MANAGERS = ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'EXAM_CONTROLLER'] as const;
 
 // Class routes
 router.post('/',          authenticate, authorizeRoles(...CLASS_MANAGERS), classController.createClass);

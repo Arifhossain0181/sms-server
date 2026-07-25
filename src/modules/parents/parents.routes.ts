@@ -15,17 +15,8 @@ router.get("/me/children", authorizeRoles("PARENT"), c.getMyChildren.bind(c));
 router.get("/me/payments", authorizeRoles("PARENT"), c.getMyPayments.bind(c));
 router.get("/me/notices", authorizeRoles("PARENT"), c.getMyNotices.bind(c));
 
-// ── ADMIN: full CRUD + child linking ─────────────────────────────────
-router.get("/", authorizeRoles("SCHOOL_ADMIN"), c.findAll.bind(c));
-router.post("/", authorizeRoles("SCHOOL_ADMIN"), c.create.bind(c));
-router.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c.findById.bind(c));
-router.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c.update.bind(c));
-router.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c.delete.bind(c));
-router.post("/:id/children", authorizeRoles("SCHOOL_ADMIN"), c.linkChild.bind(c));
-router.delete(
-  "/:id/children/:studentId",
-  authorizeRoles("SCHOOL_ADMIN"),
-  c.unlinkChild.bind(c),
-);
+// ── ADMIN / EXAM_CONTROLLER: full CRUD + child linking ─────────────────────────────────
+router.get("/", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c.findAll.bind(c));
+router.get("/:id", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c.findById.bind(c));
 
 export default router;

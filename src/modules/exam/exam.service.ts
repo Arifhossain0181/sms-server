@@ -64,6 +64,48 @@ export const getAllExams = async (classId?: string) => {
     return exams;
 };
 
+export const getExamsForPublishing = async () => {
+    const exams = await prisma.exam.findMany({
+        include: {
+            schedules: {
+                include: { subject: true, class: true },
+                orderBy: { examDate: 'asc' },
+            },
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+
+    const result = [];
+    for (const exam of exams) {
+        const [pendingCount, reportCardCount] = await Promise.all([
+            prisma.mark.count({ where: { examId: exam.id, status: 'SUBMITTED' } }),
+            prisma.reportCard.count({ where: { examId: exam.id } }),
+        ]);
+
+        let status: 'PUBLISHED' | 'DRAFT' | 'UNPUBLISHED' = 'DRAFT';
+        if (reportCardCount > 0 && pendingCount === 0) {
+            const published = await prisma.reportCard.findFirst({
+                where: { examId: exam.id },
+                select: { status: true },
+            });
+            status = published?.status === 'PUBLISHED' ? 'PUBLISHED' : 'UNPUBLISHED';
+        }
+
+        result.push({
+            id: exam.id,
+            name: exam.name,
+            type: exam.type,
+            totalMarks: exam.totalMarks,
+            schedules: exam.schedules,
+            status,
+            pendingCount,
+            reportCardCount,
+        });
+    }
+
+    return result;
+};
+
 export const getExamScheduleForClass = async (classId: string) => {
     return prisma.examSchedule.findMany({
         where: { classId },

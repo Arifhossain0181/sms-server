@@ -37,6 +37,13 @@ export const getAllExams = async (req: Request, res: Response, next: NextFunctio
   } catch (err) { next(err); }
 };
 
+export const getExamsForPublishing = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await examService.getExamsForPublishing();
+    sendSuccess(res, data);
+  } catch (err) { next(err); }
+};
+
 /** Staff-only detail — same reasoning as getAllExams. */
 export const getExamById = async (req: Request, res: Response, next: NextFunction) => {
   try {

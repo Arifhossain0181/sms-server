@@ -13,18 +13,18 @@ router.use(authenticate);
 // Teacher: view own profile & schedule
 router.get('/me', authorizeRoles('TEACHER'), teacherController.getMyProfile.bind(teacherController));
 
-// Admin only routes
+// Admin / Exam Controller / Teacher access
 router.post('/', authorizeRoles('SCHOOL_ADMIN'), teacherController.create.bind(teacherController));
 
 router.get(
   '/',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.findAll.bind(teacherController)
 );
 
 router.get(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER'),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.findById.bind(teacherController)
 );
 
@@ -61,13 +61,13 @@ router.patch(
 
 router.get(
   '/:id/schedule',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER',),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getSchedule.bind(teacherController)
 );
 
 router.get(
   '/:id/dashboard',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER',),
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getDashboardStats.bind(teacherController)
 );
 

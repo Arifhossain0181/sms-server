@@ -10,7 +10,7 @@ export class HomeworkController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       const homework = await HomeworkService.create(teacherId, req.body);
       sendSuccess(res, homework, 'Homework created', 201);
@@ -21,7 +21,7 @@ export class HomeworkController {
   async update(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       const homework = await HomeworkService.update(teacherId, req.params.id as string, req.body);
       sendSuccess(res, homework, 'Homework updated');
@@ -32,7 +32,7 @@ export class HomeworkController {
   async markReviewed(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       const homework = await HomeworkService.markReviewed(teacherId, req.params.id as string);
       sendSuccess(res, homework, 'Homework marked as reviewed');
@@ -43,7 +43,7 @@ export class HomeworkController {
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       await HomeworkService.delete(teacherId, req.params.id as string);
       sendSuccess(res, null, 'Homework deleted');
@@ -54,7 +54,7 @@ export class HomeworkController {
   async listMine(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       const { sectionId, subjectId, status, page, pageSize } = req.query as any;
       const result = await HomeworkService.listMine(teacherId, {
@@ -70,7 +70,7 @@ export class HomeworkController {
   async listOverdue(req: Request, res: Response, next: NextFunction) {
     try {
       const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
 
       const data = await HomeworkService.listOverdue(teacherId);
       sendSuccess(res, data, 'Overdue homework fetched');
@@ -89,7 +89,7 @@ export class HomeworkController {
   async getMyHomework(req: Request, res: Response, next: NextFunction) {
     try {
       const studentId = await StudentService.getStudentIdByUserId((req.user as any)?.id);
-      if (!studentId) return res.status(404).json({ success: false, message: 'Student profile not found' });
+      if (!studentId) return res.status(403).json({ success: false, message: 'Student profile not found for this user' });
 
       const { status, page, pageSize } = req.query as any;
       const result = await HomeworkService.getMyHomework(studentId, {
@@ -103,7 +103,7 @@ export class HomeworkController {
   async markViewed(req: Request, res: Response, next: NextFunction) {
     try {
       const studentId = await StudentService.getStudentIdByUserId((req.user as any)?.id);
-      if (!studentId) return res.status(404).json({ success: false, message: 'Student profile not found' });
+      if (!studentId) return res.status(403).json({ success: false, message: 'Student profile not found for this user' });
 
       const result = await HomeworkService.markViewed(studentId, req.params.id as string);
       sendSuccess(res, result, 'Marked as viewed');
@@ -114,7 +114,7 @@ export class HomeworkController {
   async getChildHomework(req: Request, res: Response, next: NextFunction) {
     try {
       const parentId = await ParentsService.getParentIdByUserId((req.user as any)?.id);
-      if (!parentId) return res.status(404).json({ success: false, message: 'Parent profile not found' });
+      if (!parentId) return res.status(403).json({ success: false, message: 'Parent profile not found for this user' });
 
       const { status, page, pageSize } = req.query as any;
       const result = await HomeworkService.getChildHomework(parentId, req.params.studentId as string, {
