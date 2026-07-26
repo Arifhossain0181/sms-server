@@ -57,6 +57,18 @@ router.delete(
 );
 
 router.patch(
+  '/:id/deactivate',
+  authorizeRoles('SCHOOL_ADMIN'),
+  studentController.deactivate.bind(studentController)
+);
+
+router.patch(
+  '/:id/reactivate',
+  authorizeRoles('SCHOOL_ADMIN'),
+  studentController.reactivate.bind(studentController)
+);
+
+router.patch(
   '/:id/avatar',
   authorizeRoles('SCHOOL_ADMIN'),
   upload.single('avatar'),

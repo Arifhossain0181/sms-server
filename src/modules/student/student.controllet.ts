@@ -96,6 +96,24 @@ export class StudentController {
       next(err);
     }
   }
+
+  async deactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await studentService.deactivate(String(req.params.id));
+      sendSuccess(res, null, 'Student deactivated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async reactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await studentService.reactivate(String(req.params.id));
+      sendSuccess(res, null, 'Student reactivated');
+    } catch (err) {
+      next(err);
+    }
+  }
  
   async uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

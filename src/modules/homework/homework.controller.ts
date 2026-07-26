@@ -9,8 +9,9 @@ export class HomeworkController {
   // ── TEACHER: create 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       const homework = await HomeworkService.create(teacherId, req.body);
       sendSuccess(res, homework, 'Homework created', 201);
@@ -20,8 +21,9 @@ export class HomeworkController {
   // ── TEACHER: update 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       const homework = await HomeworkService.update(teacherId, req.params.id as string, req.body);
       sendSuccess(res, homework, 'Homework updated');
@@ -31,8 +33,9 @@ export class HomeworkController {
   // ── TEACHER: mark reviewed 
   async markReviewed(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       const homework = await HomeworkService.markReviewed(teacherId, req.params.id as string);
       sendSuccess(res, homework, 'Homework marked as reviewed');
@@ -42,8 +45,9 @@ export class HomeworkController {
   // ── TEACHER: delete ─
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       await HomeworkService.delete(teacherId, req.params.id as string);
       sendSuccess(res, null, 'Homework deleted');
@@ -53,8 +57,9 @@ export class HomeworkController {
   // ── TEACHER: list own homework, filterable 
   async listMine(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       const { sectionId, subjectId, status, page, pageSize } = req.query as any;
       const result = await HomeworkService.listMine(teacherId, {
@@ -69,8 +74,9 @@ export class HomeworkController {
   // ── TEACHER dashboard widget: overdue & unreviewed 
   async listOverdue(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId((req.user as any)?.id);
-      if (!teacherId) return res.status(403).json({ success: false, message: 'Teacher profile not found for this user' });
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
 
       const data = await HomeworkService.listOverdue(teacherId);
       sendSuccess(res, data, 'Overdue homework fetched');
