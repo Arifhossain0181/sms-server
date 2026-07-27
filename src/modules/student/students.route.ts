@@ -18,6 +18,7 @@ router.get('/dashboard/my-dashboard', authorizeRoles('STUDENT'), studentControll
 
 // Student: view own class routine
 router.get('/routine/my-routine', authorizeRoles('STUDENT'), studentController.getClassRoutine.bind(studentController));
+router.post('/promote', authorizeRoles('SCHOOL_ADMIN', 'SUPER_ADMIN'), studentController.promoteStudents.bind(studentController));
 
 // Admin / Exam Controller / Teacher / Accountant access
 router.post(

@@ -7,6 +7,7 @@ import {
   update as updateNotice,
   deleteNotice,
   toggleActive as toggleNoticeActive,
+  togglePin,
   markAsRead,
 } from './notice.service';
 import { sendSuccess } from '../../utils/response.util';
@@ -87,6 +88,16 @@ export class NoticeController {
       if (!idStr) throw new Error('id param required');
       const notice = await toggleNoticeActive(idStr);
       sendSuccess(res, notice, `Notice ${notice.isActive ? 'activated' : 'deactivated'}`);
+    } catch (err) { next(err); }
+  }
+
+  async togglePin(req: Request, res: Response, next: NextFunction) {
+    try {
+      let { id } = req.params as { id: string | string[] };
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error('id param required');
+      const notice = await togglePin(idStr);
+      sendSuccess(res, notice, `Notice ${notice.pinned ? 'pinned' : 'unpinned'}`);
     } catch (err) { next(err); }
   }
 }

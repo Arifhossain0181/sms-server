@@ -378,4 +378,37 @@ export class StudentService {
             results,
         };
     }
+
+    async promoteStudents(studentIds: string[], targetClassId: string, targetSectionId: string) {
+        if (!studentIds.length) return { message: 'No students provided' };
+
+        const classExists = await prisma.class.findUnique({ where: { id: targetClassId } });
+        if (!classExists) throw new Error("Target class not found");
+
+        const sectionExists = await prisma.section.findUnique({ where: { id: targetSectionId, classId: targetClassId } });
+        if (!sectionExists) throw new Error("Target section not found or does not belong to the target class");
+
+        return prisma.$transaction(async (tx) => {
+            // Find current max roll number in the target section
+            const maxRollStudent = await tx.student.findFirst({
+                where: { sectionId: targetSectionId },
+                orderBy: { rollNumber: 'desc' }
+            });
+            let nextRollNumber = maxRollStudent ? maxRollStudent.rollNumber + 1 : 1;
+
+            for (const studentId of studentIds) {
+                await tx.student.update({
+                    where: { id: studentId },
+                    data: {
+                        classId: targetClassId,
+                        sectionId: targetSectionId,
+                        rollNumber: nextRollNumber
+                    }
+                });
+                nextRollNumber++;
+            }
+
+            return { message: `Successfully promoted ${studentIds.length} students` };
+        });
+    }
 }

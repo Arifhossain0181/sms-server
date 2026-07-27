@@ -242,6 +242,14 @@ export const toggleActive = async (id: string) => {
     });
 };
 
+export const togglePin = async (id: string) => {
+    const notice = await findById(id);
+    return prisma.notice.update({
+        where: { id },
+        data: { pinned: !notice.pinned },
+    });
+};
+
 /**
  * Fetch notices for an authenticated user based on their role and userId.
  * Maps the user to their appropriate recipient ID (studentId, parentId, or userId).

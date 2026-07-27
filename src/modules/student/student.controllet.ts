@@ -173,5 +173,18 @@ export class StudentController {
       next(err);
     }
   }
+
+  async promoteStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { studentIds, targetClassId, targetSectionId } = req.body;
+      if (!Array.isArray(studentIds) || !targetClassId || !targetSectionId) {
+        res.status(400).json({ success: false, message: 'Invalid payload: missing studentIds, targetClassId, or targetSectionId' });
+        return;
+      }
+      const result = await studentService.promoteStudents(studentIds, targetClassId, targetSectionId);
+      sendSuccess(res, result, 'Students promoted successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
- 

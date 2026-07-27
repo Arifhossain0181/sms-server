@@ -25,5 +25,6 @@ router.get('/:id',            authorizeRoles('SCHOOL_ADMIN'), c.findById.bind(c)
 router.patch('/:id',          authorizeRoles('SCHOOL_ADMIN'), c.update.bind(c));
 router.delete('/:id',         authorizeRoles('SCHOOL_ADMIN'), c.delete.bind(c));
 router.patch('/:id/toggle',   authorizeRoles('SCHOOL_ADMIN'), c.toggleActive.bind(c));
+router.patch('/:id/pin',      authorizeRoles('SCHOOL_ADMIN'), c.togglePin.bind(c));
 
 export default router;
