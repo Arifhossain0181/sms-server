@@ -25,7 +25,6 @@ import { gradingRoutes } from '../modules/grading/grading.route';
 import tcRoutes from '../modules/student/tc.route';
 import roleRoutes from '../modules/role/role.route';
 import reportRoutes from '../modules/report/reports.route';
-import librarianRoutes from '../modules/librarian/librarian.route';
 
 const router = express.Router();
 
@@ -59,6 +58,5 @@ router.use('/dashboard', dashboardSchoolRoutes);
 router.use('/tc', tcRoutes);
 router.use('/roles', roleRoutes);
 router.use('/reports', reportRoutes);
-router.use('/librarian', librarianRoutes);
 
 export default router;

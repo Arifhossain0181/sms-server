@@ -106,6 +106,7 @@ export class StudentService {
                     },
                 },
                 class: { select: { id: true, name: true } },
+                section: { select: { id: true, name: true } },
                 admissionRecord: { select: { guardianPhone: true, guardianEmail: true, guardianName: true } },
             },
             orderBy: { createdAt: 'desc' },
