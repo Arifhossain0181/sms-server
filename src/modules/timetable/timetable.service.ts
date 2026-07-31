@@ -10,6 +10,7 @@ import {
 
 const SLOT_SELECT = {
   id: true,
+  classId: true,
   dayOfWeek: true,
   startTime: true,
   endTime: true,
@@ -298,9 +299,15 @@ export const getMyClassTimetable = async (studentId: string) => {
     where: { id: studentId },
     select: { classId: true },
   });
-  if (!student) throw new Error('Student not found');
+  if (!student) throw { status: 404, message: 'Student not found' };
 
-  return getClassWeeklyView(student.classId);
+  const slots = await prisma.timetable.findMany({
+    where: { classId: student.classId },
+    select: SLOT_SELECT,
+    orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+  });
+
+  return slots;
 };
 
 // ─── PARENT-FACING: routine for ONE of their children 

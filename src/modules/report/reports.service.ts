@@ -26,8 +26,13 @@ function sendCsv(res: Response, filename: string, fields: string[], data: Record
   res.send(csv);
 }
 
-export const exportStudentsPdf = async (res: Response, classId?: string) => {
-  const where = classId ? { classId } : {};
+export const exportStudentsPdf = async (res: Response, classId?: string, studentId?: string) => {
+  const where: any = {};
+  if (studentId) {
+    where.id = studentId;
+  } else if (classId) {
+    where.classId = classId;
+  }
   const students = await prisma.student.findMany({
     where,
     include: {
@@ -57,8 +62,13 @@ export const exportStudentsPdf = async (res: Response, classId?: string) => {
   });
 };
 
-export const exportStudentsCsv = async (res: Response, classId?: string) => {
-  const where = classId ? { classId } : {};
+export const exportStudentsCsv = async (res: Response, classId?: string, studentId?: string) => {
+  const where: any = {};
+  if (studentId) {
+    where.id = studentId;
+  } else if (classId) {
+    where.classId = classId;
+  }
   const students = await prisma.student.findMany({
     where,
     include: {
@@ -82,12 +92,15 @@ export const exportStudentsCsv = async (res: Response, classId?: string) => {
   sendCsv(res, 'students.csv', Object.keys(data[0] ?? {}), data);
 };
 
-export const exportAttendancePdf = async (res: Response, classId: string, sectionId: string, date: string) => {
+export const exportAttendancePdf = async (res: Response, classId: string, sectionId: string, date: string, studentId?: string) => {
   const attendanceDate = new Date(date);
   attendanceDate.setHours(0, 0, 0, 0);
 
+  const where: any = { sectionId, date: attendanceDate };
+  if (studentId) where.studentId = studentId;
+
   const records = await prisma.studentAttendance.findMany({
-    where: { sectionId, date: attendanceDate },
+    where,
     include: {
       student: {
         select: {
@@ -121,12 +134,15 @@ export const exportAttendancePdf = async (res: Response, classId: string, sectio
   });
 };
 
-export const exportAttendanceCsv = async (res: Response, classId: string, sectionId: string, date: string) => {
+export const exportAttendanceCsv = async (res: Response, classId: string, sectionId: string, date: string, studentId?: string) => {
   const attendanceDate = new Date(date);
   attendanceDate.setHours(0, 0, 0, 0);
 
+  const where: any = { sectionId, date: attendanceDate };
+  if (studentId) where.studentId = studentId;
+
   const records = await prisma.studentAttendance.findMany({
-    where: { sectionId, date: attendanceDate },
+    where,
     include: {
       student: { select: { studentId: true, name: true, rollNumber: true } },
       teacher: { select: { name: true } },
@@ -146,8 +162,12 @@ export const exportAttendanceCsv = async (res: Response, classId: string, sectio
   sendCsv(res, 'attendance.csv', Object.keys(data[0] ?? {}), data);
 };
 
-export const exportFeesPdf = async (res: Response) => {
+export const exportFeesPdf = async (res: Response, studentId?: string) => {
+  const where: any = {};
+  if (studentId) where.studentId = studentId;
+
   const fees = await prisma.feeStructure.findMany({
+    where,
     include: {
       class: { select: { name: true } },
       student: { select: { studentId: true, name: true } },
@@ -174,8 +194,12 @@ export const exportFeesPdf = async (res: Response) => {
   });
 };
 
-export const exportFeesCsv = async (res: Response) => {
+export const exportFeesCsv = async (res: Response, studentId?: string) => {
+  const where: any = {};
+  if (studentId) where.studentId = studentId;
+
   const fees = await prisma.feeStructure.findMany({
+    where,
     include: {
       class: { select: { name: true } },
       student: { select: { studentId: true, name: true } },
@@ -196,8 +220,10 @@ export const exportFeesCsv = async (res: Response) => {
   sendCsv(res, 'fees.csv', Object.keys(data[0] ?? {}), data);
 };
 
-export const exportResultsPdf = async (res: Response, examId?: string) => {
-  const where = examId ? { examId } : {};
+export const exportResultsPdf = async (res: Response, examId?: string, studentId?: string) => {
+  const where: any = {};
+  if (examId) where.examId = examId;
+  if (studentId) where.studentId = studentId;
   const marks = await prisma.mark.findMany({
     where,
     include: {
@@ -226,8 +252,10 @@ export const exportResultsPdf = async (res: Response, examId?: string) => {
   });
 };
 
-export const exportResultsCsv = async (res: Response, examId?: string) => {
-  const where = examId ? { examId } : {};
+export const exportResultsCsv = async (res: Response, examId?: string, studentId?: string) => {
+  const where: any = {};
+  if (examId) where.examId = examId;
+  if (studentId) where.studentId = studentId;
   const marks = await prisma.mark.findMany({
     where,
     include: {
@@ -244,7 +272,7 @@ export const exportResultsCsv = async (res: Response, examId?: string) => {
     student: m.student.name,
     class: m.student.class?.name ?? '',
     subject: m.subject?.name ?? '',
-      marks: m.marksObtained,
+    marks: m.marksObtained,
     grade: m.grade ?? '',
   }));
 

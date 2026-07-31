@@ -49,6 +49,12 @@ router.get(
 );
 
 router.get(
+    '/:examId/students/:studentId/report-card',
+    authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN', 'STUDENT', 'PARENT'),
+    examController.downloadReportCard
+);
+
+router.get(
     '/:examId/classes/:classId/admit-cards',
     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'),
     examController.listAdmitCardDataForClass

@@ -160,7 +160,7 @@ export const TeachersService = {
       skip,
       take,
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
       },
@@ -176,10 +176,9 @@ export const TeachersService = {
       createdAt: teacher.createdAt,
       subject: teacher.subjectAssignments?.[0]?.subject?.name ?? teacher.subjectSpecialization ?? '—',
       subjectId: teacher.subjectAssignments?.[0]?.subjectId,
-      // FIX: was `teacher.joiningDate` mislabeled as dateOfBirth — now
-      // that the column actually exists, use the real value.
       dateOfBirth: teacher.dateOfBirth,
       joiningDate: teacher.joiningDate,
+      role: teacher.user?.role,
     }));
 
     return { teachers: transformedTeachers, meta };
@@ -189,7 +188,7 @@ export const TeachersService = {
     const teacher = await prisma.teacher.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
       },
@@ -203,9 +202,6 @@ export const TeachersService = {
       email: teacher.email,
       phone: teacher.phone ?? "—",
       gender: teacher.gender ?? "—",
-      //  these six were all hardcoded placeholders before because
-      // the columns didn't exist. Now they return what was actually
-      // stored.
       dateOfBirth: teacher.dateOfBirth,
       employeeId: teacher.employeeId,
       designation: teacher.designation ?? "—",
@@ -229,6 +225,7 @@ export const TeachersService = {
       isActive: teacher.isActive,
       createdAt: teacher.createdAt,
       updatedAt: teacher.updatedAt,
+      role: teacher.user?.role,
     };
   },
 

@@ -22,6 +22,7 @@ router.use(authenticate);
 // but as specified, this is the correct split.
 
 // ── Student routes (must come before :id params) ─────────────────────
+router.post('/create-payment-intent', authorizeRoles('STUDENT', 'PARENT'), c.createPaymentIntent.bind(c));
 router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
 
 // ── Reports (before :id to avoid param clash) ──────────────────────

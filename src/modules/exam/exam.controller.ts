@@ -3,9 +3,28 @@ import prisma from '../../config/db';
 import * as examService from './exam.service';
 import { sendSuccess } from '../../utils/response.util'; 
 import { streamAdmitCardPdf } from './admit-card.pdf';
+import { streamReportCardPdf } from './report-card.pdf';
 import { getAdmitCardData, getAdmitCardDataForClass } from './exam.service';
 import { listPendingMarks, approveMarks, rejectMarks, getPublishedResultsForStudent as getPublishedResultsSvc, getFailedStudents as getFailedStudentsSvc, submitExamMarks as submitExamMarksSvc } from './mark.service';
 
+interface ReportCardPdfData {
+    exam: { id: string; name: string; type: string };
+    student: {
+        studentId: string;
+        name: string;
+        rollNumber: string | number;
+        className: string;
+        sectionName: string;
+    };
+    subjects: {
+        name: string;
+        fullMarks: number;
+        marksObtained: number;
+        grade?: string;
+    }[];
+    percentage?: number;
+    result?: string;
+}
 
 const asParamString = (value: string | string[] | undefined): string => {
   if (Array.isArray(value)) return value[0] ?? '';
@@ -190,6 +209,54 @@ export const downloadAdmitCard = async (req: Request, res: Response, next: NextF
         const { examId, studentId } = req.params;
         const data = await getAdmitCardData(asParamString(examId), asParamString(studentId));
         streamAdmitCardPdf(data, res);
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const downloadReportCard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { examId, studentId } = req.params;
+        const exam = await prisma.exam.findUnique({ where: { id: asParamString(examId) }, select: { id: true, name: true, type: true } });
+        if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
+
+        const student = await prisma.student.findUnique({ where: { id: asParamString(studentId) }, select: { studentId: true, name: true, rollNumber: true, section: { select: { name: true, class: { select: { name: true } } } } } });
+        if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+
+        const published = await prisma.reportCard.findFirst({
+            where: { studentId: asParamString(studentId), examId: asParamString(examId), status: 'PUBLISHED' },
+        });
+        if (!published) return res.status(404).json({ success: false, message: 'Report card not published yet' });
+
+        const marks = await prisma.mark.findMany({
+            where: { studentId: asParamString(studentId), examId: asParamString(examId) },
+            include: { subject: { select: { name: true, fullMarks: true } } },
+        });
+
+        const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
+        const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
+        const percentage = totalFull > 0 ? Math.round((totalObtained / totalFull) * 100) : 0;
+
+        const data: ReportCardPdfData = {
+            exam: { id: exam.id, name: exam.name, type: exam.type },
+            student: {
+                studentId: student.studentId,
+                name: student.name,
+                rollNumber: student.rollNumber,
+                className: student.section.class.name,
+                sectionName: student.section.name,
+            },
+            subjects: marks.map((m) => ({
+                name: m.subject.name,
+                fullMarks: m.subject.fullMarks,
+                marksObtained: m.marksObtained,
+                grade: m.grade ?? undefined,
+            })),
+            percentage,
+            result: percentage >= 40 ? 'Passed' : 'Failed',
+        };
+
+        streamReportCardPdf(data, res);
     } catch (err) {
         next(err);
     }

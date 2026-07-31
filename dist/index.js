@@ -13473,7 +13473,7 @@ var require_buffer_list = __commonJS({
         key: "_getString",
         value: function _getString(n) {
           var p = this.head;
-          var c12 = 1;
+          var c13 = 1;
           var ret = p.data;
           n -= ret.length;
           while (p = p.next) {
@@ -13484,7 +13484,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === str.length) {
-                ++c12;
+                ++c13;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13493,9 +13493,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c12;
+            ++c13;
           }
-          this.length -= c12;
+          this.length -= c13;
           return ret;
         }
         // Consumes a specified amount of bytes from the buffered data.
@@ -13504,7 +13504,7 @@ var require_buffer_list = __commonJS({
         value: function _getBuffer(n) {
           var ret = Buffer2.allocUnsafe(n);
           var p = this.head;
-          var c12 = 1;
+          var c13 = 1;
           p.data.copy(ret);
           n -= p.data.length;
           while (p = p.next) {
@@ -13514,7 +13514,7 @@ var require_buffer_list = __commonJS({
             n -= nb;
             if (n === 0) {
               if (nb === buf.length) {
-                ++c12;
+                ++c13;
                 if (p.next) this.head = p.next;
                 else this.head = this.tail = null;
               } else {
@@ -13523,9 +13523,9 @@ var require_buffer_list = __commonJS({
               }
               break;
             }
-            ++c12;
+            ++c13;
           }
-          this.length -= c12;
+          this.length -= c13;
           return ret;
         }
         // Make sure the linked list only shows the minimal necessary information.
@@ -14625,8 +14625,8 @@ var require_string_decoder = __commonJS({
       if ((buf.length - i) % 2 === 0) {
         var r = buf.toString("utf16le", i);
         if (r) {
-          var c12 = r.charCodeAt(r.length - 1);
-          if (c12 >= 55296 && c12 <= 56319) {
+          var c13 = r.charCodeAt(r.length - 1);
+          if (c13 >= 55296 && c13 <= 56319) {
             this.lastNeed = 2;
             this.lastTotal = 4;
             this.lastChar[0] = buf[buf.length - 2];
@@ -17013,7 +17013,7 @@ var init_notification_service = __esm({
 });
 
 // src/index.ts
-var import_express21 = __toESM(require("express"));
+var import_express27 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
@@ -17033,7 +17033,7 @@ var errorMiddleware = (err, req, res, next) => {
 init_logger();
 
 // src/routes/index.ts
-var import_express20 = __toESM(require("express"));
+var import_express26 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
@@ -17310,6 +17310,9 @@ var AuthService = class {
 // src/utils/response.util.ts
 var sendSuccess = (res, data, message = "Success", statusCode = 200) => {
   return res.status(statusCode).json({ success: true, message, data });
+};
+var sendError = (res, message = "Error", statusCode = 400) => {
+  return res.status(statusCode).json({ success: false, message });
 };
 
 // src/modules/auth/auth.controller.ts
@@ -17598,10 +17601,10 @@ var getAttendance = async (studentId) => {
     where: { studentId },
     _count: { _all: true }
   });
-  const total = counts.reduce((sum, c12) => sum + c12._count._all, 0);
-  const present = counts.find((c12) => c12.status === "PRESENT")?._count._all ?? 0;
-  const absent = counts.find((c12) => c12.status === "ABSENT")?._count._all ?? 0;
-  const late = counts.find((c12) => c12.status === "LATE")?._count._all ?? 0;
+  const total = counts.reduce((sum, c13) => sum + c13._count._all, 0);
+  const present = counts.find((c13) => c13.status === "PRESENT")?._count._all ?? 0;
+  const absent = counts.find((c13) => c13.status === "ABSENT")?._count._all ?? 0;
+  const late = counts.find((c13) => c13.status === "LATE")?._count._all ?? 0;
   const percentage = total > 0 ? Math.round(present / total * 100) : 0;
   return { total, present, absent, late, percentage };
 };
@@ -17730,6 +17733,7 @@ var StudentService = class {
           }
         },
         class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
         admissionRecord: { select: { guardianPhone: true, guardianEmail: true, guardianName: true } }
       },
       orderBy: { createdAt: "desc" }
@@ -17983,6 +17987,32 @@ var StudentService = class {
       results
     };
   }
+  async promoteStudents(studentIds, targetClassId, targetSectionId) {
+    if (!studentIds.length) return { message: "No students provided" };
+    const classExists = await db_default.class.findUnique({ where: { id: targetClassId } });
+    if (!classExists) throw new Error("Target class not found");
+    const sectionExists = await db_default.section.findUnique({ where: { id: targetSectionId, classId: targetClassId } });
+    if (!sectionExists) throw new Error("Target section not found or does not belong to the target class");
+    return db_default.$transaction(async (tx) => {
+      const maxRollStudent = await tx.student.findFirst({
+        where: { sectionId: targetSectionId },
+        orderBy: { rollNumber: "desc" }
+      });
+      let nextRollNumber = maxRollStudent ? maxRollStudent.rollNumber + 1 : 1;
+      for (const studentId of studentIds) {
+        await tx.student.update({
+          where: { id: studentId },
+          data: {
+            classId: targetClassId,
+            sectionId: targetSectionId,
+            rollNumber: nextRollNumber
+          }
+        });
+        nextRollNumber++;
+      }
+      return { message: `Successfully promoted ${studentIds.length} students` };
+    });
+  }
 };
 
 // src/config/cloudinary.ts
@@ -18084,6 +18114,22 @@ var StudentController = class {
       next(err);
     }
   }
+  async deactivate(req, res, next) {
+    try {
+      await studentService.deactivate(String(req.params.id));
+      sendSuccess(res, null, "Student deactivated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async reactivate(req, res, next) {
+    try {
+      await studentService.reactivate(String(req.params.id));
+      sendSuccess(res, null, "Student reactivated");
+    } catch (err) {
+      next(err);
+    }
+  }
   async uploadAvatar(req, res, next) {
     try {
       if (!req.file) throw new Error("No file uploaded");
@@ -18135,6 +18181,19 @@ var StudentController = class {
       next(err);
     }
   }
+  async promoteStudents(req, res, next) {
+    try {
+      const { studentIds, targetClassId, targetSectionId } = req.body;
+      if (!Array.isArray(studentIds) || !targetClassId || !targetSectionId) {
+        res.status(400).json({ success: false, message: "Invalid payload: missing studentIds, targetClassId, or targetSectionId" });
+        return;
+      }
+      const result = await studentService.promoteStudents(studentIds, targetClassId, targetSectionId);
+      sendSuccess(res, result, "Students promoted successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/middleware/role.middleware.ts
@@ -18176,6 +18235,7 @@ router2.use(authenticate);
 router2.get("/me", authorizeRoles("STUDENT"), studentController.getMyProfile.bind(studentController));
 router2.get("/dashboard/my-dashboard", authorizeRoles("STUDENT"), studentController.getDashboard.bind(studentController));
 router2.get("/routine/my-routine", authorizeRoles("STUDENT"), studentController.getClassRoutine.bind(studentController));
+router2.post("/promote", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), studentController.promoteStudents.bind(studentController));
 router2.post(
   "/",
   authorizeRoles("SCHOOL_ADMIN"),
@@ -18183,7 +18243,7 @@ router2.post(
 );
 router2.get(
   "/",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT", "EXAM_CONTROLLER"),
   studentController.findAll.bind(studentController)
 );
 router2.get(
@@ -18193,7 +18253,7 @@ router2.get(
 );
 router2.get(
   "/:id",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "ACCOUNTANT", "EXAM_CONTROLLER"),
   studentController.findById.bind(studentController)
 );
 router2.put(
@@ -18207,6 +18267,16 @@ router2.delete(
   studentController.delete.bind(studentController)
 );
 router2.patch(
+  "/:id/deactivate",
+  authorizeRoles("SCHOOL_ADMIN"),
+  studentController.deactivate.bind(studentController)
+);
+router2.patch(
+  "/:id/reactivate",
+  authorizeRoles("SCHOOL_ADMIN"),
+  studentController.reactivate.bind(studentController)
+);
+router2.patch(
   "/:id/avatar",
   authorizeRoles("SCHOOL_ADMIN"),
   upload.single("avatar"),
@@ -18214,12 +18284,12 @@ router2.patch(
 );
 router2.get(
   "/:id/attendance",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   studentController.getAttendanceSummary.bind(studentController)
 );
 router2.get(
   "/:id/results",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   studentController.getResultSummary.bind(studentController)
 );
 var students_route_default = router2;
@@ -18704,7 +18774,7 @@ var deleteSection2 = async (req, res, next) => {
 
 // src/modules/class/class.route.ts
 var router4 = (0, import_express4.Router)();
-var CLASS_MANAGERS = ["SCHOOL_ADMIN", "SUPER_ADMIN"];
+var CLASS_MANAGERS = ["SCHOOL_ADMIN", "SUPER_ADMIN", "EXAM_CONTROLLER"];
 router4.post("/", authenticate, authorizeRoles(...CLASS_MANAGERS), createClass2);
 router4.get("/", authenticate, getAllClasses2);
 router4.get("/:id", authenticate, getClassById2);
@@ -18717,7 +18787,7 @@ router4.delete("/sections/:id", authenticate, authorizeRoles(...CLASS_MANAGERS),
 var class_route_default = router4;
 
 // src/modules/exam/exam.route.ts
-var import_express5 = require("express");
+var import_express6 = require("express");
 
 // src/modules/exam/exam.controller.ts
 init_db();
@@ -18775,7 +18845,6 @@ var getAllExams = async (classId) => {
     include: {
       schedules: {
         where: classId ? { classId } : void 0,
-        // FIX: only this class's schedules when filtered
         include: { subject: true, class: true },
         orderBy: { examDate: "asc" }
       }
@@ -18783,6 +18852,43 @@ var getAllExams = async (classId) => {
     orderBy: { createdAt: "desc" }
   });
   return exams;
+};
+var getExamsForPublishing = async () => {
+  const exams = await db_default.exam.findMany({
+    include: {
+      schedules: {
+        include: { subject: true, class: true },
+        orderBy: { examDate: "asc" }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  const result = [];
+  for (const exam of exams) {
+    const [pendingCount, reportCardCount] = await Promise.all([
+      db_default.mark.count({ where: { examId: exam.id, status: "SUBMITTED" } }),
+      db_default.reportCard.count({ where: { examId: exam.id } })
+    ]);
+    let status = "DRAFT";
+    if (reportCardCount > 0 && pendingCount === 0) {
+      const published = await db_default.reportCard.findFirst({
+        where: { examId: exam.id },
+        select: { status: true }
+      });
+      status = published?.status === "PUBLISHED" ? "PUBLISHED" : "UNPUBLISHED";
+    }
+    result.push({
+      id: exam.id,
+      name: exam.name,
+      type: exam.type,
+      totalMarks: exam.totalMarks,
+      schedules: exam.schedules,
+      status,
+      pendingCount,
+      reportCardCount
+    });
+  }
+  return result;
 };
 var getExamScheduleForClass = async (classId) => {
   return db_default.examSchedule.findMany({
@@ -18799,8 +18905,6 @@ var getExamById = async (id) => {
     where: { id },
     include: {
       schedules: { include: { subject: true, class: true } },
-      // FIX: `result` isn't a real relation on Exam — it's `reportCards`.
-      // The old field name would throw a Prisma validation error on every call.
       reportCards: { include: { student: true } }
     }
   });
@@ -18823,10 +18927,25 @@ var updateExam = async (id, dto) => {
 };
 var deleteExam = async (id) => {
   await getExamById(id);
+  await db_default.examSchedule.deleteMany({ where: { examId: id } });
+  await db_default.mark.deleteMany({ where: { examId: id } });
+  await db_default.admitCard.deleteMany({ where: { examId: id } });
+  await db_default.reportCard.deleteMany({ where: { examId: id } });
   return db_default.exam.delete({ where: { id } });
 };
 var publishExam = async (id, actorUserId) => {
   await getExamById(id);
+  const pendingCount = await db_default.mark.count({ where: { examId: id, status: "SUBMITTED" } });
+  if (pendingCount > 0) {
+    throw {
+      status: 400,
+      message: `Cannot publish: ${pendingCount} mark entr${pendingCount === 1 ? "y" : "ies"} still pending Exam Controller review`
+    };
+  }
+  const reportCardCount = await db_default.reportCard.count({ where: { examId: id } });
+  if (reportCardCount === 0) {
+    throw { status: 400, message: "Cannot publish: no approved marks / report cards exist for this exam" };
+  }
   const updated = await db_default.reportCard.updateMany({
     where: { examId: id },
     data: { status: ResultStatus.PUBLISHED }
@@ -18910,11 +19029,143 @@ var deleteSchedule = async (id) => {
   if (!schedule) throw { status: 404, message: "Schedule not found" };
   return db_default.examSchedule.delete({ where: { id } });
 };
-var resolveGrade = (marksObtained, fullMarks, rules) => {
-  const percent = fullMarks === 0 ? 0 : marksObtained / fullMarks * 100;
-  const matchedRule = rules.find((rule) => percent >= rule.minPercent && percent <= rule.maxPercent);
-  return { grade: matchedRule?.grade, gpa: matchedRule?.gpa, percent };
+var getAdmitCardData = async (examId, studentId) => {
+  const exam = await getExamById(examId);
+  const student = await db_default.student.findUnique({
+    where: { id: studentId },
+    select: {
+      id: true,
+      studentId: true,
+      name: true,
+      rollNumber: true,
+      section: {
+        select: {
+          id: true,
+          name: true,
+          classId: true,
+          class: { select: { id: true, name: true } }
+        }
+      }
+    }
+  });
+  if (!student) {
+    throw { status: 404, message: "Student not found" };
+  }
+  if (!student.section) {
+    throw { status: 400, message: "Student is not assigned to a section/class" };
+  }
+  const schedules = await db_default.examSchedule.findMany({
+    where: { examId, classId: student.section.classId },
+    include: { subject: { select: { id: true, name: true, fullMarks: true } } },
+    orderBy: { examDate: "asc" }
+  });
+  if (!schedules.length) {
+    throw {
+      status: 400,
+      message: "No exam schedule found for this student's class under this exam"
+    };
+  }
+  return {
+    exam: { id: exam.id, name: exam.name, type: exam.type },
+    student: {
+      id: student.id,
+      studentId: student.studentId,
+      name: student.name,
+      rollNumber: student.rollNumber,
+      className: student.section.class.name,
+      sectionName: student.section.name
+    },
+    schedules: schedules.map((s) => ({
+      subjectName: s.subject.name,
+      fullMarks: s.subject.fullMarks,
+      examDate: s.examDate,
+      startTime: s.startTime,
+      endTime: s.endTime
+    }))
+  };
 };
+var getAdmitCardDataForClass = async (examId, classId) => {
+  await getExamById(examId);
+  const students = await db_default.student.findMany({
+    where: { section: { classId } },
+    select: { id: true }
+  });
+  if (!students.length) {
+    throw { status: 404, message: "No students found in this class" };
+  }
+  const results = [];
+  for (const s of students) {
+    results.push(await getAdmitCardData(examId, s.id));
+  }
+  return results;
+};
+
+// src/modules/exam/admit-card.pdf.ts
+var import_pdfkit = __toESM(require("pdfkit"));
+var formatDate = (d) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+var streamAdmitCardPdf = (data, res, schoolName = "School Name") => {
+  const doc = new import_pdfkit.default({ size: "A4", margin: 40 });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="admit-card-${data.student.studentId}-${data.exam.id}.pdf"`
+  );
+  doc.pipe(res);
+  doc.fontSize(16).font("Helvetica-Bold").text(schoolName, { align: "center" });
+  doc.fontSize(12).font("Helvetica").text("Admit Card", { align: "center" });
+  doc.moveDown(0.5);
+  doc.fontSize(11).text(`Exam: ${data.exam.name} (${data.exam.type})`, { align: "center" });
+  doc.moveDown(1);
+  doc.rect(40, doc.y, 515, 90).stroke();
+  const boxTop = doc.y + 10;
+  doc.fontSize(10);
+  doc.text(`Student Name: ${data.student.name}`, 55, boxTop);
+  doc.text(`Student ID: ${data.student.studentId}`, 55, boxTop + 18);
+  doc.text(`Roll Number: ${data.student.rollNumber}`, 55, boxTop + 36);
+  doc.text(`Class: ${data.student.className}`, 300, boxTop);
+  doc.text(`Section: ${data.student.sectionName}`, 300, boxTop + 18);
+  doc.y = boxTop + 90;
+  doc.moveDown(2);
+  doc.fontSize(11).font("Helvetica-Bold").text("Exam Schedule", 40, doc.y);
+  doc.moveDown(0.5);
+  const tableTop = doc.y;
+  const colX = { subject: 40, date: 220, time: 340, marks: 470 };
+  doc.fontSize(10).font("Helvetica-Bold");
+  doc.text("Subject", colX.subject, tableTop);
+  doc.text("Date", colX.date, tableTop);
+  doc.text("Time", colX.time, tableTop);
+  doc.text("Full Marks", colX.marks, tableTop);
+  doc.moveTo(40, tableTop + 15).lineTo(555, tableTop + 15).stroke();
+  let rowY = tableTop + 22;
+  doc.font("Helvetica");
+  for (const s of data.schedules) {
+    doc.text(s.subjectName, colX.subject, rowY, { width: 170 });
+    doc.text(formatDate(s.examDate), colX.date, rowY);
+    doc.text(`${s.startTime} - ${s.endTime}`, colX.time, rowY);
+    doc.text(String(s.fullMarks), colX.marks, rowY);
+    rowY += 20;
+  }
+  doc.moveTo(40, rowY + 5).lineTo(555, rowY + 5).stroke();
+  doc.moveDown(4);
+  doc.fontSize(9).text("This admit card must be produced at the examination hall.", 40, rowY + 40);
+  doc.text("_____________________", 380, rowY + 60);
+  doc.text("Exam Controller Signature", 380, rowY + 75);
+  doc.end();
+};
+
+// src/modules/exam/mark.service.ts
+init_db();
+var safeAudit = async (userId, action, targetId, meta) => {
+  try {
+    await db_default.auditLog.create({ data: { userId, action, targetId, meta, timestamp: /* @__PURE__ */ new Date() } });
+  } catch (err) {
+    console.warn("Audit log failed:", err?.message);
+  }
+};
+function resolveGrade(marksObtained, fullMarks, rules) {
+  const matchedRule = rules.find((rule) => marksObtained >= rule.minMark && marksObtained <= rule.maxMark);
+  return { grade: matchedRule?.grade, gpa: matchedRule?.gpaPoint };
+}
 var submitExamMarks = async (examId, dto, authUser) => {
   await getExamById(examId);
   if (!dto.entries?.length) {
@@ -18937,8 +19188,8 @@ var submitExamMarks = async (examId, dto, authUser) => {
     db_default.student.findMany({ where: { id: { in: studentIds } }, select: { id: true } }),
     db_default.subject.findMany({ where: { id: { in: subjectIds } }, select: { id: true, fullMarks: true } }),
     db_default.gradingRule.findMany({
-      orderBy: { minPercent: "asc" },
-      select: { minPercent: true, maxPercent: true, grade: true, gpa: true }
+      orderBy: { minMark: "asc" },
+      select: { minMark: true, maxMark: true, grade: true, gpaPoint: true }
     })
   ]);
   const studentSet = new Set(students.map((s) => s.id));
@@ -18998,7 +19249,16 @@ var submitExamMarks = async (examId, dto, authUser) => {
             subjectId: entry.subjectId
           }
         },
-        update: { marksObtained: entry.marksObtained, grade, gpa, teacherId },
+        update: {
+          marksObtained: entry.marksObtained,
+          grade,
+          gpa,
+          teacherId,
+          status: "SUBMITTED",
+          rejectReason: null,
+          reviewedById: null,
+          reviewedAt: null
+        },
         create: {
           studentId: entry.studentId,
           examId,
@@ -19006,12 +19266,136 @@ var submitExamMarks = async (examId, dto, authUser) => {
           marksObtained: entry.marksObtained,
           grade,
           gpa,
-          teacherId
+          teacherId,
+          status: "SUBMITTED"
         }
       });
     })
   );
   return { examId, totalProcessed: marks.length, marks };
+};
+var listPendingMarks = async (examId, classId, subjectId) => {
+  await getExamById(examId);
+  return db_default.mark.findMany({
+    where: {
+      examId,
+      status: "SUBMITTED",
+      ...subjectId && { subjectId },
+      ...classId && { student: { section: { classId } } }
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          studentId: true,
+          name: true,
+          section: { select: { name: true, class: { select: { name: true } } } }
+        }
+      },
+      subject: { select: { id: true, name: true, fullMarks: true, passMarks: true } },
+      teacher: { select: { id: true, name: true } }
+    },
+    orderBy: [{ subjectId: "asc" }, { student: { name: "asc" } }]
+  });
+};
+var approveMarks = async (examId, dto, actorUserId) => {
+  await getExamById(examId);
+  const where = dto.entries?.length ? {
+    examId,
+    status: "SUBMITTED",
+    OR: dto.entries.map((e) => ({ studentId: e.studentId, subjectId: e.subjectId }))
+  } : { examId, status: "SUBMITTED" };
+  const target = await db_default.mark.findMany({ where, select: { id: true, studentId: true } });
+  if (!target.length) {
+    throw { status: 400, message: "No pending marks found matching the given criteria" };
+  }
+  await db_default.mark.updateMany({
+    where: { id: { in: target.map((t) => t.id) } },
+    data: { status: "APPROVED", reviewedById: actorUserId, reviewedAt: /* @__PURE__ */ new Date() }
+  });
+  await safeAudit(actorUserId, "EXAM_MARKS_APPROVE", examId, { count: target.length });
+  const affectedStudentIds = [...new Set(target.map((t) => t.studentId))];
+  const reportCards = await generateReportCards(examId, affectedStudentIds);
+  return { examId, approvedCount: target.length, reportCardsUpdated: reportCards.length };
+};
+var rejectMarks = async (examId, dto, actorUserId) => {
+  await getExamById(examId);
+  if (!dto.entries?.length) {
+    throw { status: 400, message: "entries[] is required to reject specific marks" };
+  }
+  if (!dto.reason?.trim()) {
+    throw { status: 400, message: "A reason is required to reject marks" };
+  }
+  const target = await db_default.mark.findMany({
+    where: {
+      examId,
+      status: "SUBMITTED",
+      OR: dto.entries.map((e) => ({ studentId: e.studentId, subjectId: e.subjectId }))
+    },
+    select: { id: true }
+  });
+  if (!target.length) {
+    throw { status: 400, message: "No pending marks found matching the given criteria" };
+  }
+  await db_default.mark.updateMany({
+    where: { id: { in: target.map((t) => t.id) } },
+    data: {
+      status: "REJECTED",
+      rejectReason: dto.reason,
+      reviewedById: actorUserId,
+      reviewedAt: /* @__PURE__ */ new Date()
+    }
+  });
+  await safeAudit(actorUserId, "EXAM_MARKS_REJECT", examId, {
+    count: target.length,
+    reason: dto.reason
+  });
+  return { examId, rejectedCount: target.length };
+};
+var generateReportCards = async (examId, studentIds) => {
+  const approvedMarks = await db_default.mark.findMany({
+    where: {
+      examId,
+      status: "APPROVED",
+      ...studentIds?.length && { studentId: { in: studentIds } }
+    },
+    include: { subject: { select: { fullMarks: true } } }
+  });
+  if (!approvedMarks.length) return [];
+  const byStudent = /* @__PURE__ */ new Map();
+  for (const m of approvedMarks) {
+    const list = byStudent.get(m.studentId) ?? [];
+    list.push(m);
+    byStudent.set(m.studentId, list);
+  }
+  const results = [];
+  for (const [studentId, marks] of byStudent.entries()) {
+    const totalMarks = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
+    const obtainedMarks = marks.reduce((sum, m) => sum + m.marksObtained, 0);
+    const gpas = marks.filter((m) => m.gpa != null).map((m) => m.gpa);
+    const avgGpa = gpas.length ? gpas.reduce((a, b) => a + b, 0) / gpas.length : null;
+    const worst = marks.reduce((min, m) => (m.gpa ?? 0) < (min.gpa ?? Infinity) ? m : min);
+    const reportCard = await db_default.reportCard.upsert({
+      where: { studentId_examId: { studentId, examId } },
+      update: {
+        totalMarks,
+        obtainedMarks,
+        gpa: avgGpa,
+        grade: worst.grade ?? null
+      },
+      create: {
+        studentId,
+        examId,
+        totalMarks,
+        obtainedMarks,
+        gpa: avgGpa,
+        grade: worst.grade ?? null,
+        status: "UNPUBLISHED"
+      }
+    });
+    results.push(reportCard);
+  }
+  return results;
 };
 var getPublishedResultsForStudent = async (studentId, examId) => {
   const publishedReportCards = await db_default.reportCard.findMany({
@@ -19100,6 +19484,14 @@ var getAllExams2 = async (req, res, next) => {
   try {
     const classId = asOptionalQueryString(req.query.classId);
     const data = await getAllExams(classId);
+    sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+var getExamsForPublishing2 = async (req, res, next) => {
+  try {
+    const data = await getExamsForPublishing();
     sendSuccess(res, data);
   } catch (err) {
     next(err);
@@ -19246,32 +19638,315 @@ var getChildResults = async (req, res, next) => {
     next(err);
   }
 };
+var downloadAdmitCard = async (req, res, next) => {
+  try {
+    const { examId, studentId } = req.params;
+    const data = await getAdmitCardData(asParamString2(examId), asParamString2(studentId));
+    streamAdmitCardPdf(data, res);
+  } catch (err) {
+    next(err);
+  }
+};
+var listAdmitCardDataForClass = async (req, res, next) => {
+  try {
+    const { examId, classId } = req.params;
+    const data = await getAdmitCardDataForClass(asParamString2(examId), asParamString2(classId));
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+var getPendingMarks = async (req, res, next) => {
+  try {
+    const examId = asParamString2(req.params.examId);
+    const classId = asOptionalQueryString(req.query.classId);
+    const subjectId = asOptionalQueryString(req.query.subjectId);
+    const data = await listPendingMarks(examId, classId, subjectId);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+var postApproveMarks = async (req, res, next) => {
+  try {
+    const examId = asParamString2(req.params.examId);
+    const result = await approveMarks(examId, req.body, req.user.id);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+var postRejectMarks = async (req, res, next) => {
+  try {
+    const examId = asParamString2(req.params.examId);
+    const result = await rejectMarks(examId, req.body, req.user.id);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// src/modules/grading/grading.route.ts
+var import_express5 = require("express");
+
+// src/modules/grading/grading.service.ts
+init_db();
+async function assertNoOverlap(classId, academicYear, minMark, maxMark, excludeId) {
+  const overlapping = await db_default.gradingRule.findFirst({
+    where: {
+      classId,
+      academicYear: academicYear ?? null,
+      ...excludeId ? { id: { not: excludeId } } : {},
+      minMark: { lte: maxMark },
+      maxMark: { gte: minMark }
+    }
+  });
+  if (overlapping) {
+    const err = new Error(
+      `Mark range ${minMark}-${maxMark} overlaps with existing grade "${overlapping.grade}" (${overlapping.minMark}-${overlapping.maxMark}) for this class.`
+    );
+    err.status = 400;
+    throw err;
+  }
+}
+var createGradingRule = async (data) => {
+  await assertNoOverlap(data.classId, data.academicYear, data.minMark, data.maxMark);
+  return db_default.gradingRule.create({
+    data: {
+      classId: data.classId,
+      academicYear: data.academicYear,
+      minMark: data.minMark,
+      maxMark: data.maxMark,
+      grade: data.grade,
+      gpaPoint: data.gpaPoint,
+      isPassing: data.isPassing ?? true
+    }
+  });
+};
+var bulkUpsertGradingRules = async (data) => {
+  const sorted = [...data.rows].sort((a, b) => a.minMark - b.maxMark);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].minMark <= sorted[i - 1].maxMark) {
+      const err = new Error(
+        `Overlapping rows in submitted grading scale: "${sorted[i - 1].grade}" (${sorted[i - 1].minMark}-${sorted[i - 1].maxMark}) and "${sorted[i].grade}" (${sorted[i].minMark}-${sorted[i].maxMark})`
+      );
+      err.status = 400;
+      throw err;
+    }
+  }
+  return db_default.$transaction(async (tx) => {
+    await tx.gradingRule.deleteMany({
+      where: {
+        classId: data.classId,
+        academicYear: data.academicYear ?? null
+      }
+    });
+    await tx.gradingRule.createMany({
+      data: data.rows.map((row) => ({
+        classId: data.classId,
+        academicYear: data.academicYear,
+        minMark: row.minMark,
+        maxMark: row.maxMark,
+        grade: row.grade,
+        gpaPoint: row.gpaPoint,
+        isPassing: row.isPassing ?? true
+      }))
+    });
+    return tx.gradingRule.findMany({
+      where: { classId: data.classId, academicYear: data.academicYear ?? null },
+      orderBy: { minMark: "asc" }
+    });
+  });
+};
+var listGradingRules = async (classId, academicYear) => {
+  return db_default.gradingRule.findMany({
+    where: { classId, academicYear: academicYear ?? null },
+    orderBy: { minMark: "asc" }
+  });
+};
+var updateGradingRule = async (id, data) => {
+  const existing = await db_default.gradingRule.findUnique({ where: { id } });
+  if (!existing) {
+    const err = new Error("Grading rule not found");
+    err.status = 404;
+    throw err;
+  }
+  const nextMin = data.minMark ?? existing.minMark;
+  const nextMax = data.maxMark ?? existing.maxMark;
+  if (nextMax < nextMin) {
+    const err = new Error("maxMark must be greater than or equal to minMark");
+    err.status = 400;
+    throw err;
+  }
+  return db_default.gradingRule.update({
+    where: { id },
+    data
+  });
+};
+var deleteGradingRule = async (id) => {
+  await db_default.gradingRule.delete({ where: { id } });
+};
+
+// src/modules/grading/grading.controller.ts
+function extractValidationError(field, message) {
+  return `${field}: ${message}`;
+}
+function validateCreateRule(body) {
+  if (!body || typeof body !== "object") return "Request body is required";
+  if (typeof body.classId !== "string" || !body.classId.trim()) return extractValidationError("classId", "is required");
+  if (typeof body.academicYear !== "undefined" && typeof body.academicYear !== "string") return extractValidationError("academicYear", "must be a string");
+  if (typeof body.minMark !== "number" || body.minMark < 0 || body.minMark > 100) return extractValidationError("minMark", "must be a number between 0 and 100");
+  if (typeof body.maxMark !== "number" || body.maxMark < 0 || body.maxMark > 100) return extractValidationError("maxMark", "must be a number between 0 and 100");
+  if (typeof body.grade !== "string" || body.grade.length < 1 || body.grade.length > 10) return extractValidationError("grade", "must be a string between 1 and 10 characters");
+  if (typeof body.gpaPoint !== "number" || body.gpaPoint < 0 || body.gpaPoint > 5) return extractValidationError("gpaPoint", "must be a number between 0 and 5");
+  if (body.maxMark < body.minMark) return extractValidationError("maxMark", "must be greater than or equal to minMark");
+  return null;
+}
+function validateBulkUpsert(body) {
+  if (!body || typeof body !== "object") return "Request body is required";
+  if (typeof body.classId !== "string" || !body.classId.trim()) return extractValidationError("classId", "is required");
+  if (typeof body.academicYear !== "undefined" && typeof body.academicYear !== "string") return extractValidationError("academicYear", "must be a string");
+  if (!Array.isArray(body.rows) || body.rows.length === 0) return extractValidationError("rows", "must be a non-empty array");
+  for (let i = 0; i < body.rows.length; i++) {
+    const row = body.rows[i];
+    if (!row || typeof row !== "object") return `Row ${i + 1}: must be an object`;
+    if (typeof row.minMark !== "number" || row.minMark < 0 || row.minMark > 100) return `Row ${i + 1}: minMark must be a number between 0 and 100`;
+    if (typeof row.maxMark !== "number" || row.maxMark < 0 || row.maxMark > 100) return `Row ${i + 1}: maxMark must be a number between 0 and 100`;
+    if (typeof row.grade !== "string" || row.grade.length < 1 || row.grade.length > 10) return `Row ${i + 1}: grade must be a string between 1 and 10 characters`;
+    if (typeof row.gpaPoint !== "number" || row.gpaPoint < 0 || row.gpaPoint > 5) return `Row ${i + 1}: gpaPoint must be a number between 0 and 5`;
+    if (row.maxMark < row.minMark) return `Row ${i + 1}: maxMark must be greater than or equal to minMark`;
+  }
+  return null;
+}
+function validateUpdateRule(params, body) {
+  if (!params || typeof params.id !== "string" || !params.id.trim()) return extractValidationError("id", "is required");
+  if (!body || typeof body !== "object") return "Request body is required";
+  if (typeof body.minMark !== "undefined" && (typeof body.minMark !== "number" || body.minMark < 0 || body.minMark > 100)) return extractValidationError("minMark", "must be a number between 0 and 100");
+  if (typeof body.maxMark !== "undefined" && (typeof body.maxMark !== "number" || body.maxMark < 0 || body.maxMark > 100)) return extractValidationError("maxMark", "must be a number between 0 and 100");
+  if (typeof body.grade !== "undefined" && (typeof body.grade !== "string" || body.grade.length < 1 || body.grade.length > 10)) return extractValidationError("grade", "must be a string between 1 and 10 characters");
+  if (typeof body.gpaPoint !== "undefined" && (typeof body.gpaPoint !== "number" || body.gpaPoint < 0 || body.gpaPoint > 5)) return extractValidationError("gpaPoint", "must be a number between 0 and 5");
+  if (typeof body.isPassing !== "undefined" && typeof body.isPassing !== "boolean") return extractValidationError("isPassing", "must be a boolean");
+  if (body.maxMark !== void 0 && body.minMark !== void 0 && body.maxMark < body.minMark) return extractValidationError("maxMark", "must be greater than or equal to minMark");
+  return null;
+}
+function validateListQuery(query) {
+  if (!query || typeof query !== "object") return "Query parameters are required";
+  if (typeof query.classId !== "string" || !query.classId.trim()) return extractValidationError("classId", "is required");
+  if (typeof query.academicYear !== "undefined" && typeof query.academicYear !== "string") return extractValidationError("academicYear", "must be a string");
+  return null;
+}
+var createGradingRule2 = async (req, res, next) => {
+  try {
+    const validationError = validateCreateRule(req.body);
+    if (validationError) {
+      return sendError(res, validationError, 400);
+    }
+    const rule = await createGradingRule(req.body);
+    sendSuccess(res, rule, "Grading rule created successfully", 201);
+  } catch (err) {
+    next(err);
+  }
+};
+var bulkUpsertGradingRules2 = async (req, res, next) => {
+  try {
+    const validationError = validateBulkUpsert(req.body);
+    if (validationError) {
+      return sendError(res, validationError, 400);
+    }
+    const rules = await bulkUpsertGradingRules(req.body);
+    sendSuccess(res, rules, "Grading scale saved successfully");
+  } catch (err) {
+    next(err);
+  }
+};
+var listGradingRules2 = async (req, res, next) => {
+  try {
+    const validationError = validateListQuery(req.query);
+    if (validationError) {
+      return sendError(res, validationError, 400);
+    }
+    const { classId, academicYear } = req.query;
+    const rules = await listGradingRules(classId, academicYear);
+    sendSuccess(res, rules, "Grading rules retrieved successfully");
+  } catch (err) {
+    next(err);
+  }
+};
+var updateGradingRule2 = async (req, res, next) => {
+  try {
+    const validationError = validateUpdateRule(req.params, req.body);
+    if (validationError) {
+      return sendError(res, validationError, 400);
+    }
+    const rule = await updateGradingRule(String(req.params.id), req.body);
+    sendSuccess(res, rule, "Grading rule updated successfully");
+  } catch (err) {
+    next(err);
+  }
+};
+var deleteGradingRule2 = async (req, res, next) => {
+  try {
+    if (!req.params.id || typeof req.params.id !== "string" || !req.params.id.trim()) {
+      return sendError(res, "id is required", 400);
+    }
+    await deleteGradingRule(req.params.id);
+    sendSuccess(res, null, "Grading rule deleted successfully");
+  } catch (err) {
+    next(err);
+  }
+};
+
+// src/modules/grading/grading.route.ts
+var router5 = (0, import_express5.Router)();
+var EXAM_STAFF = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "SUPER_ADMIN"];
+router5.use(authenticate);
+router5.post("/", authorizeRoles(...EXAM_STAFF), createGradingRule2);
+router5.post("/bulk", authorizeRoles(...EXAM_STAFF), bulkUpsertGradingRules2);
+router5.get("/", authorizeRoles(...EXAM_STAFF), listGradingRules2);
+router5.put("/:id", authorizeRoles(...EXAM_STAFF), updateGradingRule2);
+router5.delete("/:id", authorizeRoles(...EXAM_STAFF), deleteGradingRule2);
+var gradingRoutes = router5;
 
 // src/modules/exam/exam.route.ts
-var router5 = (0, import_express5.Router)();
-var EXAM_STAFF = ["EXAM_CONTROLLER", "SCHOOL_ADMIN"];
+var router6 = (0, import_express6.Router)();
+var EXAM_STAFF2 = ["EXAM_CONTROLLER", "SCHOOL_ADMIN"];
 var EXAM_VIEWERS = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "TEACHER"];
-router5.use(authenticate);
-router5.post("/", authorizeRoles(...EXAM_STAFF), createExam2);
-router5.get("/", authorizeRoles(...EXAM_VIEWERS), getAllExams2);
-router5.get("/:id", authorizeRoles(...EXAM_VIEWERS), getExamById2);
-router5.put("/:id", authorizeRoles(...EXAM_STAFF), updateExam2);
-router5.delete("/:id", authorizeRoles(...EXAM_STAFF), deleteExam2);
-router5.patch("/:id/publish", authorizeRoles(...EXAM_STAFF), publishExam2);
-router5.patch("/:id/unpublish", authorizeRoles(...EXAM_STAFF), unpublishExam2);
-router5.post("/schedules", authorizeRoles(...EXAM_STAFF), createSchedule);
-router5.get("/:examId/schedules", authorizeRoles(...EXAM_VIEWERS), getScheduleByExam2);
-router5.delete("/schedules/:id", authorizeRoles(...EXAM_STAFF), deleteSchedule2);
-router5.post("/:examId/marks", authorizeRoles("TEACHER", ...EXAM_STAFF), submitExamMarks2);
-router5.get("/:examId/failed-students", authorizeRoles("TEACHER", ...EXAM_STAFF), getFailedStudents2);
-router5.get("/my/schedule", authorizeRoles("STUDENT"), getMyExamSchedule);
-router5.get("/my/results", authorizeRoles("STUDENT"), getMyResults);
-router5.get("/child/:studentId/schedule", authorizeRoles("PARENT"), getChildExamSchedule);
-router5.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults);
-var exam_route_default = router5;
+router6.use(authenticate);
+router6.post("/", authorizeRoles(...EXAM_STAFF2), createExam2);
+router6.get("/", authorizeRoles(...EXAM_VIEWERS), getAllExams2);
+router6.get("/publishing", authorizeRoles(...EXAM_VIEWERS), getExamsForPublishing2);
+router6.get("/:id", authorizeRoles(...EXAM_VIEWERS), getExamById2);
+router6.put("/:id", authorizeRoles(...EXAM_STAFF2), updateExam2);
+router6.delete("/:id", authorizeRoles(...EXAM_STAFF2), deleteExam2);
+router6.patch("/:id/publish", authorizeRoles(...EXAM_STAFF2), publishExam2);
+router6.patch("/:id/unpublish", authorizeRoles(...EXAM_STAFF2), unpublishExam2);
+router6.post("/schedules", authorizeRoles(...EXAM_STAFF2), createSchedule);
+router6.get("/:examId/schedules", authorizeRoles(...EXAM_VIEWERS), getScheduleByExam2);
+router6.delete("/schedules/:id", authorizeRoles(...EXAM_STAFF2), deleteSchedule2);
+router6.post("/:examId/marks", authorizeRoles("TEACHER", ...EXAM_STAFF2), submitExamMarks2);
+router6.get("/:examId/failed-students", authorizeRoles("TEACHER", ...EXAM_STAFF2), getFailedStudents2);
+router6.get("/:examId/marks/pending", authorizeRoles("EXAM_CONTROLLER", "SCHOOL_ADMIN"), getPendingMarks);
+router6.post("/:examId/marks/approve", authorizeRoles("EXAM_CONTROLLER"), postApproveMarks);
+router6.post("/:examId/marks/reject", authorizeRoles("EXAM_CONTROLLER"), postRejectMarks);
+router6.get("/my/schedule", authorizeRoles("STUDENT"), getMyExamSchedule);
+router6.get("/my/results", authorizeRoles("STUDENT"), getMyResults);
+router6.get("/child/:studentId/schedule", authorizeRoles("PARENT"), getChildExamSchedule);
+router6.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults);
+router6.use("/grading-rules", gradingRoutes);
+router6.get(
+  "/:examId/students/:studentId/admit-card",
+  authorizeRoles("EXAM_CONTROLLER", "SCHOOL_ADMIN", "STUDENT", "PARENT"),
+  downloadAdmitCard
+);
+router6.get(
+  "/:examId/classes/:classId/admit-cards",
+  authorizeRoles("EXAM_CONTROLLER", "SCHOOL_ADMIN"),
+  listAdmitCardDataForClass
+);
+var exam_route_default = router6;
 
 // src/modules/attendance/attendacne.router.ts
-var import_express6 = require("express");
+var import_express7 = require("express");
 
 // src/modules/attendance/attendance.controller.ts
 init_db();
@@ -19589,19 +20264,19 @@ var AttendanceController = class {
 };
 
 // src/modules/attendance/attendacne.router.ts
-var router6 = (0, import_express6.Router)();
+var router7 = (0, import_express7.Router)();
 var c = new AttendanceController();
-router6.use(authenticate);
-router6.post("/take", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.take.bind(c));
-router6.get("/by-date", authorizeRoles("TEACHER", "SCHOOL_ADMIN", "ADMIN"), c.byDate.bind(c));
-router6.get("/monthly-report", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.monthlyReport.bind(c));
-router6.patch("/:id", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.update.bind(c));
-router6.get("/my-attendance", authorizeRoles("STUDENT"), c.myAttendance.bind(c));
-router6.get("/child/:studentId", authorizeRoles("PARENT"), c.childAttendance.bind(c));
-var attendacne_router_default = router6;
+router7.use(authenticate);
+router7.post("/take", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.take.bind(c));
+router7.get("/by-date", authorizeRoles("TEACHER", "SCHOOL_ADMIN", "ADMIN"), c.byDate.bind(c));
+router7.get("/monthly-report", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.monthlyReport.bind(c));
+router7.patch("/:id", authorizeRoles("TEACHER", "SCHOOL_ADMIN"), c.update.bind(c));
+router7.get("/my-attendance", authorizeRoles("STUDENT"), c.myAttendance.bind(c));
+router7.get("/child/:studentId", authorizeRoles("PARENT"), c.childAttendance.bind(c));
+var attendacne_router_default = router7;
 
 // src/modules/teachers/teacher.routes.ts
-var import_express7 = require("express");
+var import_express8 = require("express");
 
 // src/modules/teachers/teachers.service.ts
 init_db();
@@ -19734,7 +20409,7 @@ var TeachersService = {
       skip,
       take,
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
       },
@@ -19749,10 +20424,9 @@ var TeachersService = {
       createdAt: teacher.createdAt,
       subject: teacher.subjectAssignments?.[0]?.subject?.name ?? teacher.subjectSpecialization ?? "\u2014",
       subjectId: teacher.subjectAssignments?.[0]?.subjectId,
-      // FIX: was `teacher.joiningDate` mislabeled as dateOfBirth — now
-      // that the column actually exists, use the real value.
       dateOfBirth: teacher.dateOfBirth,
-      joiningDate: teacher.joiningDate
+      joiningDate: teacher.joiningDate,
+      role: teacher.user?.role
     }));
     return { teachers: transformedTeachers, meta };
   },
@@ -19760,7 +20434,7 @@ var TeachersService = {
     const teacher = await db_default.teacher.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
       }
@@ -19772,9 +20446,6 @@ var TeachersService = {
       email: teacher.email,
       phone: teacher.phone ?? "\u2014",
       gender: teacher.gender ?? "\u2014",
-      //  these six were all hardcoded placeholders before because
-      // the columns didn't exist. Now they return what was actually
-      // stored.
       dateOfBirth: teacher.dateOfBirth,
       employeeId: teacher.employeeId,
       designation: teacher.designation ?? "\u2014",
@@ -19795,7 +20466,8 @@ var TeachersService = {
       classes: teacher.sectionTeacher?.map((s) => s.class?.name) ?? [],
       isActive: teacher.isActive,
       createdAt: teacher.createdAt,
-      updatedAt: teacher.updatedAt
+      updatedAt: teacher.updatedAt,
+      role: teacher.user?.role
     };
   },
   async findByUserId(userId) {
@@ -19930,8 +20602,8 @@ var TeachersService = {
         upcomingExams: 0
       };
     }
-    const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
+    const today2 = /* @__PURE__ */ new Date();
+    today2.setHours(0, 0, 0, 0);
     const [totalStudents, totalClasses, totalSubjects, upcomingExams] = await Promise.all([
       db_default.student.count({
         where: { section: { classId: { in: classIds } } }
@@ -19939,7 +20611,7 @@ var TeachersService = {
       Promise.resolve(classIds.length),
       Promise.resolve(teacher.subjectAssignments.length),
       db_default.examSchedule.count({
-        where: { classId: { in: classIds }, examDate: { gte: today } }
+        where: { classId: { in: classIds }, examDate: { gte: today2 } }
       })
     ]);
     return { totalStudents, totalClasses, totalSubjects, upcomingExams };
@@ -20088,61 +20760,61 @@ var TeacherController = class {
 };
 
 // src/modules/teachers/teacher.routes.ts
-var router7 = (0, import_express7.Router)();
+var router8 = (0, import_express8.Router)();
 var teacherController = new TeacherController();
-router7.use(authenticate);
-router7.get("/me", authorizeRoles("TEACHER"), teacherController.getMyProfile.bind(teacherController));
-router7.post("/", authorizeRoles("SCHOOL_ADMIN"), teacherController.create.bind(teacherController));
-router7.get(
+router8.use(authenticate);
+router8.get("/me", authorizeRoles("TEACHER"), teacherController.getMyProfile.bind(teacherController));
+router8.post("/", authorizeRoles("SCHOOL_ADMIN"), teacherController.create.bind(teacherController));
+router8.get(
   "/",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.findAll.bind(teacherController)
 );
-router7.get(
+router8.get(
   "/:id",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.findById.bind(teacherController)
 );
-router7.patch(
+router8.patch(
   "/:id",
   authorizeRoles("SCHOOL_ADMIN"),
   teacherController.update.bind(teacherController)
 );
-router7.delete(
+router8.delete(
   "/:id",
   authorizeRoles("SCHOOL_ADMIN"),
   teacherController.delete.bind(teacherController)
 );
-router7.patch(
+router8.patch(
   "/:id/avatar",
   authorizeRoles("SCHOOL_ADMIN"),
   upload.single("avatar"),
   teacherController.uploadAvatar.bind(teacherController)
 );
-router7.patch(
+router8.patch(
   "/:id/assign-subjects",
   authorizeRoles("SCHOOL_ADMIN"),
   teacherController.assignSubjects.bind(teacherController)
 );
-router7.patch(
+router8.patch(
   "/:id/assign-classes",
   authorizeRoles("SCHOOL_ADMIN"),
   teacherController.assignClasses.bind(teacherController)
 );
-router7.get(
+router8.get(
   "/:id/schedule",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.getSchedule.bind(teacherController)
 );
-router7.get(
+router8.get(
   "/:id/dashboard",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER"),
+  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.getDashboardStats.bind(teacherController)
 );
-var teacher_routes_default = router7;
+var teacher_routes_default = router8;
 
 // src/modules/result/result.router.ts
-var import_express8 = require("express");
+var import_express9 = require("express");
 
 // src/modules/result/result.controller.ts
 init_db();
@@ -20557,21 +21229,21 @@ var getChildResults2 = async (req, res, next) => {
 };
 
 // src/modules/result/result.router.ts
-var router8 = (0, import_express8.Router)();
-var EXAM_STAFF2 = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "SUPER_ADMIN"];
-router8.use(authenticate);
-router8.post("/", authorizeRoles("TEACHER", ...EXAM_STAFF2), submitResult2);
-router8.post("/bulk", authorizeRoles("TEACHER", ...EXAM_STAFF2), submitBulkResult2);
-router8.get("/student/:studentId", authorizeRoles("TEACHER", ...EXAM_STAFF2), getResultByStudent2);
-router8.get("/exam/:examId", authorizeRoles("TEACHER", ...EXAM_STAFF2), getResultByExam2);
-router8.get("/exam/:examId/failed", authorizeRoles("TEACHER", ...EXAM_STAFF2), getFailedStudents4);
-router8.patch("/marks/:id", authorizeRoles("TEACHER", ...EXAM_STAFF2), updateMark2);
-router8.get("/my-results", authorizeRoles("STUDENT"), getMyResults2);
-router8.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults2);
-var result_router_default = router8;
+var router9 = (0, import_express9.Router)();
+var EXAM_STAFF3 = ["EXAM_CONTROLLER", "SCHOOL_ADMIN", "SUPER_ADMIN"];
+router9.use(authenticate);
+router9.post("/", authorizeRoles("TEACHER", ...EXAM_STAFF3), submitResult2);
+router9.post("/bulk", authorizeRoles("TEACHER", ...EXAM_STAFF3), submitBulkResult2);
+router9.get("/student/:studentId", authorizeRoles("TEACHER", ...EXAM_STAFF3), getResultByStudent2);
+router9.get("/exam/:examId", authorizeRoles("TEACHER", ...EXAM_STAFF3), getResultByExam2);
+router9.get("/exam/:examId/failed", authorizeRoles("TEACHER", ...EXAM_STAFF3), getFailedStudents4);
+router9.patch("/marks/:id", authorizeRoles("TEACHER", ...EXAM_STAFF3), updateMark2);
+router9.get("/my-results", authorizeRoles("STUDENT"), getMyResults2);
+router9.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults2);
+var result_router_default = router9;
 
 // src/modules/admission/admission.routes.ts
-var import_express9 = require("express");
+var import_express10 = require("express");
 
 // src/modules/admission/admission.service.ts
 init_db();
@@ -20887,8 +21559,9 @@ var AdmissionService = class {
     }
     return admission;
   }
-  async convertToStudent(_dto) {
-    throw new Error("Convert to student is not implemented yet");
+  async convertToStudent(dto) {
+    const result = await this.createStudentFromAdmission(dto.admissionId);
+    return result;
   }
   async delete(id, actorUserId) {
     await this._exists(id);
@@ -21248,31 +21921,31 @@ var AdmissionController = class {
 };
 
 // src/modules/admission/admission.routes.ts
-var router9 = (0, import_express9.Router)();
+var router10 = (0, import_express10.Router)();
 var c2 = new AdmissionController();
-router9.post("/apply", c2.apply.bind(c2));
-router9.get("/classes", c2.getPublicClasses.bind(c2));
-router9.post("/stripe/checkout", c2.createStripeCheckout.bind(c2));
-router9.get("/stripe/verify", c2.verifyStripeSession.bind(c2));
-router9.post(
+router10.post("/apply", c2.apply.bind(c2));
+router10.get("/classes", c2.getPublicClasses.bind(c2));
+router10.post("/stripe/checkout", c2.createStripeCheckout.bind(c2));
+router10.get("/stripe/verify", c2.verifyStripeSession.bind(c2));
+router10.post(
   "/upload-document",
   upload.single("document"),
   c2.uploadDocument.bind(c2)
 );
-router9.get("/my-applications", authenticate, c2.getMyApplications.bind(c2));
-router9.use(authenticate, authorizeRoles("SCHOOL_ADMIN"));
-router9.get("/stats", c2.getStats.bind(c2));
-router9.post("/convert-to-student", c2.convertToStudent.bind(c2));
-router9.patch("/:id/status", c2.updateStatus.bind(c2));
-router9.get("/", c2.findAll.bind(c2));
-router9.post("/", c2.apply.bind(c2));
-router9.get("/:id", c2.findById.bind(c2));
-router9.patch("/:id", c2.update.bind(c2));
-router9.delete("/:id", c2.delete.bind(c2));
-var admission_routes_default = router9;
+router10.get("/my-applications", authenticate, c2.getMyApplications.bind(c2));
+router10.use(authenticate, authorizeRoles("SCHOOL_ADMIN"));
+router10.get("/stats", c2.getStats.bind(c2));
+router10.post("/convert-to-student", c2.convertToStudent.bind(c2));
+router10.patch("/:id/status", c2.updateStatus.bind(c2));
+router10.get("/", c2.findAll.bind(c2));
+router10.post("/", c2.apply.bind(c2));
+router10.get("/:id", c2.findById.bind(c2));
+router10.patch("/:id", c2.update.bind(c2));
+router10.delete("/:id", c2.delete.bind(c2));
+var admission_routes_default = router10;
 
 // src/modules/fee/router.ts
-var import_express10 = require("express");
+var import_express11 = require("express");
 
 // src/modules/fee/fee.service.ts
 init_db();
@@ -21797,6 +22470,106 @@ var getMonthlyAnalytics = async (year) => {
     byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }]))
   };
 };
+var createPaymentIntent = async (feeId, studentId) => {
+  const fee = await db_default.feeStructure.findUnique({ where: { id: feeId } });
+  if (!fee) throw new Error("Fee not found");
+  if (fee.studentId !== studentId) throw new Error("Fee does not belong to this student");
+  if (fee.status === "PAID") throw new Error("Fee is already paid");
+  const amountRemaining = fee.amount - fee.Paidamount;
+  if (amountRemaining <= 0) throw new Error("No outstanding amount");
+  const paymentIntent = await striPe_default.paymentIntents.create({
+    amount: Math.round(amountRemaining * 100),
+    // Stripe expects amount in smallest currency unit (e.g. cents/paisa)
+    currency: "bdt",
+    metadata: {
+      feeId,
+      studentId
+    }
+  });
+  return {
+    clientSecret: paymentIntent.client_secret,
+    amount: amountRemaining,
+    currency: "bdt"
+  };
+};
+var handleStripeWebhook = async (signature, rawBody) => {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    throw new Error("Stripe webhook secret not configured");
+  }
+  let event;
+  try {
+    event = striPe_default.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  } catch (err) {
+    throw new Error(`Webhook Error: ${err.message}`);
+  }
+  if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object;
+    const { feeId, studentId } = paymentIntent.metadata;
+    if (!feeId || !studentId) {
+      console.warn("PaymentIntent succeeded but missing metadata", paymentIntent.id);
+      return;
+    }
+    await db_default.$transaction(
+      async (tx) => {
+        const fee = await tx.feeStructure.findUnique({ where: { id: feeId } });
+        if (!fee) return;
+        if (fee.status === "PAID") return;
+        const amountPaid = paymentIntent.amount / 100;
+        const totalPaid = fee.Paidamount + amountPaid;
+        const newStatus = totalPaid >= fee.amount ? "PAID" : "PARTIAL";
+        let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
+        if (!invoice) {
+          invoice = await tx.invoice.create({
+            data: {
+              studentId: fee.studentId,
+              feeStructureId: fee.id,
+              amount: fee.amount,
+              dueDate: fee.dueDate,
+              year: fee.year,
+              month: fee.month,
+              status: newStatus
+            }
+          });
+        }
+        const transactionId = paymentIntent.id;
+        const existingPayment = await tx.payment.findUnique({ where: { transactionId } });
+        if (existingPayment) return;
+        await tx.payment.create({
+          data: {
+            feeStructureId: fee.id,
+            amount: amountPaid,
+            method: "STRIPE",
+            status: "PAID",
+            transactionId,
+            note: "Paid via Stripe",
+            invoiceId: invoice.id,
+            studentId: fee.studentId,
+            stripePaymentIntentId: paymentIntent.id,
+            paidAt: /* @__PURE__ */ new Date()
+          }
+        });
+        await tx.feeStructure.update({
+          where: { id: fee.id },
+          data: { Paidamount: totalPaid, status: newStatus }
+        });
+        if (newStatus === "PAID") {
+          await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
+        }
+        await tx.auditLog.create({
+          data: {
+            userId: studentId,
+            // Attributing to the student
+            action: "FEE_ONLINE_PAYMENT",
+            targetId: fee.id,
+            metadata: { amount: amountPaid, method: "STRIPE", newStatus, transactionId }
+          }
+        }).catch((err) => console.warn("Audit log failed:", err?.message));
+      },
+      { isolationLevel: "Serializable" }
+    );
+  }
+};
 
 // src/modules/fee/fee.controller.ts
 var FeesController = class {
@@ -21951,31 +22724,62 @@ var FeesController = class {
       next(err);
     }
   }
+  async createPaymentIntent(req, res, next) {
+    try {
+      const { feeId } = req.body;
+      if (!feeId) throw new Error("feeId is required");
+      const studentId = req.user?.studentId || req.user?.id;
+      if (!studentId) throw new Error("Student identity not found on request");
+      const targetStudentId = req.body.studentId || studentId;
+      const paymentIntentData = await createPaymentIntent(feeId, targetStudentId);
+      sendSuccess(res, paymentIntentData, "Payment Intent created");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async handleWebhook(req, res, next) {
+    try {
+      const signature = req.headers["stripe-signature"];
+      if (!signature) {
+        return res.status(400).send("Missing stripe signature");
+      }
+      const rawBody = req.body;
+      await handleStripeWebhook(
+        Array.isArray(signature) ? signature[0] : signature,
+        rawBody
+      );
+      res.status(200).send({ received: true });
+    } catch (err) {
+      console.error("Stripe Webhook Error:", err);
+      res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+  }
 };
 
 // src/modules/fee/router.ts
-var router10 = (0, import_express10.Router)();
+var router11 = (0, import_express11.Router)();
 var c3 = new FeesController();
-router10.use(authenticate);
-router10.get("/my-fees", authorizeRoles("STUDENT"), c3.getMyFees.bind(c3));
-router10.get("/report/collection", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getCollectionReport.bind(c3));
-router10.get("/report/overdue", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getOverdueFees.bind(c3));
-router10.get("/summary", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getSummary.bind(c3));
-router10.get("/transactions", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getTransactions.bind(c3));
-router10.get("/analytics/monthly", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getMonthlyAnalytics.bind(c3));
-router10.get("/student/:studentId", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.getStudentSummary.bind(c3));
-router10.post("/", authorizeRoles("ACCOUNTANT"), c3.create.bind(c3));
-router10.post("/bulk", authorizeRoles("ACCOUNTANT"), c3.bulkCreate.bind(c3));
-router10.get("/", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.findAll.bind(c3));
-router10.get("/:id", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.findById.bind(c3));
-router10.patch("/:id", authorizeRoles("ACCOUNTANT"), c3.update.bind(c3));
-router10.delete("/:id", authorizeRoles("ACCOUNTANT"), c3.delete.bind(c3));
-router10.patch("/:id/pay", authorizeRoles("ACCOUNTANT"), c3.recordPayment.bind(c3));
-router10.post("/cash", authorizeRoles("ACCOUNTANT"), c3.recordCashPayment.bind(c3));
-var router_default = router10;
+router11.use(authenticate);
+router11.post("/create-payment-intent", authorizeRoles("STUDENT", "PARENT"), c3.createPaymentIntent.bind(c3));
+router11.get("/my-fees", authorizeRoles("STUDENT"), c3.getMyFees.bind(c3));
+router11.get("/report/collection", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getCollectionReport.bind(c3));
+router11.get("/report/overdue", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getOverdueFees.bind(c3));
+router11.get("/summary", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getSummary.bind(c3));
+router11.get("/transactions", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getTransactions.bind(c3));
+router11.get("/analytics/monthly", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getMonthlyAnalytics.bind(c3));
+router11.get("/student/:studentId", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.getStudentSummary.bind(c3));
+router11.post("/", authorizeRoles("ACCOUNTANT"), c3.create.bind(c3));
+router11.post("/bulk", authorizeRoles("ACCOUNTANT"), c3.bulkCreate.bind(c3));
+router11.get("/", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.findAll.bind(c3));
+router11.get("/:id", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.findById.bind(c3));
+router11.patch("/:id", authorizeRoles("ACCOUNTANT"), c3.update.bind(c3));
+router11.delete("/:id", authorizeRoles("ACCOUNTANT"), c3.delete.bind(c3));
+router11.patch("/:id/pay", authorizeRoles("ACCOUNTANT"), c3.recordPayment.bind(c3));
+router11.post("/cash", authorizeRoles("ACCOUNTANT"), c3.recordCashPayment.bind(c3));
+var router_default = router11;
 
 // src/modules/teachingApplication/teachingApplication.routes.ts
-var import_express11 = require("express");
+var import_express12 = require("express");
 
 // src/modules/teachingApplication/teachingApplication.service.ts
 init_db();
@@ -22177,17 +22981,17 @@ var TeachingApplicationController = class {
 };
 
 // src/modules/teachingApplication/teachingApplication.routes.ts
-var router11 = (0, import_express11.Router)();
+var router12 = (0, import_express12.Router)();
 var c4 = new TeachingApplicationController();
-router11.post("/apply", c4.apply.bind(c4));
-router11.use(authenticate);
-router11.get("/", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findAll.bind(c4));
-router11.get("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findById.bind(c4));
-router11.patch("/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.updateStatus.bind(c4));
-var teachingApplication_routes_default = router11;
+router12.post("/apply", c4.apply.bind(c4));
+router12.use(authenticate);
+router12.get("/", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findAll.bind(c4));
+router12.get("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findById.bind(c4));
+router12.patch("/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.updateStatus.bind(c4));
+var teachingApplication_routes_default = router12;
 
 // src/modules/notice/notice.route.ts
-var import_express12 = require("express");
+var import_express13 = require("express");
 
 // src/modules/notice/notice.service.ts
 init_db();
@@ -22387,6 +23191,13 @@ var toggleActive = async (id) => {
     data: { isActive: !notice.isActive }
   });
 };
+var togglePin = async (id) => {
+  const notice = await findById(id);
+  return db_default.notice.update({
+    where: { id },
+    data: { pinned: !notice.pinned }
+  });
+};
 var getFeedForUser = async (opts) => {
   const { role, userId } = opts;
   if (ALL_STAFF_ROLES.includes(role)) {
@@ -22501,24 +23312,36 @@ var NoticeController = class {
       next(err);
     }
   }
+  async togglePin(req, res, next) {
+    try {
+      let { id } = req.params;
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error("id param required");
+      const notice = await togglePin(idStr);
+      sendSuccess(res, notice, `Notice ${notice.pinned ? "pinned" : "unpinned"}`);
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/modules/notice/notice.route.ts
-var router12 = (0, import_express12.Router)();
+var router13 = (0, import_express13.Router)();
 var c5 = new NoticeController();
-router12.use(authenticate);
-router12.get("/feed", c5.feed.bind(c5));
-router12.patch("/read/:recipientId", c5.markRead.bind(c5));
-router12.post("/", authorizeRoles("SCHOOL_ADMIN"), c5.create.bind(c5));
-router12.get("/", authorizeRoles("SCHOOL_ADMIN"), c5.findAll.bind(c5));
-router12.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.findById.bind(c5));
-router12.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.update.bind(c5));
-router12.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.delete.bind(c5));
-router12.patch("/:id/toggle", authorizeRoles("SCHOOL_ADMIN"), c5.toggleActive.bind(c5));
-var notice_route_default = router12;
+router13.use(authenticate);
+router13.get("/feed", c5.feed.bind(c5));
+router13.patch("/read/:recipientId", c5.markRead.bind(c5));
+router13.post("/", authorizeRoles("SCHOOL_ADMIN"), c5.create.bind(c5));
+router13.get("/", authorizeRoles("SCHOOL_ADMIN"), c5.findAll.bind(c5));
+router13.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.findById.bind(c5));
+router13.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.update.bind(c5));
+router13.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c5.delete.bind(c5));
+router13.patch("/:id/toggle", authorizeRoles("SCHOOL_ADMIN"), c5.toggleActive.bind(c5));
+router13.patch("/:id/pin", authorizeRoles("SCHOOL_ADMIN"), c5.togglePin.bind(c5));
+var notice_route_default = router13;
 
 // src/modules/timetable/timetable.routes.ts
-var import_express13 = require("express");
+var import_express14 = require("express");
 
 // src/modules/timetable/timetable.service.ts
 init_db();
@@ -23160,26 +23983,27 @@ var TimetableController = class {
 };
 
 // src/modules/timetable/timetable.routes.ts
-var router13 = (0, import_express13.Router)();
+var router14 = (0, import_express14.Router)();
 var c6 = new TimetableController();
-router13.use(authenticate);
-router13.get("/my-routine", authorizeRoles("STUDENT"), c6.getMyRoutine.bind(c6));
-router13.get("/my-routine/today", authorizeRoles("STUDENT"), c6.getMyTodayRoutine.bind(c6));
-router13.get("/parent/child/:studentId", authorizeRoles("PARENT"), c6.getChildRoutine.bind(c6));
-router13.get("/parent/child/:studentId/today", authorizeRoles("PARENT"), c6.getChildTodayRoutine.bind(c6));
-router13.get("/", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.findAll.bind(c6));
-router13.get("/class/:classId", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.getClassWeeklyView.bind(c6));
-router13.get("/teacher/:teacherId", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.getTeacherWeeklyView.bind(c6));
-router13.get("/:id", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c6.findById.bind(c6));
-router13.post("/", authorizeRoles("EXAM_CONTROLLER"), c6.createSlot.bind(c6));
-router13.post("/bulk", authorizeRoles("EXAM_CONTROLLER"), c6.bulkCreate.bind(c6));
-router13.patch("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.update.bind(c6));
-router13.delete("/class/:classId", authorizeRoles("EXAM_CONTROLLER"), c6.deleteClassSchedule.bind(c6));
-router13.delete("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.delete.bind(c6));
-var timetable_routes_default = router13;
+var VIEWERS = ["SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"];
+router14.use(authenticate);
+router14.get("/my-routine", authorizeRoles("STUDENT"), c6.getMyRoutine.bind(c6));
+router14.get("/my-routine/today", authorizeRoles("STUDENT"), c6.getMyTodayRoutine.bind(c6));
+router14.get("/parent/child/:studentId", authorizeRoles("PARENT"), c6.getChildRoutine.bind(c6));
+router14.get("/parent/child/:studentId/today", authorizeRoles("PARENT"), c6.getChildTodayRoutine.bind(c6));
+router14.get("/", authorizeRoles(...VIEWERS), c6.findAll.bind(c6));
+router14.get("/class/:classId", authorizeRoles(...VIEWERS), c6.getClassWeeklyView.bind(c6));
+router14.get("/teacher/:teacherId", authorizeRoles(...VIEWERS), c6.getTeacherWeeklyView.bind(c6));
+router14.get("/:id", authorizeRoles(...VIEWERS), c6.findById.bind(c6));
+router14.post("/", authorizeRoles("EXAM_CONTROLLER"), c6.createSlot.bind(c6));
+router14.post("/bulk", authorizeRoles("EXAM_CONTROLLER"), c6.bulkCreate.bind(c6));
+router14.patch("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.update.bind(c6));
+router14.delete("/class/:classId", authorizeRoles("EXAM_CONTROLLER"), c6.deleteClassSchedule.bind(c6));
+router14.delete("/:id", authorizeRoles("EXAM_CONTROLLER"), c6.delete.bind(c6));
+var timetable_routes_default = router14;
 
 // src/modules/parents/parents.routes.ts
-var import_express14 = require("express");
+var import_express15 = require("express");
 
 // src/modules/parents/parents.controller.ts
 var ParentsController = class {
@@ -23307,29 +24131,20 @@ var ParentsController = class {
 };
 
 // src/modules/parents/parents.routes.ts
-var router14 = (0, import_express14.Router)();
+var router15 = (0, import_express15.Router)();
 var c7 = new ParentsController();
-router14.use(authenticate);
-router14.get("/me", authorizeRoles("PARENT"), c7.getMyProfile.bind(c7));
-router14.patch("/me", authorizeRoles("PARENT"), c7.updateMyProfile.bind(c7));
-router14.get("/me/children", authorizeRoles("PARENT"), c7.getMyChildren.bind(c7));
-router14.get("/me/payments", authorizeRoles("PARENT"), c7.getMyPayments.bind(c7));
-router14.get("/me/notices", authorizeRoles("PARENT"), c7.getMyNotices.bind(c7));
-router14.get("/", authorizeRoles("SCHOOL_ADMIN"), c7.findAll.bind(c7));
-router14.post("/", authorizeRoles("SCHOOL_ADMIN"), c7.create.bind(c7));
-router14.get("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.findById.bind(c7));
-router14.patch("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.update.bind(c7));
-router14.delete("/:id", authorizeRoles("SCHOOL_ADMIN"), c7.delete.bind(c7));
-router14.post("/:id/children", authorizeRoles("SCHOOL_ADMIN"), c7.linkChild.bind(c7));
-router14.delete(
-  "/:id/children/:studentId",
-  authorizeRoles("SCHOOL_ADMIN"),
-  c7.unlinkChild.bind(c7)
-);
-var parents_routes_default = router14;
+router15.use(authenticate);
+router15.get("/me", authorizeRoles("PARENT"), c7.getMyProfile.bind(c7));
+router15.patch("/me", authorizeRoles("PARENT"), c7.updateMyProfile.bind(c7));
+router15.get("/me/children", authorizeRoles("PARENT"), c7.getMyChildren.bind(c7));
+router15.get("/me/payments", authorizeRoles("PARENT"), c7.getMyPayments.bind(c7));
+router15.get("/me/notices", authorizeRoles("PARENT"), c7.getMyNotices.bind(c7));
+router15.get("/", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c7.findAll.bind(c7));
+router15.get("/:id", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c7.findById.bind(c7));
+var parents_routes_default = router15;
 
 // src/modules/notifiction/notifictaion.routes.ts
-var import_express15 = require("express");
+var import_express16 = require("express");
 
 // src/modules/notifiction/notification.controller.ts
 init_notification_service();
@@ -23404,21 +24219,21 @@ var NotificationController = class {
 };
 
 // src/modules/notifiction/notifictaion.routes.ts
-var router15 = (0, import_express15.Router)();
+var router16 = (0, import_express16.Router)();
 var c8 = new NotificationController();
-router15.use(authenticate);
-router15.post("/", authorizeRoles("SCHOOL_ADMIN"), c8.send.bind(c8));
-router15.post("/broadcast", authorizeRoles("SCHOOL_ADMIN"), c8.broadcast.bind(c8));
-router15.get("/", c8.findAll.bind(c8));
-router15.get("/unread-count", c8.getUnreadCount.bind(c8));
-router15.patch("/mark-all-read", c8.markAllRead.bind(c8));
-router15.delete("/clear-all", c8.deleteAll.bind(c8));
-router15.patch("/:id/read", c8.markRead.bind(c8));
-router15.delete("/:id", c8.delete.bind(c8));
-var notifictaion_routes_default = router15;
+router16.use(authenticate);
+router16.post("/", authorizeRoles("SCHOOL_ADMIN"), c8.send.bind(c8));
+router16.post("/broadcast", authorizeRoles("SCHOOL_ADMIN"), c8.broadcast.bind(c8));
+router16.get("/", c8.findAll.bind(c8));
+router16.get("/unread-count", c8.getUnreadCount.bind(c8));
+router16.patch("/mark-all-read", c8.markAllRead.bind(c8));
+router16.delete("/clear-all", c8.deleteAll.bind(c8));
+router16.patch("/:id/read", c8.markRead.bind(c8));
+router16.delete("/:id", c8.delete.bind(c8));
+var notifictaion_routes_default = router16;
 
 // src/modules/homework/howework.routes.ts
-var import_express16 = require("express");
+var import_express17 = require("express");
 
 // src/modules/homework/homework.service.ts
 init_db();
@@ -23639,8 +24454,9 @@ var HomeworkController = class {
   // ── TEACHER: create 
   async create(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       const homework = await HomeworkService.create(teacherId, req.body);
       sendSuccess(res, homework, "Homework created", 201);
     } catch (err) {
@@ -23650,8 +24466,9 @@ var HomeworkController = class {
   // ── TEACHER: update 
   async update(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       const homework = await HomeworkService.update(teacherId, req.params.id, req.body);
       sendSuccess(res, homework, "Homework updated");
     } catch (err) {
@@ -23661,8 +24478,9 @@ var HomeworkController = class {
   // ── TEACHER: mark reviewed 
   async markReviewed(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       const homework = await HomeworkService.markReviewed(teacherId, req.params.id);
       sendSuccess(res, homework, "Homework marked as reviewed");
     } catch (err) {
@@ -23672,8 +24490,9 @@ var HomeworkController = class {
   // ── TEACHER: delete ─
   async delete(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       await HomeworkService.delete(teacherId, req.params.id);
       sendSuccess(res, null, "Homework deleted");
     } catch (err) {
@@ -23683,8 +24502,9 @@ var HomeworkController = class {
   // ── TEACHER: list own homework, filterable 
   async listMine(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       const { sectionId, subjectId, status, page, pageSize } = req.query;
       const result = await HomeworkService.listMine(teacherId, {
         sectionId,
@@ -23701,8 +24521,9 @@ var HomeworkController = class {
   // ── TEACHER dashboard widget: overdue & unreviewed 
   async listOverdue(req, res, next) {
     try {
-      const teacherId = await TeachersService.getTeacherIdByUserId(req.user?.id);
-      if (!teacherId) return res.status(404).json({ success: false, message: "Teacher profile not found" });
+      let teacherId = String(req.user?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
       const data = await HomeworkService.listOverdue(teacherId);
       sendSuccess(res, data, "Overdue homework fetched");
     } catch (err) {
@@ -23722,7 +24543,7 @@ var HomeworkController = class {
   async getMyHomework(req, res, next) {
     try {
       const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
-      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      if (!studentId) return res.status(403).json({ success: false, message: "Student profile not found for this user" });
       const { status, page, pageSize } = req.query;
       const result = await HomeworkService.getMyHomework(studentId, {
         status,
@@ -23738,7 +24559,7 @@ var HomeworkController = class {
   async markViewed(req, res, next) {
     try {
       const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
-      if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
+      if (!studentId) return res.status(403).json({ success: false, message: "Student profile not found for this user" });
       const result = await HomeworkService.markViewed(studentId, req.params.id);
       sendSuccess(res, result, "Marked as viewed");
     } catch (err) {
@@ -23749,7 +24570,7 @@ var HomeworkController = class {
   async getChildHomework(req, res, next) {
     try {
       const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
-      if (!parentId) return res.status(404).json({ success: false, message: "Parent profile not found" });
+      if (!parentId) return res.status(403).json({ success: false, message: "Parent profile not found for this user" });
       const { status, page, pageSize } = req.query;
       const result = await HomeworkService.getChildHomework(parentId, req.params.studentId, {
         status,
@@ -23764,23 +24585,23 @@ var HomeworkController = class {
 };
 
 // src/modules/homework/howework.routes.ts
-var router16 = (0, import_express16.Router)();
+var router17 = (0, import_express17.Router)();
 var c9 = new HomeworkController();
-router16.use(authenticate);
-router16.get("/my-homework", authorizeRoles("STUDENT"), c9.getMyHomework.bind(c9));
-router16.patch("/:id/viewed", authorizeRoles("STUDENT"), c9.markViewed.bind(c9));
-router16.get("/child/:studentId", authorizeRoles("PARENT"), c9.getChildHomework.bind(c9));
-router16.get("/my", authorizeRoles("TEACHER"), c9.listMine.bind(c9));
-router16.get("/my/overdue", authorizeRoles("TEACHER"), c9.listOverdue.bind(c9));
-router16.post("/", authorizeRoles("TEACHER"), c9.create.bind(c9));
-router16.patch("/:id", authorizeRoles("TEACHER"), c9.update.bind(c9));
-router16.patch("/:id/review", authorizeRoles("TEACHER"), c9.markReviewed.bind(c9));
-router16.delete("/:id", authorizeRoles("TEACHER"), c9.delete.bind(c9));
-router16.get("/:id", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c9.getById.bind(c9));
-var howework_routes_default = router16;
+router17.use(authenticate);
+router17.get("/my-homework", authorizeRoles("STUDENT"), c9.getMyHomework.bind(c9));
+router17.patch("/:id/viewed", authorizeRoles("STUDENT"), c9.markViewed.bind(c9));
+router17.get("/child/:studentId", authorizeRoles("PARENT"), c9.getChildHomework.bind(c9));
+router17.get("/my", authorizeRoles("TEACHER"), c9.listMine.bind(c9));
+router17.get("/my/overdue", authorizeRoles("TEACHER"), c9.listOverdue.bind(c9));
+router17.post("/", authorizeRoles("TEACHER"), c9.create.bind(c9));
+router17.patch("/:id", authorizeRoles("TEACHER"), c9.update.bind(c9));
+router17.patch("/:id/review", authorizeRoles("TEACHER"), c9.markReviewed.bind(c9));
+router17.delete("/:id", authorizeRoles("TEACHER"), c9.delete.bind(c9));
+router17.get("/:id", authorizeRoles("SCHOOL_ADMIN", "TEACHER"), c9.getById.bind(c9));
+var howework_routes_default = router17;
 
 // src/modules/superAdmin/superAdmin.route.ts
-var import_express17 = require("express");
+var import_express18 = require("express");
 
 // src/modules/superAdmin/superAdmin.controller.ts
 init_db();
@@ -23806,23 +24627,23 @@ var SuperAdminController = class {
 };
 
 // src/modules/superAdmin/superAdmin.route.ts
-var router17 = (0, import_express17.Router)();
+var router18 = (0, import_express18.Router)();
 var superAdminController = new SuperAdminController();
-router17.use(authenticate);
-router17.get(
+router18.use(authenticate);
+router18.get(
   "/schools",
   authorizeRoles("SUPER_ADMIN"),
   superAdminController.getSchools.bind(superAdminController)
 );
-var superAdmin_route_default = router17;
+var superAdmin_route_default = router18;
 
 // src/modules/hr/hr.routes.ts
-var import_express18 = require("express");
+var import_express19 = require("express");
 
 // src/modules/hr/hr.service.ts
 init_db();
 init_pagination_util();
-var import_pdfkit = __toESM(require("pdfkit"));
+var import_pdfkit2 = __toESM(require("pdfkit"));
 async function createDepartment(dto) {
   const existing = await db_default.department.findFirst({
     where: { OR: [{ name: dto.name }, ...dto.code ? [{ code: dto.code }] : []] }
@@ -24463,7 +25284,7 @@ async function generatePayslipPdf(payrollId) {
     include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, department: { select: { name: true } } } } }
   });
   if (!payroll) throw { status: 404, message: "Payroll not found" };
-  const doc = new import_pdfkit.default({ size: "A4", margin: 50 });
+  const doc = new import_pdfkit2.default({ size: "A4", margin: 50 });
   const chunks = [];
   return new Promise((resolve, reject) => {
     doc.on("data", (chunk) => chunks.push(chunk));
@@ -24817,48 +25638,317 @@ var HRController = class {
 };
 
 // src/modules/hr/hr.routes.ts
-var router18 = (0, import_express18.Router)();
+var router19 = (0, import_express19.Router)();
 var c10 = new HRController();
-router18.use(authenticate);
-router18.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.getDashboardStats.bind(c10));
-router18.post("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createDepartment.bind(c10));
-router18.get("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllDepartments.bind(c10));
-router18.patch("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateDepartment.bind(c10));
-router18.delete("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.deleteDepartment.bind(c10));
-router18.post("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createStaff.bind(c10));
-router18.get("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllStaff.bind(c10));
-router18.get("/staff/directory", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.getStaffDirectory.bind(c10));
-router18.get("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findStaffById.bind(c10));
-router18.patch("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateStaff.bind(c10));
-router18.delete("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.archiveStaff.bind(c10));
-router18.patch("/staff/:id/restore", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.restoreStaff.bind(c10));
-router18.post("/attendance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordAttendance.bind(c10));
-router18.post("/attendance/bulk", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordBulkAttendance.bind(c10));
-router18.get("/attendance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getStaffAttendance.bind(c10));
-router18.get("/attendance/daily", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getDailyAttendance.bind(c10));
-router18.get("/attendance/monthly-summary", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getAttendanceMonthlySummary.bind(c10));
-router18.post("/leave", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.createLeaveRequest.bind(c10));
-router18.get("/leave", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllLeaveRequests.bind(c10));
-router18.patch("/leave/:id/approve", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.approveLeaveRequest.bind(c10));
-router18.get("/leave/staff/:id/balance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getLeaveBalance.bind(c10));
-router18.post("/leave/staff/:id/balance/init", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.initializeLeaveBalances.bind(c10));
-router18.post("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.generatePayroll.bind(c10));
-router18.get("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.findAllPayrolls.bind(c10));
-router18.get("/payroll/pending", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPendingPayrolls.bind(c10));
-router18.get("/payroll/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPayrollHistory.bind(c10));
-router18.get("/payroll/:id/download", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.downloadPayslip.bind(c10));
-router18.patch("/payroll/:id/mark-paid", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.markPayrollPaid.bind(c10));
-router18.post("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.createPerformanceReview.bind(c10));
-router18.get("/performance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findPerformanceReviews.bind(c10));
-router18.post("/critical-actions", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.requestCriticalAction.bind(c10));
-router18.get("/critical-actions", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findPendingCriticalActions.bind(c10));
-router18.get("/critical-actions/:id", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findCriticalActionById.bind(c10));
-router18.patch("/critical-actions/:id/approve", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.approveCriticalAction.bind(c10));
-router18.patch("/critical-actions/:id/reject", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.rejectCriticalAction.bind(c10));
-var hr_routes_default = router18;
+router19.use(authenticate);
+router19.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.getDashboardStats.bind(c10));
+router19.post("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createDepartment.bind(c10));
+router19.get("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllDepartments.bind(c10));
+router19.patch("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateDepartment.bind(c10));
+router19.delete("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.deleteDepartment.bind(c10));
+router19.post("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createStaff.bind(c10));
+router19.get("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllStaff.bind(c10));
+router19.get("/staff/directory", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.getStaffDirectory.bind(c10));
+router19.get("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findStaffById.bind(c10));
+router19.patch("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateStaff.bind(c10));
+router19.delete("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.archiveStaff.bind(c10));
+router19.patch("/staff/:id/restore", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.restoreStaff.bind(c10));
+router19.post("/attendance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordAttendance.bind(c10));
+router19.post("/attendance/bulk", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordBulkAttendance.bind(c10));
+router19.get("/attendance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getStaffAttendance.bind(c10));
+router19.get("/attendance/daily", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getDailyAttendance.bind(c10));
+router19.get("/attendance/monthly-summary", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getAttendanceMonthlySummary.bind(c10));
+router19.post("/leave", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.createLeaveRequest.bind(c10));
+router19.get("/leave", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllLeaveRequests.bind(c10));
+router19.patch("/leave/:id/approve", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.approveLeaveRequest.bind(c10));
+router19.get("/leave/staff/:id/balance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getLeaveBalance.bind(c10));
+router19.post("/leave/staff/:id/balance/init", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.initializeLeaveBalances.bind(c10));
+router19.post("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.generatePayroll.bind(c10));
+router19.get("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.findAllPayrolls.bind(c10));
+router19.get("/payroll/pending", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPendingPayrolls.bind(c10));
+router19.get("/payroll/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPayrollHistory.bind(c10));
+router19.get("/payroll/:id/download", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.downloadPayslip.bind(c10));
+router19.patch("/payroll/:id/mark-paid", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.markPayrollPaid.bind(c10));
+router19.post("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.createPerformanceReview.bind(c10));
+router19.get("/performance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findPerformanceReviews.bind(c10));
+router19.post("/critical-actions", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.requestCriticalAction.bind(c10));
+router19.get("/critical-actions", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findPendingCriticalActions.bind(c10));
+router19.get("/critical-actions/:id", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findCriticalActionById.bind(c10));
+router19.patch("/critical-actions/:id/approve", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.approveCriticalAction.bind(c10));
+router19.patch("/critical-actions/:id/reject", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.rejectCriticalAction.bind(c10));
+var hr_routes_default = router19;
+
+// src/modules/dashboard/dashboard.route.ts
+var import_express20 = require("express");
+
+// src/modules/dashboard/dashboard.service.ts
+init_db();
+var today = /* @__PURE__ */ new Date();
+today.setHours(0, 0, 0, 0);
+var getExamStatus = (nextDate) => {
+  if (!nextDate) return "COMPLETED";
+  const d = new Date(nextDate);
+  d.setHours(0, 0, 0, 0);
+  if (d > today) return "UPCOMING";
+  if (d.getTime() === today.getTime()) return "ONGOING";
+  return "COMPLETED";
+};
+var getStudentExamSummary = async (userId) => {
+  const student = await db_default.student.findUnique({
+    where: { userId },
+    select: { id: true, classId: true }
+  });
+  if (!student) throw { status: 404, message: "Student not found" };
+  const exams = await db_default.exam.findMany({
+    where: {
+      schedules: {
+        some: { classId: student.classId }
+      }
+    },
+    include: {
+      reportCards: {
+        where: {
+          studentId: student.id,
+          status: "PUBLISHED"
+        },
+        select: { id: true }
+      },
+      schedules: {
+        where: { classId: student.classId },
+        select: {
+          examDate: true,
+          subjectId: true
+        },
+        orderBy: { examDate: "asc" }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  return exams.map((exam) => {
+    const uniqueSubjectIds = new Set(exam.schedules.map((s) => s.subjectId));
+    const nextDate = exam.schedules.length ? new Date(exam.schedules[0].examDate) : null;
+    const status = getExamStatus(nextDate);
+    const formattedDate = nextDate ? nextDate.toISOString().split("T")[0] : null;
+    return {
+      examId: exam.id,
+      examName: exam.name,
+      examType: exam.type,
+      status,
+      admitCardAvailable: exam.schedules.length > 0,
+      resultPublished: exam.reportCards.length > 0,
+      nextExamDate: status === "COMPLETED" && exam.schedules.every(
+        (s) => new Date(s.examDate) < today
+      ) ? null : formattedDate,
+      subjectsCount: uniqueSubjectIds.size
+    };
+  });
+};
+var getParentDashboard = async (parentUserId) => {
+  const parent = await db_default.parent.findUnique({
+    where: { userId: parentUserId },
+    select: { id: true, userId: true }
+  });
+  if (!parent) throw { status: 404, message: "Parent profile not found" };
+  const children = await db_default.student.findMany({
+    where: { parentId: parent.id },
+    select: {
+      id: true,
+      name: true,
+      class: { select: { name: true } }
+    }
+  });
+  const result = [];
+  for (const child of children) {
+    const exams = await getStudentExamSummary(child.id);
+    result.push({
+      childId: child.id,
+      childName: child.name,
+      className: child.class.name,
+      exams
+    });
+  }
+  return result;
+};
+
+// src/modules/dashboard/dashboard.controller.ts
+var DashboardController = class {
+  async getStudentExams(req, res, next) {
+    try {
+      const userId = req.user?.id;
+      const data = await getStudentExamSummary(userId);
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getParentExams(req, res, next) {
+    try {
+      const userId = req.user?.id;
+      const data = await getParentDashboard(userId);
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/dashboard/dashboard.route.ts
+var router20 = (0, import_express20.Router)();
+var controller = new DashboardController();
+router20.use(authenticate);
+router20.get("/student/dashboard/exams", authorizeRoles("STUDENT"), controller.getStudentExams.bind(controller));
+router20.get("/parent/dashboard/exams", authorizeRoles("PARENT"), controller.getParentExams.bind(controller));
+var dashboard_route_default = router20;
+
+// src/modules/dashboard/dashboard-school.route.ts
+var import_express21 = require("express");
+
+// src/modules/dashboard/dashboard-school.service.ts
+init_db();
+var getSchoolAdminDashboard = async () => {
+  const today2 = /* @__PURE__ */ new Date();
+  today2.setHours(0, 0, 0, 0);
+  const [
+    totalStudents,
+    totalTeachers,
+    totalClasses,
+    todayAttendance,
+    feeSummary,
+    recentAdmissions,
+    upcomingExams,
+    libraryStats
+  ] = await Promise.all([
+    db_default.student.count({ where: { isActive: true } }),
+    db_default.teacher.count({ where: { isActive: true } }),
+    db_default.class.count(),
+    getTodayAttendanceSummary(),
+    getFeeSummary2(),
+    getRecentAdmissions(),
+    getUpcomingExams(),
+    getLibraryStats()
+  ]);
+  return {
+    totalStudents,
+    totalTeachers,
+    totalClasses,
+    attendance: todayAttendance,
+    fees: feeSummary,
+    library: libraryStats,
+    recentAdmissions,
+    upcomingExams
+  };
+};
+async function getTodayAttendanceSummary() {
+  const today2 = /* @__PURE__ */ new Date();
+  today2.setHours(0, 0, 0, 0);
+  const records = await db_default.studentAttendance.findMany({
+    where: { date: today2 },
+    select: { status: true }
+  });
+  const present = records.filter((r) => r.status === "PRESENT").length;
+  const absent = records.filter((r) => r.status === "ABSENT").length;
+  const late = records.filter((r) => r.status === "LATE").length;
+  const total = records.length;
+  return { present, absent, late, total, date: today2.toISOString().split("T")[0] };
+}
+async function getFeeSummary2() {
+  const [totalPending, totalPaid, totalCollected] = await Promise.all([
+    db_default.feeStructure.count({ where: { status: "PENDING" } }),
+    db_default.feeStructure.count({ where: { status: "PAID" } }),
+    db_default.feeStructure.aggregate({
+      where: { status: "PAID" },
+      _sum: { Paidamount: true }
+    })
+  ]);
+  return {
+    totalPending,
+    totalPaid,
+    totalCollected: totalCollected._sum.Paidamount ?? 0
+  };
+}
+async function getRecentAdmissions() {
+  const admissions = await db_default.admissionApplication.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: {
+      id: true,
+      applicantName: true,
+      targetClass: { select: { name: true } },
+      createdAt: true,
+      status: true
+    }
+  });
+  return admissions;
+}
+async function getUpcomingExams() {
+  const today2 = /* @__PURE__ */ new Date();
+  today2.setHours(0, 0, 0, 0);
+  const exams = await db_default.exam.findMany({
+    where: {
+      schedules: {
+        some: {
+          examDate: { gte: today2 }
+        }
+      }
+    },
+    include: {
+      schedules: {
+        where: { examDate: { gte: today2 } },
+        select: { examDate: true },
+        orderBy: { examDate: "asc" },
+        take: 1
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5
+  });
+  return exams.map((exam) => ({
+    id: exam.id,
+    name: exam.name,
+    type: exam.type,
+    nextExamDate: exam.schedules[0]?.examDate ?? null
+  }));
+}
+async function getLibraryStats() {
+  const [totalBooks, totalIssued, overdueIssues] = await Promise.all([
+    db_default.book.count(),
+    db_default.bookIssue.count({ where: { returnDate: null } }),
+    db_default.bookIssue.count({
+      where: {
+        returnDate: null,
+        dueDate: { lt: /* @__PURE__ */ new Date() }
+      }
+    })
+  ]);
+  return {
+    totalBooks,
+    totalIssued,
+    overdueIssues
+  };
+}
+
+// src/modules/dashboard/dashboard-school.controller.ts
+var SchoolAdminDashboardController = class {
+  async getDashboard(req, res, next) {
+    try {
+      const data = await getSchoolAdminDashboard();
+      sendSuccess(res, data, "Dashboard data fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/dashboard/dashboard-school.route.ts
+var router21 = (0, import_express21.Router)();
+var controller2 = new SchoolAdminDashboardController();
+router21.use(authenticate);
+router21.get("/school-admin", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), controller2.getDashboard.bind(controller2));
+var dashboardSchoolRoutes = router21;
 
 // src/modules/recruitment/recruitment.routes.ts
-var import_express19 = require("express");
+var import_express22 = require("express");
 
 // src/modules/recruitment/recruitment.service.ts
 init_db();
@@ -25328,59 +26418,623 @@ var RecruitmentController = class {
 };
 
 // src/modules/recruitment/recruitment.routes.ts
-var router19 = (0, import_express19.Router)();
+var router22 = (0, import_express22.Router)();
 var c11 = new RecruitmentController();
-router19.use(authenticate);
-router19.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.getDashboardStats.bind(c11));
-router19.post("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createJobPosting.bind(c11));
-router19.get("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllJobPostings.bind(c11));
-router19.get("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findJobPostingById.bind(c11));
-router19.patch("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateJobPosting.bind(c11));
-router19.patch("/jobs/:id/close", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.closeJobPosting.bind(c11));
-router19.post("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createApplicant.bind(c11));
-router19.get("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllApplicants.bind(c11));
-router19.get("/applicants/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findApplicantById.bind(c11));
-router19.patch("/applicants/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateApplicantStatus.bind(c11));
-router19.post("/interviews", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createInterview.bind(c11));
-router19.patch("/interviews/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateInterview.bind(c11));
-router19.post("/offers", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createOffer.bind(c11));
-router19.get("/offers/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findOfferById.bind(c11));
-router19.patch("/offers/:id/accept", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.acceptOffer.bind(c11));
-router19.patch("/offers/:id/reject", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.rejectOffer.bind(c11));
-router19.post("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createDesignationSalary.bind(c11));
-router19.get("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllDesignationSalaries.bind(c11));
-router19.get("/designation-salaries/:designation", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.getDesignationSalary.bind(c11));
-var recruitment_routes_default = router19;
+router22.use(authenticate);
+router22.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.getDashboardStats.bind(c11));
+router22.post("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createJobPosting.bind(c11));
+router22.get("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllJobPostings.bind(c11));
+router22.get("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findJobPostingById.bind(c11));
+router22.patch("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateJobPosting.bind(c11));
+router22.patch("/jobs/:id/close", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.closeJobPosting.bind(c11));
+router22.post("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createApplicant.bind(c11));
+router22.get("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllApplicants.bind(c11));
+router22.get("/applicants/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findApplicantById.bind(c11));
+router22.patch("/applicants/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateApplicantStatus.bind(c11));
+router22.post("/interviews", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createInterview.bind(c11));
+router22.patch("/interviews/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateInterview.bind(c11));
+router22.post("/offers", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createOffer.bind(c11));
+router22.get("/offers/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findOfferById.bind(c11));
+router22.patch("/offers/:id/accept", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.acceptOffer.bind(c11));
+router22.patch("/offers/:id/reject", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.rejectOffer.bind(c11));
+router22.post("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createDesignationSalary.bind(c11));
+router22.get("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllDesignationSalaries.bind(c11));
+router22.get("/designation-salaries/:designation", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.getDesignationSalary.bind(c11));
+var recruitment_routes_default = router22;
+
+// src/modules/student/tc.route.ts
+var import_express23 = require("express");
+
+// src/modules/student/tc.controller.ts
+var import_pdfkit3 = __toESM(require("pdfkit"));
+init_db();
+var TCController = class {
+  async getAll(req, res, next) {
+    try {
+      const tcs = await db_default.transferCertificate.findMany({
+        include: {
+          student: {
+            include: {
+              user: { select: { name: true, email: true } },
+              class: { select: { id: true, name: true } },
+              section: { select: { id: true, name: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100
+      });
+      const data = tcs.map((tc) => ({
+        id: tc.id,
+        studentId: tc.studentId,
+        studentName: tc.student?.user?.name ?? "Unknown",
+        studentEmail: tc.student?.user?.email ?? "",
+        className: tc.student?.class?.name ?? "\u2014",
+        sectionName: tc.student?.section?.name ?? "\u2014",
+        rollNumber: tc.student?.rollNumber ?? null,
+        issueDate: tc.issueDate?.toISOString() ?? null,
+        reason: tc.reason,
+        createdAt: tc.createdAt.toISOString()
+      }));
+      sendSuccess(res, data, "TC records fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async downloadTC(req, res, next) {
+    try {
+      const { studentId } = req.params;
+      const tc = await db_default.transferCertificate.findUnique({
+        where: { studentId },
+        include: { student: { include: { class: true, section: true } } }
+      });
+      if (!tc) {
+        res.status(404).json({ success: false, message: "TC not found for this student" });
+        return;
+      }
+      const student = tc.student;
+      const doc = new import_pdfkit3.default({ margin: 50 });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=TC_${student.studentId}.pdf`);
+      doc.pipe(res);
+      doc.fontSize(25).text("Transfer Certificate", { align: "center" });
+      doc.moveDown();
+      doc.fontSize(14).text(`This is to certify that ${student.name} (ID: ${student.studentId}) was a student of this school.`);
+      doc.moveDown();
+      doc.text(`Class: ${student.class.name}`);
+      doc.text(`Section: ${student.section.name}`);
+      doc.text(`Roll Number: ${student.rollNumber}`);
+      doc.moveDown();
+      doc.text(`Reason for leaving: ${tc.reason || "Not specified"}`);
+      doc.moveDown();
+      doc.text(`Date of Issue: ${tc.issueDate ? new Date(tc.issueDate).toLocaleDateString() : (/* @__PURE__ */ new Date()).toLocaleDateString()}`);
+      doc.moveDown(4);
+      doc.text("Principal Signature: _________________", { align: "right" });
+      doc.end();
+    } catch (error) {
+      next(error);
+    }
+  }
+  async generateTC(req, res, next) {
+    try {
+      const { studentId, reason } = req.body;
+      if (!studentId) {
+        res.status(400).json({ success: false, message: "studentId is required" });
+        return;
+      }
+      const student = await db_default.student.findUnique({
+        where: { id: studentId },
+        include: { class: true, section: true }
+      });
+      if (!student) {
+        res.status(404).json({ success: false, message: "Student not found" });
+        return;
+      }
+      const existingTC = await db_default.transferCertificate.findUnique({
+        where: { studentId },
+        select: { id: true }
+      });
+      if (existingTC) {
+        res.status(409).json({ success: false, message: "TC already generated for this student" });
+        return;
+      }
+      await db_default.transferCertificate.create({
+        data: { studentId, reason, issueDate: /* @__PURE__ */ new Date() }
+      });
+      await db_default.student.update({
+        where: { id: studentId },
+        data: { isActive: false }
+      });
+      const doc = new import_pdfkit3.default({ margin: 50 });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=TC_${student.studentId}.pdf`);
+      doc.pipe(res);
+      doc.fontSize(25).text("Transfer Certificate", { align: "center" });
+      doc.moveDown();
+      doc.fontSize(14).text(`This is to certify that ${student.name} (ID: ${student.studentId}) was a student of this school.`);
+      doc.moveDown();
+      doc.text(`Class: ${student.class.name}`);
+      doc.text(`Section: ${student.section.name}`);
+      doc.text(`Roll Number: ${student.rollNumber}`);
+      doc.moveDown();
+      doc.text(`Reason for leaving: ${reason || "Not specified"}`);
+      doc.moveDown();
+      doc.text(`Date of Issue: ${(/* @__PURE__ */ new Date()).toLocaleDateString()}`);
+      doc.moveDown(4);
+      doc.text("Principal Signature: _________________", { align: "right" });
+      doc.end();
+    } catch (error) {
+      next(error);
+    }
+  }
+};
+
+// src/modules/student/tc.route.ts
+var router23 = (0, import_express23.Router)();
+var tcController = new TCController();
+router23.use(authenticate);
+router23.get("/all", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.getAll.bind(tcController));
+router23.get("/:studentId/download", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.downloadTC.bind(tcController));
+router23.post("/generate", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.generateTC.bind(tcController));
+var tc_route_default = router23;
+
+// src/modules/role/role.route.ts
+var import_express24 = require("express");
+
+// src/modules/role/role.controller.ts
+init_db();
+var import_client4 = require("@prisma/client");
+var RoleController = class {
+  async assignRole(req, res, next) {
+    try {
+      const { userId, newRole } = req.body;
+      if (!userId || !newRole) {
+        res.status(400).json({ success: false, message: "userId and newRole are required" });
+        return;
+      }
+      if (!Object.values(import_client4.Role).includes(newRole)) {
+        res.status(400).json({ success: false, message: "Invalid role" });
+        return;
+      }
+      const user = await db_default.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+      const updatedUser = await db_default.user.update({
+        where: { id: userId },
+        data: { role: newRole },
+        select: { id: true, name: true, email: true, role: true }
+      });
+      res.status(200).json({ success: true, data: updatedUser, message: "Role assigned successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+  async revokeRole(req, res, next) {
+    try {
+      const { userId } = req.body;
+      if (!userId) {
+        res.status(400).json({ success: false, message: "userId is required" });
+        return;
+      }
+      const user = await db_default.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+      const updatedUser = await db_default.user.update({
+        where: { id: userId },
+        data: { role: import_client4.Role.TEACHER },
+        // fallback role
+        select: { id: true, name: true, email: true, role: true }
+      });
+      res.status(200).json({ success: true, data: updatedUser, message: "Role revoked successfully (reset to TEACHER)" });
+    } catch (error) {
+      next(error);
+    }
+  }
+};
+
+// src/modules/role/role.route.ts
+var router24 = (0, import_express24.Router)();
+var roleController = new RoleController();
+router24.post("/assign", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.assignRole.bind(roleController));
+router24.post("/revoke", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.revokeRole.bind(roleController));
+var role_route_default = router24;
+
+// src/modules/report/reports.route.ts
+var import_express25 = require("express");
+
+// src/modules/report/reports.service.ts
+init_db();
+var import_pdfkit4 = __toESM(require("pdfkit"));
+var import_json2csv = require("json2csv");
+function sendPdf(res, filename, buildDoc) {
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+  const doc = new import_pdfkit4.default({ margin: 50 });
+  doc.pipe(res);
+  buildDoc(doc);
+  doc.end();
+}
+function sendCsv(res, filename, fields, data) {
+  const parser = new import_json2csv.Parser({ fields });
+  const csv = parser.parse(data);
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+  res.send(csv);
+}
+var exportStudentsPdf = async (res, classId, studentId) => {
+  const where = {};
+  if (studentId) {
+    where.id = studentId;
+  } else if (classId) {
+    where.classId = classId;
+  }
+  const students = await db_default.student.findMany({
+    where,
+    include: {
+      user: { select: { email: true, isActive: true } },
+      class: { select: { name: true } },
+      section: { select: { name: true } }
+    },
+    orderBy: { rollNumber: "asc" }
+  });
+  sendPdf(res, "students.pdf", (doc) => {
+    doc.fontSize(20).text("Student List", { align: "center" });
+    doc.moveDown();
+    const headers = ["ID", "Name", "Class", "Section", "Roll", "Email", "Status"];
+    const rows = students.map((s) => [
+      s.studentId,
+      s.name,
+      s.class?.name ?? "",
+      s.section?.name ?? "",
+      String(s.rollNumber),
+      s.user?.email ?? "",
+      s.isActive ? "Active" : "Inactive"
+    ]);
+    drawTable(doc, headers, rows);
+  });
+};
+var exportStudentsCsv = async (res, classId, studentId) => {
+  const where = {};
+  if (studentId) {
+    where.id = studentId;
+  } else if (classId) {
+    where.classId = classId;
+  }
+  const students = await db_default.student.findMany({
+    where,
+    include: {
+      user: { select: { email: true, isActive: true } },
+      class: { select: { name: true } },
+      section: { select: { name: true } }
+    },
+    orderBy: { rollNumber: "asc" }
+  });
+  const data = students.map((s) => ({
+    studentId: s.studentId,
+    name: s.name,
+    class: s.class?.name ?? "",
+    section: s.section?.name ?? "",
+    rollNumber: s.rollNumber,
+    email: s.user?.email ?? "",
+    status: s.isActive ? "Active" : "Inactive"
+  }));
+  sendCsv(res, "students.csv", Object.keys(data[0] ?? {}), data);
+};
+var exportAttendancePdf = async (res, classId, sectionId, date, studentId) => {
+  const attendanceDate = new Date(date);
+  attendanceDate.setHours(0, 0, 0, 0);
+  const where = { sectionId, date: attendanceDate };
+  if (studentId) where.studentId = studentId;
+  const records = await db_default.studentAttendance.findMany({
+    where,
+    include: {
+      student: {
+        select: {
+          studentId: true,
+          name: true,
+          rollNumber: true,
+          class: { select: { name: true } },
+          section: { select: { name: true } }
+        }
+      },
+      teacher: { select: { name: true } }
+    },
+    orderBy: { student: { rollNumber: "asc" } }
+  });
+  sendPdf(res, "attendance.pdf", (doc) => {
+    doc.fontSize(20).text("Attendance Report", { align: "center" });
+    doc.fontSize(12).text(`Date: ${date}`, { align: "center" });
+    doc.moveDown();
+    const headers = ["Roll", "Student ID", "Name", "Status", "Marked By"];
+    const rows = records.map((r) => [
+      String(r.student.rollNumber),
+      r.student.studentId,
+      r.student.name,
+      r.status,
+      r.teacher?.name ?? ""
+    ]);
+    drawTable(doc, headers, rows);
+  });
+};
+var exportAttendanceCsv = async (res, classId, sectionId, date, studentId) => {
+  const attendanceDate = new Date(date);
+  attendanceDate.setHours(0, 0, 0, 0);
+  const where = { sectionId, date: attendanceDate };
+  if (studentId) where.studentId = studentId;
+  const records = await db_default.studentAttendance.findMany({
+    where,
+    include: {
+      student: { select: { studentId: true, name: true, rollNumber: true } },
+      teacher: { select: { name: true } }
+    },
+    orderBy: { student: { rollNumber: "asc" } }
+  });
+  const data = records.map((r) => ({
+    rollNumber: r.student.rollNumber,
+    studentId: r.student.studentId,
+    name: r.student.name,
+    status: r.status,
+    markedBy: r.teacher?.name ?? "",
+    date
+  }));
+  sendCsv(res, "attendance.csv", Object.keys(data[0] ?? {}), data);
+};
+var exportFeesPdf = async (res, studentId) => {
+  const where = {};
+  if (studentId) where.studentId = studentId;
+  const fees = await db_default.feeStructure.findMany({
+    where,
+    include: {
+      class: { select: { name: true } },
+      student: { select: { studentId: true, name: true } }
+    },
+    orderBy: { dueDate: "desc" }
+  });
+  sendPdf(res, "fees.pdf", (doc) => {
+    doc.fontSize(20).text("Fee Collection Report", { align: "center" });
+    doc.moveDown();
+    const headers = ["Student", "Class", "Type", "Amount", "Paid", "Status", "Due Date"];
+    const rows = fees.map((f) => [
+      f.student?.name ?? "N/A",
+      f.class?.name ?? "",
+      f.feeType,
+      String(f.amount),
+      String(f.Paidamount),
+      f.status,
+      f.dueDate.toISOString().split("T")[0]
+    ]);
+    drawTable(doc, headers, rows);
+  });
+};
+var exportFeesCsv = async (res, studentId) => {
+  const where = {};
+  if (studentId) where.studentId = studentId;
+  const fees = await db_default.feeStructure.findMany({
+    where,
+    include: {
+      class: { select: { name: true } },
+      student: { select: { studentId: true, name: true } }
+    },
+    orderBy: { dueDate: "desc" }
+  });
+  const data = fees.map((f) => ({
+    student: f.student?.name ?? "N/A",
+    class: f.class?.name ?? "",
+    feeType: f.feeType,
+    amount: f.amount,
+    paid: f.Paidamount,
+    status: f.status,
+    dueDate: f.dueDate.toISOString().split("T")[0]
+  }));
+  sendCsv(res, "fees.csv", Object.keys(data[0] ?? {}), data);
+};
+var exportResultsPdf = async (res, examId, studentId) => {
+  const where = {};
+  if (examId) where.examId = examId;
+  if (studentId) where.studentId = studentId;
+  const marks = await db_default.mark.findMany({
+    where,
+    include: {
+      student: { select: { studentId: true, name: true, rollNumber: true, class: { select: { name: true } } } },
+      subject: { select: { name: true } },
+      exam: { select: { name: true, type: true } }
+    },
+    orderBy: [{ exam: { name: "asc" } }, { student: { rollNumber: "asc" } }]
+  });
+  sendPdf(res, "results.pdf", (doc) => {
+    doc.fontSize(20).text("Results Report", { align: "center" });
+    doc.moveDown();
+    const headers = ["Exam", "Student", "Class", "Subject", "Marks", "Grade"];
+    const rows = marks.map((m) => [
+      m.exam?.name ?? "",
+      m.student.name,
+      m.student.class?.name ?? "",
+      m.subject?.name ?? "",
+      String(m.marksObtained),
+      m.grade ?? ""
+    ]);
+    drawTable(doc, headers, rows);
+  });
+};
+var exportResultsCsv = async (res, examId, studentId) => {
+  const where = {};
+  if (examId) where.examId = examId;
+  if (studentId) where.studentId = studentId;
+  const marks = await db_default.mark.findMany({
+    where,
+    include: {
+      student: { select: { studentId: true, name: true, rollNumber: true, class: { select: { name: true } } } },
+      subject: { select: { name: true } },
+      exam: { select: { name: true, type: true } }
+    },
+    orderBy: [{ exam: { name: "asc" } }, { student: { rollNumber: "asc" } }]
+  });
+  const data = marks.map((m) => ({
+    exam: m.exam?.name ?? "",
+    studentId: m.student.studentId,
+    student: m.student.name,
+    class: m.student.class?.name ?? "",
+    subject: m.subject?.name ?? "",
+    marks: m.marksObtained,
+    grade: m.grade ?? ""
+  }));
+  sendCsv(res, "results.csv", Object.keys(data[0] ?? {}), data);
+};
+function drawTable(doc, headers, rows) {
+  const colWidth = 80;
+  const rowHeight = 25;
+  const startX = 50;
+  let y = doc.y;
+  doc.fontSize(10).font("Helvetica-Bold");
+  headers.forEach((h, i) => {
+    doc.text(h, startX + i * colWidth, y, { width: colWidth, align: "left" });
+  });
+  y += rowHeight;
+  doc.font("Helvetica");
+  rows.forEach((row) => {
+    row.forEach((cell, i) => {
+      doc.text(String(cell), startX + i * colWidth, y, { width: colWidth, align: "left" });
+    });
+    y += rowHeight;
+  });
+  doc.y = y;
+}
+
+// src/modules/report/reports.controller.ts
+var ReportsController = class {
+  async exportStudentsPdf(req, res, next) {
+    try {
+      const classId = req.query.classId;
+      const studentId = req.query.studentId;
+      await exportStudentsPdf(res, classId, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportStudentsCsv(req, res, next) {
+    try {
+      const classId = req.query.classId;
+      const studentId = req.query.studentId;
+      await exportStudentsCsv(res, classId, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportAttendancePdf(req, res, next) {
+    try {
+      const { classId, sectionId, date } = req.query;
+      const studentId = req.query.studentId;
+      if (!classId || !sectionId || !date) {
+        res.status(400).json({ success: false, message: "classId, sectionId, and date are required" });
+        return;
+      }
+      await exportAttendancePdf(res, classId, sectionId, date, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportAttendanceCsv(req, res, next) {
+    try {
+      const { classId, sectionId, date } = req.query;
+      const studentId = req.query.studentId;
+      if (!classId || !sectionId || !date) {
+        res.status(400).json({ success: false, message: "classId, sectionId, and date are required" });
+        return;
+      }
+      await exportAttendanceCsv(res, classId, sectionId, date, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportFeesPdf(req, res, next) {
+    try {
+      const studentId = req.query.studentId;
+      await exportFeesPdf(res, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportFeesCsv(req, res, next) {
+    try {
+      const studentId = req.query.studentId;
+      await exportFeesCsv(res, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportResultsPdf(req, res, next) {
+    try {
+      const examId = req.query.examId;
+      const studentId = req.query.studentId;
+      await exportResultsPdf(res, examId, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async exportResultsCsv(req, res, next) {
+    try {
+      const examId = req.query.examId;
+      const studentId = req.query.studentId;
+      await exportResultsCsv(res, examId, studentId);
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/report/reports.route.ts
+var router25 = (0, import_express25.Router)();
+var c12 = new ReportsController();
+router25.use(authenticate);
+router25.get("/students/pdf", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsPdf.bind(c12));
+router25.get("/students/csv", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsCsv.bind(c12));
+router25.get("/attendance/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendancePdf.bind(c12));
+router25.get("/attendance/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendanceCsv.bind(c12));
+router25.get("/fees/pdf", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesPdf.bind(c12));
+router25.get("/fees/csv", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesCsv.bind(c12));
+router25.get("/results/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsPdf.bind(c12));
+router25.get("/results/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsCsv.bind(c12));
+var reports_route_default = router25;
 
 // src/routes/index.ts
-var router20 = import_express20.default.Router();
-router20.get("/health", (req, res) => {
+var router26 = import_express26.default.Router();
+router26.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router20.use("/auth", auth_route_default);
-router20.use("/students", students_route_default);
-router20.use("/subjects", subject_router_default);
-router20.use("/classes", class_route_default);
-router20.use("/exams", exam_route_default);
-router20.use("/attendance", attendacne_router_default);
-router20.use("/teachers", teacher_routes_default);
-router20.use("/results", result_router_default);
-router20.use("/admission", admission_routes_default);
-router20.use("/fees", router_default);
-router20.use("/teaching", teachingApplication_routes_default);
-router20.use("/notices", notice_route_default);
-router20.use("/timetable", timetable_routes_default);
-router20.use("/homework", howework_routes_default);
-router20.use("/parents", parents_routes_default);
-router20.use("/notifications", notifictaion_routes_default);
-router20.use("/super-admin", superAdmin_route_default);
-router20.use("/hr", hr_routes_default);
-router20.use("/recruitment", recruitment_routes_default);
-var routes_default = router20;
+router26.use("/auth", auth_route_default);
+router26.use("/students", students_route_default);
+router26.use("/subjects", subject_router_default);
+router26.use("/classes", class_route_default);
+router26.use("/exams", exam_route_default);
+router26.use("/attendance", attendacne_router_default);
+router26.use("/teachers", teacher_routes_default);
+router26.use("/results", result_router_default);
+router26.use("/admission", admission_routes_default);
+router26.use("/fees", router_default);
+router26.use("/teaching", teachingApplication_routes_default);
+router26.use("/notices", notice_route_default);
+router26.use("/timetable", timetable_routes_default);
+router26.use("/homework", howework_routes_default);
+router26.use("/parents", parents_routes_default);
+router26.use("/notifications", notifictaion_routes_default);
+router26.use("/super-admin", superAdmin_route_default);
+router26.use("/hr", hr_routes_default);
+router26.use("/recruitment", recruitment_routes_default);
+router26.use("/grading-rules", gradingRoutes);
+router26.use("/dashboard", dashboard_route_default);
+router26.use("/dashboard", dashboardSchoolRoutes);
+router26.use("/tc", tc_route_default);
+router26.use("/roles", role_route_default);
+router26.use("/reports", reports_route_default);
+var routes_default = router26;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express21.default)();
+var app = (0, import_express27.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
@@ -25414,7 +27068,9 @@ if (process.env.NODE_ENV !== "production") {
     next();
   });
 }
-app.use(import_express21.default.json({ limit: "1mb" }));
+var feesController = new FeesController();
+app.post("/api/v1/fees/webhook", import_express27.default.raw({ type: "application/json" }), feesController.handleWebhook.bind(feesController));
+app.use(import_express27.default.json({ limit: "1mb" }));
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,

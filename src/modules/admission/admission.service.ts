@@ -143,8 +143,9 @@ export class AdmissionService {
         return admission;
     }
 
-    async convertToStudent(_dto: ConvertToStudentDto) {
-        throw new Error("Convert to student is not implemented yet");
+    async convertToStudent(dto: ConvertToStudentDto) {
+        const result = await this.createStudentFromAdmission(dto.admissionId);
+        return result;
     }
 
     async delete(id: string, actorUserId: string) {
@@ -210,8 +211,7 @@ export class AdmissionService {
 
    
     private async createStudentFromAdmission(admissionId: string) {
-        return prisma.$transaction(
-            async (tx) => {
+        return prisma.$transaction(async (tx) => {
                 const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
                 if (!admission) throw new Error("Admission record not found");
                 if (admission.studentId) return admission;
@@ -236,15 +236,13 @@ export class AdmissionService {
                     });
                 }
 
-                //  pick the section that still has room, not just the
-                // alphabetically-first one (Req 1.5 — capacity limits).
                 const sections = await tx.section.findMany({
                     where: { classId: admission.targetClassId },
                     include: { _count: { select: { students: true } } },
                     orderBy: { name: "asc" },
                 });
                 const section = sections.find((s) => s._count.students < s.maxCapacity);
-                    if (!section) throw new Error("No available section with capacity for this class");
+                if (!section) throw new Error("No available section with capacity for this class");
 
                 const rollAggregate = await tx.student.aggregate({
                     where: { sectionId: section.id },
@@ -274,12 +272,6 @@ export class AdmissionService {
                     });
                 }
 
-                // 2) PARENT / GUARDIAN account is auto-provisioned here on
-                //    approval — the parent does NOT self sign-up. The school
-                //    account is created and credentials are emailed. Siblings
-                //    share one parent account (guardianEmail is reused), so
-                //    we only link the student to the existing parent when one
-                //    already exists (Req 1.2: multi-child accounts must work).
                 const parentResult = await this._ensureParentFromAdmission(tx, admission);
                 if (parentResult && !studentProfile.parentId) {
                     studentProfile = await tx.student.update({
@@ -293,8 +285,6 @@ export class AdmissionService {
                     data: { studentId: studentProfile.id },
                 });
 
-                // Return tempPassword only inside the tx scope so the caller
-                // can send the welcome email AFTER commit — see below.
                 return {
                     ...studentProfile,
                     __tempPassword: tempPassword,
@@ -303,12 +293,8 @@ export class AdmissionService {
                     __parentTempPassword: parentResult?.tempPassword ?? null,
                     __parentEmail: parentResult?.email ?? null,
                 };
-            },
-            { isolationLevel: "Serializable" }
+            }
         ).then(async (result: any) => {
-            // FIX: email is fired after the transaction commits, and is
-            // non-blocking — approval should not wait on SMTP (NFR: 3s page loads).
-            // FIX: temp password is no longer console.logged (security leak).
             const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
             if (result.__tempPassword) {
                 mailService

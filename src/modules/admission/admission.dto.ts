@@ -47,9 +47,6 @@ export interface UpdateAdmissionDto {
 // ─── Convert approved admission → Student account ───────────────────
 export interface ConvertToStudentDto {
   admissionId: string;
-  email: string;
-  password: string;
-  rollNumber: string;
 }
 
 // ─── Query / filter ─────────────────────────────────────────────────

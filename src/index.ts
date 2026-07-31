@@ -10,6 +10,7 @@ import { initSocket } from './config/socket';
 import { errorMiddleware } from './middleware/error.middle';
 import logger from './utils/logger';
 import router from './routes';
+import { FeesController } from './modules/fee/fee.controller';
 
 dotenv.config();
 
@@ -61,6 +62,10 @@ if (process.env.NODE_ENV !== 'production') {
     next();
   });
 }
+
+// Stripe Webhook MUST be parsed as raw body before express.json() is applied
+const feesController = new FeesController();
+app.post('/api/v1/fees/webhook', express.raw({ type: 'application/json' }), feesController.handleWebhook.bind(feesController));
 
 app.use(express.json({ limit: '1mb' }));
 

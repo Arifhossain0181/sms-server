@@ -1,6 +1,7 @@
 import prisma from "../../config/db";
 import { BulkCreateFeeDto, CreateFeeDto, FeeQueryDto, RecordCashPaymentDto, RecordPaymentDto, UpdateFeeDto } from "./fee.dto";
 import { paginate } from "../../utils/pagination.util";
+import stripe from "../../config/striPe";
 
 
 
@@ -639,4 +640,128 @@ export const getMonthlyAnalytics = async (year: number) => {
     byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
     byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }])),
   };
+};
+
+// ─── Stripe Payment Intent & Webhook ─
+
+export const createPaymentIntent = async (feeId: string, studentId: string) => {
+  const fee = await prisma.feeStructure.findUnique({ where: { id: feeId } });
+  if (!fee) throw new Error("Fee not found");
+  if (fee.studentId !== studentId) throw new Error("Fee does not belong to this student");
+  if (fee.status === "PAID") throw new Error("Fee is already paid");
+
+  const amountRemaining = fee.amount - fee.Paidamount;
+  if (amountRemaining <= 0) throw new Error("No outstanding amount");
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: Math.round(amountRemaining * 100), // Stripe expects amount in smallest currency unit (e.g. cents/paisa)
+    currency: "bdt",
+    metadata: {
+      feeId,
+      studentId,
+    },
+  });
+
+  return {
+    clientSecret: paymentIntent.client_secret,
+    amount: amountRemaining,
+    currency: "bdt"
+  };
+};
+
+export const handleStripeWebhook = async (signature: string, rawBody: Buffer) => {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    throw new Error("Stripe webhook secret not configured");
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  } catch (err: any) {
+    throw new Error(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object as any;
+    const { feeId, studentId } = paymentIntent.metadata;
+
+    if (!feeId || !studentId) {
+      console.warn("PaymentIntent succeeded but missing metadata", paymentIntent.id);
+      return;
+    }
+
+    // Using serializable transaction to prevent race conditions just like recordPayment
+    await prisma.$transaction(
+      async (tx) => {
+        const fee = await tx.feeStructure.findUnique({ where: { id: feeId } });
+        if (!fee) return;
+        if (fee.status === "PAID") return; // Already processed
+
+        // paymentIntent.amount is in cents/paisa
+        const amountPaid = paymentIntent.amount / 100;
+        const totalPaid = fee.Paidamount + amountPaid;
+        const newStatus = totalPaid >= fee.amount ? "PAID" : "PARTIAL";
+
+        let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
+        if (!invoice) {
+          invoice = await tx.invoice.create({
+            data: {
+              studentId: fee.studentId!,
+              feeStructureId: fee.id,
+              amount: fee.amount,
+              dueDate: fee.dueDate,
+              year: fee.year,
+              month: fee.month,
+              status: newStatus,
+            },
+          });
+        }
+
+        const transactionId = paymentIntent.id;
+
+        // Check if payment already recorded
+        const existingPayment = await tx.payment.findUnique({ where: { transactionId } });
+        if (existingPayment) return;
+
+        await tx.payment.create({
+          data: {
+            feeStructureId: fee.id,
+            amount: amountPaid,
+            method: "STRIPE",
+            status: "PAID",
+            transactionId,
+            note: "Paid via Stripe",
+            invoiceId: invoice.id,
+            studentId: fee.studentId!,
+            stripePaymentIntentId: paymentIntent.id,
+            paidAt: new Date(),
+          },
+        });
+
+        await tx.feeStructure.update({
+          where: { id: fee.id },
+          data: { Paidamount: totalPaid, status: newStatus },
+        });
+
+        if (newStatus === "PAID") {
+          await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
+        }
+
+        // We can't log the user who made the payment easily since it's a webhook,
+        // so we log it as SYSTEM or omit actorUserId.
+        await tx.auditLog
+          .create({
+            data: {
+              userId: studentId, // Attributing to the student
+              action: "FEE_ONLINE_PAYMENT",
+              targetId: fee.id,
+              metadata: { amount: amountPaid, method: "STRIPE", newStatus, transactionId },
+            },
+          })
+          .catch((err) => console.warn("Audit log failed:", err?.message));
+      },
+      { isolationLevel: "Serializable" }
+    );
+  }
 };

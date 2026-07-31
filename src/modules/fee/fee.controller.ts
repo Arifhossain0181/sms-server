@@ -14,6 +14,8 @@ import {
   getOverdueFees as getOverdueFeesService,
   getAllPayments as getTransactionsService,
   getMonthlyAnalytics as getMonthlyAnalyticsService,
+  createPaymentIntent as createPaymentIntentService,
+  handleStripeWebhook as handleStripeWebhookService,
 } from './fee.service';
 import { sendSuccess } from '../../utils/response.util';
 
@@ -157,5 +159,48 @@ export class FeesController {
       const data = await getMonthlyAnalyticsService(year);
       sendSuccess(res, data, 'Analytics fetched');
     } catch (err) { next(err); }
+  }
+
+  async createPaymentIntent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { feeId } = req.body;
+      if (!feeId) throw new Error('feeId is required');
+      
+      const studentId = req.user?.studentId || req.user?.id; // Allow parents or students
+      if (!studentId) throw new Error('Student identity not found on request');
+      
+      // If a parent is paying, we might need to verify the fee actually belongs to their child.
+      // But the service does `if (fee.studentId !== studentId)`, so if user is a PARENT, we need 
+      // their child's studentId. Let's assume req.body.studentId can be passed by parent, or 
+      // the parent route handles it differently.
+      // Let's pass the studentId from body if it's there, else from user.
+      const targetStudentId = req.body.studentId || studentId;
+
+      const paymentIntentData = await createPaymentIntentService(feeId, targetStudentId);
+      sendSuccess(res, paymentIntentData, 'Payment Intent created');
+    } catch (err) { next(err); }
+  }
+
+  async handleWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      const signature = req.headers['stripe-signature'];
+      if (!signature) {
+        return res.status(400).send('Missing stripe signature');
+      }
+
+      // Important: rawBody must be available. 
+      // This requires setting up express.raw() in the route.
+      const rawBody = req.body;
+      
+      await handleStripeWebhookService(
+        Array.isArray(signature) ? signature[0] : signature, 
+        rawBody
+      );
+
+      res.status(200).send({ received: true });
+    } catch (err: any) {
+      console.error('Stripe Webhook Error:', err);
+      res.status(400).send(`Webhook Error: ${err.message}`);
+    }
   }
 }

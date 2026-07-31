@@ -93,7 +93,7 @@ export class TimetableController {
   //       own profile, so there is nothing to fake or guess.
   async getMyRoutine(req: Request, res: Response, next: NextFunction) {
     try {
-      const studentId = await StudentsService.getStudentIdByUserId((req.user as any)?.id);
+      const studentId = await StudentService.getStudentIdByUserId((req.user as any)?.id);
       if (!studentId) return res.status(404).json({ success: false, message: 'Student profile not found' });
 
       const data = await timetableService.getMyClassTimetable(studentId);
@@ -104,7 +104,7 @@ export class TimetableController {
   // ── STUDENT dashboard widget: today's classes only ────────────────
   async getMyTodayRoutine(req: Request, res: Response, next: NextFunction) {
     try {
-      const studentId = await StudentsService.getStudentIdByUserId((req.user as any)?.id);
+      const studentId = await StudentService.getStudentIdByUserId((req.user as any)?.id);
       if (!studentId) return res.status(404).json({ success: false, message: 'Student profile not found' });
 
       const data = await timetableService.getTodaysClassesForStudent(studentId);

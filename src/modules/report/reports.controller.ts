@@ -5,7 +5,8 @@ export class ReportsController {
   async exportStudentsPdf(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const classId = req.query.classId as string | undefined;
-      await ReportsService.exportStudentsPdf(res, classId);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportStudentsPdf(res, classId, studentId);
     } catch (err) {
       next(err);
     }
@@ -14,7 +15,8 @@ export class ReportsController {
   async exportStudentsCsv(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const classId = req.query.classId as string | undefined;
-      await ReportsService.exportStudentsCsv(res, classId);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportStudentsCsv(res, classId, studentId);
     } catch (err) {
       next(err);
     }
@@ -23,11 +25,12 @@ export class ReportsController {
   async exportAttendancePdf(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { classId, sectionId, date } = req.query as Record<string, string>;
+      const studentId = req.query.studentId as string | undefined;
       if (!classId || !sectionId || !date) {
         res.status(400).json({ success: false, message: 'classId, sectionId, and date are required' });
         return;
       }
-      await ReportsService.exportAttendancePdf(res, classId, sectionId, date);
+      await ReportsService.exportAttendancePdf(res, classId, sectionId, date, studentId);
     } catch (err) {
       next(err);
     }
@@ -36,11 +39,12 @@ export class ReportsController {
   async exportAttendanceCsv(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { classId, sectionId, date } = req.query as Record<string, string>;
+      const studentId = req.query.studentId as string | undefined;
       if (!classId || !sectionId || !date) {
         res.status(400).json({ success: false, message: 'classId, sectionId, and date are required' });
         return;
       }
-      await ReportsService.exportAttendanceCsv(res, classId, sectionId, date);
+      await ReportsService.exportAttendanceCsv(res, classId, sectionId, date, studentId);
     } catch (err) {
       next(err);
     }
@@ -48,7 +52,8 @@ export class ReportsController {
 
   async exportFeesPdf(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await ReportsService.exportFeesPdf(res);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportFeesPdf(res, studentId);
     } catch (err) {
       next(err);
     }
@@ -56,7 +61,8 @@ export class ReportsController {
 
   async exportFeesCsv(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await ReportsService.exportFeesCsv(res);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportFeesCsv(res, studentId);
     } catch (err) {
       next(err);
     }
@@ -65,7 +71,8 @@ export class ReportsController {
   async exportResultsPdf(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const examId = req.query.examId as string | undefined;
-      await ReportsService.exportResultsPdf(res, examId);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportResultsPdf(res, examId, studentId);
     } catch (err) {
       next(err);
     }
@@ -74,7 +81,8 @@ export class ReportsController {
   async exportResultsCsv(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const examId = req.query.examId as string | undefined;
-      await ReportsService.exportResultsCsv(res, examId);
+      const studentId = req.query.studentId as string | undefined;
+      await ReportsService.exportResultsCsv(res, examId, studentId);
     } catch (err) {
       next(err);
     }
