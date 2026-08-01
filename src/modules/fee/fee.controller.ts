@@ -9,6 +9,7 @@ import {
   recordPayment,
   recordCashPayment,
   getstudentFeeSummary,
+  getStudentFeeList,
   getCollectionReport,
   getFeeSummary,
   getOverdueFees as getOverdueFeesService,
@@ -17,6 +18,7 @@ import {
   createPaymentIntent as createPaymentIntentService,
   handleStripeWebhook as handleStripeWebhookService,
 } from './fee.service';
+import { StudentService } from '../student/student.service';
 import { sendSuccess } from '../../utils/response.util';
 
 export class FeesController {
@@ -137,11 +139,23 @@ export class FeesController {
 
   async getMyFees(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.user?.studentId) {
-        throw new Error('Student ID not found in token');
+      const studentId = req.user?.studentId || (req.user?.id ? await StudentService.getStudentIdByUserId(req.user.id) : null);
+      if (!studentId) {
+        return res.status(403).json({ success: false, message: 'Student profile not found' });
       }
-      const data = await getstudentFeeSummary(req.user.studentId);
+      const data = await getstudentFeeSummary(studentId);
       sendSuccess(res, data, 'Your fees fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getMyFeeList(req: Request, res: Response, next: NextFunction) {
+    try {
+      const studentId = req.user?.studentId || (req.user?.id ? await StudentService.getStudentIdByUserId(req.user.id) : null);
+      if (!studentId) {
+        return res.status(403).json({ success: false, message: 'Student profile not found' });
+      }
+      const data = await getStudentFeeList(studentId);
+      sendSuccess(res, data, 'Your fee list fetched');
     } catch (err) { next(err); }
   }
 

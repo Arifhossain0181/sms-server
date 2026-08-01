@@ -24,6 +24,7 @@ router.use(authenticate);
 // ── Student routes (must come before :id params) ─────────────────────
 router.post('/create-payment-intent', authorizeRoles('STUDENT', 'PARENT'), c.createPaymentIntent.bind(c));
 router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
+router.get('/my-fees-list', authorizeRoles('STUDENT'), c.getMyFeeList.bind(c));
 
 // ── Reports (before :id to avoid param clash) ──────────────────────
 router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getCollectionReport.bind(c));

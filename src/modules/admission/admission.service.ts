@@ -212,6 +212,7 @@ export class AdmissionService {
    
     private async createStudentFromAdmission(admissionId: string) {
         return prisma.$transaction(async (tx) => {
+                await tx.$executeRaw`SET LOCAL statement_timeout = 30000`;
                 const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
                 if (!admission) throw new Error("Admission record not found");
                 if (admission.studentId) return admission;

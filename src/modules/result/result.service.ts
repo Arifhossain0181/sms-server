@@ -258,6 +258,72 @@ export const getResultByStudent = async (
     return { studentId, examId: examId ?? null, totalObtained, totalFull, percentage, marks };
 };
 
+/** Student: class highest marks per subject for comparison */
+export const getClassHighestMarks = async (studentId: string, examId?: string) => {
+    const student = await prisma.student.findUnique({
+        where: { id: studentId },
+        select: { classId: true },
+    });
+    if (!student) throw { status: 404, message: 'Student not found' };
+
+    const publishedExamIds = await prisma.reportCard.findMany({
+        where: {
+            student: { classId: student.classId },
+            status: ResultStatus.PUBLISHED,
+            ...(examId && { examId }),
+        },
+        select: { examId: true },
+        distinct: ['examId'],
+    }).then((rows) => rows.map((r) => r.examId));
+
+    if (!publishedExamIds.length) {
+        return [];
+    }
+
+    const marks = await prisma.mark.findMany({
+        where: {
+            examId: { in: publishedExamIds },
+            student: { classId: student.classId },
+        },
+        select: {
+            examId: true,
+            subjectId: true,
+            marksObtained: true,
+            exam: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true, fullMarks: true } },
+        },
+    });
+
+    const highestByExamSubject = new Map<string, {
+        examId: string;
+        examName: string;
+        subjectId: string;
+        subjectName: string;
+        fullMarks: number;
+        highestMark: number;
+    }>();
+
+    for (const mark of marks) {
+        const key = `${mark.examId}:${mark.subjectId}`;
+        const existing = highestByExamSubject.get(key);
+        if (!existing || mark.marksObtained > existing.highestMark) {
+            highestByExamSubject.set(key, {
+                examId: mark.exam.id,
+                examName: mark.exam.name,
+                subjectId: mark.subject.id,
+                subjectName: mark.subject.name,
+                fullMarks: mark.subject.fullMarks,
+                highestMark: mark.marksObtained,
+            });
+        }
+    }
+
+    return Array.from(highestByExamSubject.values()).sort((a, b) => {
+        if (a.examId !== b.examId) return a.examName.localeCompare(b.examName);
+        return a.subjectName.localeCompare(b.subjectName);
+    });
+};
+
 /** Staff-only (Exam Controller / School Admin / Teacher) — full, unfiltered view for review before publishing. */
 export const getResultByExam = async (examId: string) => {
     const marks = await prisma.mark.findMany({

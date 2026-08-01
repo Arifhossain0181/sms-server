@@ -109,6 +109,20 @@ export const getMyResults = async (req: Request, res: Response, next: NextFuncti
   } catch (err) { next(err); }
 };
 
+export const getMyClassHighest = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const student = await prisma.student.findFirst({
+      where: { userId: req.user!.id },
+      select: { id: true },
+    });
+    if (!student) throw { status: 404, message: 'Student profile not found' };
+
+    const examId = toSingleString(req.query.examId);
+    const data = await resultService.getClassHighestMarks(student.id, examId);
+    sendSuccess(res, data, 'Class highest marks fetched');
+  } catch (err) { next(err); }
+};
+
 // ── Parent: a linked child's (published-only) results 
 
 export const getChildResults = async (req: Request, res: Response, next: NextFunction) => {

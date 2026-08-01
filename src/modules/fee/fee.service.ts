@@ -415,6 +415,51 @@ export const getstudentFeeSummary = async (studentId: string) => {
   return { totalFees, totalPaid, outstanding: totalFees - totalPaid, overDue };
 };
 
+export const getStudentFeeList = async (studentId: string) => {
+  const fees = await prisma.feeStructure.findMany({
+    where: { studentId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          class: { select: { id: true, name: true } },
+        },
+      },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          status: true,
+          paidAt: true,
+          transactionId: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: { dueDate: "desc" },
+  });
+
+  return fees.map((fee) => ({
+    id: fee.id,
+    studentId: fee.studentId,
+    feeType: fee.feeType,
+    title: fee.title,
+    amount: fee.amount,
+    paidAmount: fee.Paidamount,
+    dueAmount: Math.max(fee.amount - fee.Paidamount, 0),
+    dueDate: fee.dueDate,
+    month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
+    status: fee.status,
+    student: fee.student,
+    payments: fee.payments,
+    createdAt: fee.createdAt,
+  }));
+};
+
 /**
  * Requirement 1.5: monthly fee collection report, ONLINE vs OFFLINE split,
  * plus a by-type breakdown — computed with aggregate/groupBy so it stays

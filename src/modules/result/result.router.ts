@@ -22,6 +22,7 @@ router.patch('/marks/:id',        authorizeRoles('TEACHER', ...EXAM_STAFF), resu
 
 // ── Student: own published results only 
 router.get('/my-results',                 authorizeRoles('STUDENT'), resultController.getMyResults);
+router.get('/my-results/class-highest',   authorizeRoles('STUDENT'), resultController.getMyClassHighest);
 
 // ── Parent: a linked child's published results only
 router.get('/child/:studentId/results',   authorizeRoles('PARENT'), resultController.getChildResults);
