@@ -5,7 +5,10 @@ import {
   ParentQueryDto,
   PaginationDto,
 } from "./parents.dto";
-
+import { getAttendance } from "../student/student.attendence";
+import { getResults } from "../student/student.result";
+import { getClassHighestMarks } from "../result/result.service";
+import { createPaymentIntent as createFeePaymentIntent } from "../fee/fee.service";
 
 
 
@@ -20,7 +23,7 @@ const PARENT_SELECT = {
   user: { select: { id: true, email: true } },
 } as const;
 
-// ─── ADMIN: create a Parent profile ───────────────────────────────
+// ─── ADMIN: create a Parent profile 
 export class ParentsService {
   static async createParent(dto: CreateParentDto) {
     // WHAT: confirm the linked User exists AND isn't already a Parent.
@@ -47,7 +50,7 @@ export class ParentsService {
     });
   }
 
-  // ─── ADMIN: update any parent's profile ─────────────────────────
+  // ─── ADMIN: update any parent's profile 
   static async updateParent(parentId: string, dto: UpdateParentDto) {
     const existing = await prisma.parent.findUnique({ where: { id: parentId }, select: { id: true } });
     if (!existing) throw new Error('Parent not found');
@@ -55,7 +58,7 @@ export class ParentsService {
     return prisma.parent.update({ where: { id: parentId }, data: dto, select: PARENT_SELECT });
   }
 
-  // ─── ADMIN: delete a parent profile ──────────────────────────────
+  // ─── ADMIN: delete a parent profile 
   static async deleteParent(parentId: string) {
     const existing = await prisma.parent.findUnique({
       where: { id: parentId },
@@ -103,7 +106,7 @@ export class ParentsService {
     return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 
-  // ─── ADMIN: single parent, with children list ────────────────────
+  // ─── ADMIN: single parent, with children list
   static async getParentById(parentId: string) {
     const parent = await prisma.parent.findUnique({
       where: { id: parentId },
@@ -116,7 +119,7 @@ export class ParentsService {
     return parent;
   }
 
-  // ─── ADMIN: link a student to this parent ────────────────────────
+  // ─── ADMIN: link a student to this parent 
   static async linkChild(parentId: string, studentId: string) {
     const [parent, student] = await Promise.all([
       prisma.parent.findUnique({ where: { id: parentId }, select: { id: true } }),
@@ -129,7 +132,7 @@ export class ParentsService {
     return prisma.student.update({ where: { id: studentId }, data: { parentId } });
   }
 
-  // ─── ADMIN: unlink a student from this parent ────────────────────
+  // ─── ADMIN: unlink a student from this parent 
   static async unlinkChild(parentId: string, studentId: string) {
     const student = await prisma.student.findFirst({ where: { id: studentId, parentId }, select: { id: true } });
     if (!student) throw new Error('This student is not linked to this parent');
@@ -137,9 +140,9 @@ export class ParentsService {
     return prisma.student.update({ where: { id: studentId }, data: { parentId: null } });
   }
 
-  // =====================================================================
+
   // PARENT SELF-SERVICE
-  // =====================================================================
+  
 
   // WHAT: resolves the logged-in User's own Parent id.
   // WHY: used by the timetable module and every method below — since
@@ -202,16 +205,265 @@ export class ParentsService {
     const page = pagination.page ?? 1;
     const pageSize = Math.min(pagination.pageSize ?? 20, 100);
 
-    return prisma.noticeRecipient.findMany({
+    const recipients = await prisma.noticeRecipient.findMany({
       where: { parentId: parent.id },
       select: {
         id: true,
-        read: true,
+        isRead: true,
         notice: { select: { id: true, title: true, content: true, createdAt: true } },
       },
       orderBy: { notice: { createdAt: 'desc' } },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
+
+    return recipients.map((r) => ({
+      id: r.id,
+      read: r.isRead,
+      noticeId: r.notice.id,
+      title: r.notice.title,
+      content: r.notice.content,
+      createdAt: r.notice.createdAt,
+    }));
+  }
+
+  // PARENT SELF-SERVICE: CHILD ACADEMIC DATA
+  // 
+
+  static async assertParentOwnsChild(parentId: string, childId: string) {
+    const child = await prisma.student.findFirst({
+      where: { id: childId, parentId },
+      select: { id: true },
+    });
+    if (!child) throw new Error('Child not found or not linked to your account');
+    return child;
+  }
+
+  static async getChildProfile(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    return prisma.student.findUnique({
+      where: { id: childId },
+      select: {
+        id: true,
+        studentId: true,
+        name: true,
+        rollNumber: true,
+        dob: true,
+        gender: true,
+        bloodGroup: true,
+        address: true,
+        photo: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        user: { select: { email: true } },
+        createdAt: true,
+      },
+    });
+  }
+
+  static async getChildAttendance(parentId: string, childId: string, month?: number, year?: number) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    const where: any = { studentId: childId };
+    if (month && year) {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 1);
+      where.date = { gte: start, lt: end };
+    }
+
+    const [records, summary] = await Promise.all([
+      prisma.studentAttendance.findMany({
+        where,
+        select: { id: true, date: true, status: true },
+        orderBy: { date: 'desc' },
+      }),
+      prisma.studentAttendance.groupBy({
+        by: ['status'],
+        where: { studentId: childId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const total = summary.reduce((sum, c) => sum + c._count._all, 0);
+    const present = summary.find((c) => c.status === 'PRESENT')?._count._all ?? 0;
+    const absent = summary.find((c) => c.status === 'ABSENT')?._count._all ?? 0;
+    const late = summary.find((c) => c.status === 'LATE')?._count._all ?? 0;
+    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+
+    return {
+      records: records.map((r) => ({ ...r, date: r.date.toISOString() })),
+      summary: { total, present, absent, late, percentage },
+    };
+  }
+
+  static async getChildResults(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+    return getResults(childId);
+  }
+
+  static async getChildClassHighestMarks(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+    return getClassHighestMarks(childId);
+  }
+
+  static async getChildHomework(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    const student = await prisma.student.findUnique({
+      where: { id: childId },
+      select: { classId: true, sectionId: true },
+    });
+    if (!student) throw new Error('Student not found');
+
+    const today = new Date().toISOString().split('T')[0];
+
+    return prisma.homework.findMany({
+      where: {
+        classId: student.classId,
+        sectionId: student.sectionId,
+        dueDate: { gte: today },
+      },
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { user: { select: { name: true } } } },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+  }
+
+  static async getChildTimetable(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    const student = await prisma.student.findUnique({
+      where: { id: childId },
+      select: { classId: true },
+    });
+    if (!student || !student.classId) throw new Error('Student class not assigned');
+
+    const timetable = await prisma.timetable.findMany({
+      where: { classId: student.classId },
+      select: {
+        id: true,
+        dayOfWeek: true,
+        startTime: true,
+        endTime: true,
+        roomNumber: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { user: { select: { name: true } } } },
+      },
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+
+    return timetable;
+  }
+
+  static async getChildReportCards(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    const reportCards = await prisma.reportCard.findMany({
+      where: { studentId: childId, status: 'PUBLISHED' },
+      include: {
+        exam: { select: { id: true, name: true, type: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const examIds = reportCards.map((rc) => rc.examId);
+    const marks = examIds.length > 0 ? await prisma.mark.findMany({
+      where: { studentId: childId, examId: { in: examIds } },
+      include: { subject: { select: { name: true, fullMarks: true } } },
+    }) : [];
+
+    const marksByExam = new Map<string, typeof marks>();
+    for (const mark of marks) {
+      const list = marksByExam.get(mark.examId) ?? [];
+      list.push(mark);
+      marksByExam.set(mark.examId, list);
+    }
+
+    return reportCards.map((rc) => ({
+      id: rc.id,
+      examId: rc.exam.id,
+      examName: rc.exam.name,
+      examType: rc.exam.type,
+      status: rc.status,
+      createdAt: rc.createdAt,
+      marks: (marksByExam.get(rc.examId) ?? []).map((m) => ({
+        subjectName: m.subject.name,
+        fullMarks: m.subject.fullMarks,
+        marksObtained: m.marksObtained,
+        grade: m.grade,
+      })),
+    }));
+  }
+
+  static async getChildAdmitCards(parentId: string, childId: string) {
+    await this.assertParentOwnsChild(parentId, childId);
+
+    const exams = await prisma.exam.findMany({
+      where: {
+        reportCards: {
+          some: { studentId: childId, status: 'PUBLISHED' },
+        },
+      },
+      select: { id: true, name: true, type: true },
+    });
+
+    return exams.map((e) => ({
+      examId: e.id,
+      examName: e.name,
+      examType: e.type,
+      url: `/api/v1/exams/${e.id}/students/${childId}/admit-card`,
+    }));
+  }
+
+  static async createParentPaymentIntent(parentId: string, feeId: string) {
+    const parent = await prisma.parent.findUnique({ where: { userId: parentId }, select: { id: true } });
+    if (!parent) throw new Error('Parent profile not found');
+
+    const fee = await prisma.feeStructure.findFirst({
+      where: { id: feeId, student: { parentId: parent.id } },
+      select: { id: true, studentId: true, amount: true, Paidamount: true },
+    });
+    if (!fee) throw new Error('Fee not found or not linked to your children');
+    if (!fee.studentId) throw new Error('Fee student not found');
+
+    const dueAmount = Math.max((fee.amount ?? 0) - (fee.Paidamount ?? 0), 0);
+    if (dueAmount <= 0) throw new Error('Fee already paid');
+
+    return createFeePaymentIntent(fee.id, fee.studentId);
+  }
+
+  static async getLowAttendanceAlerts(parentId: string) {
+    const parent = await prisma.parent.findUnique({ where: { id: parentId }, select: { id: true } });
+    if (!parent) throw new Error('Parent profile not found');
+
+    const children = await prisma.student.findMany({
+      where: { parentId: parent.id },
+      select: { id: true, name: true, classId: true, sectionId: true },
+    });
+
+    const alerts = [];
+    for (const child of children) {
+      try {
+        const attendance = await getAttendance(child.id);
+        if (attendance.percentage < 75 && attendance.total > 0) {
+          alerts.push({
+            childId: child.id,
+            childName: child.name,
+            className: child.classId,
+            sectionId: child.sectionId,
+            attendancePercentage: attendance.percentage,
+            totalDays: attendance.total,
+            absentDays: attendance.absent,
+          });
+        }
+      } catch {}
+    }
+
+    return alerts;
   }
 }

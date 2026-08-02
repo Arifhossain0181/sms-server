@@ -177,19 +177,12 @@ export class FeesController {
 
   async createPaymentIntent(req: Request, res: Response, next: NextFunction) {
     try {
-      const { feeId } = req.body;
+      const { feeId, studentId } = req.body;
       if (!feeId) throw new Error('feeId is required');
       
-      const studentId = req.user?.studentId || req.user?.id; // Allow parents or students
-      if (!studentId) throw new Error('Student identity not found on request');
+      const targetStudentId = studentId || req.user?.studentId;
+      if (!targetStudentId) throw new Error('Student identity not found on request');
       
-      // If a parent is paying, we might need to verify the fee actually belongs to their child.
-      // But the service does `if (fee.studentId !== studentId)`, so if user is a PARENT, we need 
-      // their child's studentId. Let's assume req.body.studentId can be passed by parent, or 
-      // the parent route handles it differently.
-      // Let's pass the studentId from body if it's there, else from user.
-      const targetStudentId = req.body.studentId || studentId;
-
       const paymentIntentData = await createPaymentIntentService(feeId, targetStudentId);
       sendSuccess(res, paymentIntentData, 'Payment Intent created');
     } catch (err) { next(err); }

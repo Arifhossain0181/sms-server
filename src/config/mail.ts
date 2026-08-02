@@ -1,30 +1,41 @@
 import nodemailer from "nodemailer";
 
+const mailHost = process.env.MAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com";
+const mailPort = Number(process.env.MAIL_PORT || process.env.SMTP_PORT || 587);
+const mailSecure = process.env.MAIL_SECURE
+  ? process.env.MAIL_SECURE === "true"
+  : false;
+const mailUser = process.env.MAIL_USER || process.env.SMTP_USER;
+const mailPass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS;
+const mailFrom = process.env.MAIL_FROM || process.env.SMTP_FROM || mailUser || "noreply@sms.local";
+
 // Initialize transporter
 const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || "smtp.gmail.com",
-  port: Number(process.env.MAIL_PORT) || 587,
-  secure: process.env.MAIL_SECURE === "true", // true for 465, false for other ports
+  host: mailHost,
+  port: mailPort,
+  secure: mailSecure, // true for 465, false for other ports
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASSWORD,
+    user: mailUser,
+    pass: mailPass,
   },
 });
 
 export interface SendMailOptions {
   to: string;
   subject: string;
-  html: string;
+  html?: string;
   text?: string;
 }
 
 export const mailService = {
   async send(options: SendMailOptions) {
     try {
-      const from = process.env.MAIL_FROM || process.env.MAIL_USER || "noreply@sms.local";
-      
+      if (!mailUser || !mailPass) {
+        throw new Error("Mail credentials are not configured");
+      }
+
       const info = await transporter.sendMail({
-        from,
+        from: mailFrom,
         ...options,
       });
 
@@ -43,7 +54,7 @@ export const mailService = {
     tempPassword: string,
     loginUrl: string
   ) {
-    const subject = "🎓 Your Student Account Has Been Created";
+    const subject = "Your Student Account Has Been Created";
     const html = `
       <!DOCTYPE html>
       <html>
@@ -132,7 +143,7 @@ export const mailService = {
     tempPassword: string,
     loginUrl: string
   ) {
-    const subject = "👨‍👩‍👦 Your Parent Account Has Been Created";
+    const subject = "👨‍👩 Your Parent Account Has Been Created";
     const html = `
       <!DOCTYPE html>
       <html>

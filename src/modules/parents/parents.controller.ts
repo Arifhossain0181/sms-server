@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import prisma from '../../config/db';
 import { ParentsService } from './parents.service';
+import { getAttendance } from '../student/student.attendence';
 import { sendSuccess } from '../../utils/response.util';
 
 export class ParentsController {
@@ -110,6 +112,146 @@ export class ParentsController {
         pageSize: pageSize ? Number(pageSize) : undefined,
       });
       sendSuccess(res, notices, 'Your notices fetched');
+    } catch (err) { next(err); }
+  }
+
+  // =====================================================================
+  // PARENT SELF-SERVICE: CHILD ACADEMIC DATA
+  // =====================================================================
+
+  async getMyChildrenDetailed(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+
+      const children = await prisma.student.findMany({
+        where: { parentId },
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          classId: true,
+          sectionId: true,
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      const childrenWithAttendance = await Promise.all(
+        children.map(async (child) => {
+          try {
+            const attendance = await getAttendance(child.id);
+            return {
+              ...child,
+              attendancePercentage: attendance.percentage,
+              attendanceSummary: attendance,
+            };
+          } catch {
+            return { ...child, attendancePercentage: 0, attendanceSummary: null };
+          }
+        })
+      );
+
+      sendSuccess(res, childrenWithAttendance, 'Your children fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const profile = await ParentsService.getChildProfile(parentId, req.params.childId as string);
+      sendSuccess(res, profile, 'Child profile fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildAttendance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const { month, year } = req.query as any;
+      const data = await ParentsService.getChildAttendance(
+        parentId,
+        req.params.childId as string,
+        month ? Number(month) : undefined,
+        year ? Number(year) : undefined
+      );
+      sendSuccess(res, data, 'Child attendance fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildResults(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildResults(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Child results fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildClassHighestMarks(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildClassHighestMarks(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Class highest marks fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildHomework(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildHomework(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Child homework fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildTimetable(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildTimetable(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Child timetable fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildReportCards(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildReportCards(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Child report cards fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getChildAdmitCards(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getChildAdmitCards(parentId, req.params.childId as string);
+      sendSuccess(res, data, 'Child admit cards fetched');
+    } catch (err) { next(err); }
+  }
+
+  async createParentPaymentIntent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (req.user as any)?.id;
+      if (!parentId) throw new Error('Unauthorized');
+      const { feeId } = req.body;
+      if (!feeId) throw new Error('feeId is required');
+      const data = await ParentsService.createParentPaymentIntent(parentId, feeId);
+      sendSuccess(res, data, 'Payment intent created');
+    } catch (err) { next(err); }
+  }
+
+  async getLowAttendanceAlerts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = (await ParentsService.getParentIdByUserId((req.user as any)?.id));
+      if (!parentId) throw new Error('Parent profile not found');
+      const data = await ParentsService.getLowAttendanceAlerts(parentId);
+      sendSuccess(res, data, 'Low attendance alerts fetched');
     } catch (err) { next(err); }
   }
 }

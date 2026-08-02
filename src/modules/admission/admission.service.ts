@@ -25,7 +25,7 @@ export class AdmissionService {
         return prisma.admissionApplication.create({
             data: {
                 applicantName: dto.applicantName,
-                studentEmail: dto.studentEmail,
+                studentEmail: dto.studentEmail.trim().toLowerCase(),
                 dob: new Date(dto.dob),
                 gender: dto.gender,
                 religion: dto.religion,
@@ -33,7 +33,7 @@ export class AdmissionService {
                 address: dto.address,
                 guardianName: dto.guardianName,
                 guardianPhone: dto.guardianPhone,
-                guardianEmail: dto.guardianEmail,
+                guardianEmail: dto.guardianEmail.trim().toLowerCase(),
                 targetClassId: dto.targetClassId,
                 photoUrl: dto.photoUrl,
                 birthCertUrl: dto.birthCertUrl,
@@ -106,7 +106,7 @@ export class AdmissionService {
                 address: dto.address,
                 guardianName: dto.guardianName,
                 guardianPhone: dto.guardianPhone,
-                guardianEmail: dto.guardianEmail,
+                guardianEmail: dto.guardianEmail?.trim().toLowerCase(),
                 targetClassId: dto.targetClassId,
                 photoUrl: dto.photoUrl,
                 birthCertUrl: dto.birthCertUrl,

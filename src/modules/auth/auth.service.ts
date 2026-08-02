@@ -1,34 +1,9 @@
 import prisma from "../../config/db";
+import { mailService } from "../../config/mail";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwt.util";
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshTokenDto, RegisterDto, ResetPasswordDto } from "./auth.dto";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import nodemailer from "nodemailer";
-
-const sendEmail = async ({ to, subject, text }: { to: string; subject: string; text: string }) => {
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-
-    if (!user || !pass) {
-        throw new Error("SMTP credentials are not configured");
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || "smtp.gmail.com",
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: false,
-        auth: { user, pass }
-    });
-
-    await transporter.sendMail({
-        from: process.env.SMTP_FROM || user,
-        to,
-        subject,
-        text
-    });
-};
-
-
 
 const USER_SELECT = {
     id: true,
@@ -212,7 +187,7 @@ export class AuthService {
         });
 
         const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-        await sendEmail({
+        await mailService.send({
             to: user.email,
             subject: "Password Reset Request",
             text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`,

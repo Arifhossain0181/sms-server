@@ -17041,6 +17041,203 @@ var import_express = require("express");
 // src/modules/auth/auth.service.ts
 init_db();
 
+// src/config/mail.ts
+var import_nodemailer = __toESM(require("nodemailer"));
+var mailHost = process.env.MAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com";
+var mailPort = Number(process.env.MAIL_PORT || process.env.SMTP_PORT || 587);
+var mailSecure = process.env.MAIL_SECURE ? process.env.MAIL_SECURE === "true" : false;
+var mailUser = process.env.MAIL_USER || process.env.SMTP_USER;
+var mailPass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS;
+var mailFrom = process.env.MAIL_FROM || process.env.SMTP_FROM || mailUser || "noreply@sms.local";
+var transporter = import_nodemailer.default.createTransport({
+  host: mailHost,
+  port: mailPort,
+  secure: mailSecure,
+  // true for 465, false for other ports
+  auth: {
+    user: mailUser,
+    pass: mailPass
+  }
+});
+var mailService = {
+  async send(options) {
+    try {
+      if (!mailUser || !mailPass) {
+        throw new Error("Mail credentials are not configured");
+      }
+      const info = await transporter.sendMail({
+        from: mailFrom,
+        ...options
+      });
+      console.log("Email sent:", info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error("Email send error:", error);
+      return { success: false, error };
+    }
+  },
+  // Send student account creation email with credentials
+  async sendStudentCredentials(email, studentName, tempPassword, loginUrl) {
+    const subject = "Your Student Account Has Been Created";
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+            .header h2 { margin: 0; }
+            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
+            .credentials { background: white; padding: 15px; border-left: 4px solid #667eea; margin: 15px 0; border-radius: 4px; }
+            .field { margin: 10px 0; }
+            .label { font-weight: bold; color: #333; }
+            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
+            .button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
+            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>Welcome to School Management System \u{1F393}</h2>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${studentName}</strong>,</p>
+              
+              <p>Congratulations! Your admission has been <strong>approved</strong> \u2705</p>
+              
+              <p>Your student account has been created. Use the credentials below to log in:</p>
+              
+              <div class="credentials">
+                <div class="field">
+                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="value">${email}</div>
+                </div>
+                <div class="field">
+                  <div class="label">\u{1F510} Temporary Password:</div>
+                  <div class="value">${tempPassword}</div>
+                </div>
+              </div>
+              
+              <div class="warning">
+                <strong> Important:</strong> This is a temporary password. After logging in, you must change it immediately to a secure password of your choice.
+              </div>
+              
+              <p>
+                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
+              </p>
+              
+              <p><strong>Next Steps:</strong></p>
+              <ol>
+                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
+                <li>Log in with your email and temporary password</li>
+                <li>Change your password immediately</li>
+                <li>Start using your student dashboard!</li>
+              </ol>
+              
+              <p>If you have any issues, please contact the school administration.</p>
+              
+              <p>Best regards,<br><strong>School Management System</strong></p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    return this.send({
+      to: email,
+      subject,
+      html
+    });
+  },
+  // Send parent/guardian account creation email with credentials.
+  // The parent account is provisioned by the school on admission approval
+  // (the parent does NOT self sign-up), so credentials are emailed here.
+  async sendParentCredentials(email, parentName, studentName, tempPassword, loginUrl) {
+    const subject = "\u{1F468}\u200D\u{1F469} Your Parent Account Has Been Created";
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+            .header h2 { margin: 0; }
+            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
+            .credentials { background: white; padding: 15px; border-left: 4px solid #11998e; margin: 15px 0; border-radius: 4px; }
+            .field { margin: 10px 0; }
+            .label { font-weight: bold; color: #333; }
+            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
+            .button { display: inline-block; background: #11998e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
+            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>Welcome, Parent/Guardian </h2>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${parentName}</strong>,</p>
+
+              <p>A student account for <strong>${studentName}</strong> has been approved, and a parent account has been created for you.</p>
+
+              <p>Use the credentials below to log in and monitor <strong>${studentName}</strong>'s academic progress:</p>
+
+              <div class="credentials">
+                <div class="field">
+                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="value">${email}</div>
+                </div>
+                <div class="field">
+                  <div class="label"> Temporary Password:</div>
+                  <div class="value">${tempPassword}</div>
+                </div>
+              </div>
+
+              <div class="warning">
+                <strong>Important:</strong> This is a temporary password. After logging in, please change it immediately to a secure password of your choice.
+              </div>
+
+              <p>
+                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
+              </p>
+
+              <p><strong>Next Steps:</strong></p>
+              <ol>
+                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
+                <li>Log in with your email and temporary password</li>
+                <li>Change your password immediately</li>
+                <li>Track attendance, results, fees and notices for your child</li>
+              </ol>
+
+              <p>If you have any issues, please contact the school administration.</p>
+
+              <p>Best regards,<br><strong>School Management System</strong></p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    return this.send({
+      to: email,
+      subject,
+      html
+    });
+  }
+};
+
 // src/utils/jwt.util.ts
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
 var accessSecret = process.env.JWT_ACCESS_SECRET;
@@ -17079,26 +17276,6 @@ var verifyRefreshToken = (token) => {
 // src/modules/auth/auth.service.ts
 var import_bcryptjs = __toESM(require("bcryptjs"));
 var import_node_crypto = require("crypto");
-var import_nodemailer = __toESM(require("nodemailer"));
-var sendEmail = async ({ to, subject, text }) => {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!user || !pass) {
-    throw new Error("SMTP credentials are not configured");
-  }
-  const transporter2 = import_nodemailer.default.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
-    auth: { user, pass }
-  });
-  await transporter2.sendMail({
-    from: process.env.SMTP_FROM || user,
-    to,
-    subject,
-    text
-  });
-};
 var USER_SELECT = {
   id: true,
   name: true,
@@ -17236,7 +17413,7 @@ var AuthService = class {
       data: { userId: user.id, otp: token, expiresAt, used: false }
     });
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    await sendEmail({
+    await mailService.send({
       to: user.email,
       subject: "Password Reset Request",
       text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`
@@ -19153,6 +19330,67 @@ var streamAdmitCardPdf = (data, res, schoolName = "School Name") => {
   doc.end();
 };
 
+// src/modules/exam/report-card.pdf.ts
+var import_pdfkit2 = __toESM(require("pdfkit"));
+var formatDate2 = (d) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+var streamReportCardPdf = (data, res, schoolName = "School Name") => {
+  const doc = new import_pdfkit2.default({ size: "A4", margin: 40 });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="report-card-${data.student.studentId}-${data.exam.id}.pdf"`
+  );
+  doc.pipe(res);
+  doc.fontSize(16).font("Helvetica-Bold").text(schoolName, { align: "center" });
+  doc.fontSize(14).font("Helvetica-Bold").text("Report Card", { align: "center" });
+  doc.moveDown(0.3);
+  doc.fontSize(11).font("Helvetica").text(`Exam: ${data.exam.name} (${data.exam.type})`, { align: "center" });
+  doc.moveDown(1);
+  doc.rect(40, doc.y, 515, 85).stroke();
+  const boxTop = doc.y + 10;
+  doc.fontSize(10).font("Helvetica");
+  doc.text(`Student Name: ${data.student.name}`, 55, boxTop);
+  doc.text(`Student ID: ${data.student.studentId}`, 55, boxTop + 18);
+  doc.text(`Roll Number: ${data.student.rollNumber}`, 55, boxTop + 36);
+  doc.text(`Class: ${data.student.className}`, 300, boxTop);
+  doc.text(`Section: ${data.student.sectionName}`, 300, boxTop + 18);
+  doc.text(`Generated: ${formatDate2(/* @__PURE__ */ new Date())}`, 300, boxTop + 36);
+  doc.y = boxTop + 95;
+  doc.moveDown(2);
+  doc.fontSize(11).font("Helvetica-Bold").text("Subject-wise Marks", 40, doc.y);
+  doc.moveDown(0.5);
+  const tableTop = doc.y;
+  const colX = { subject: 40, fullMarks: 220, obtained: 320, grade: 420 };
+  doc.fontSize(10).font("Helvetica-Bold");
+  doc.text("Subject", colX.subject, tableTop);
+  doc.text("Full Marks", colX.fullMarks, tableTop);
+  doc.text("Obtained", colX.obtained, tableTop);
+  doc.text("Grade", colX.grade, tableTop);
+  doc.moveTo(40, tableTop + 15).lineTo(555, tableTop + 15).stroke();
+  let rowY = tableTop + 22;
+  doc.font("Helvetica");
+  for (const s of data.subjects) {
+    doc.text(s.name, colX.subject, rowY, { width: 170 });
+    doc.text(String(s.fullMarks), colX.fullMarks, rowY);
+    doc.text(String(s.marksObtained), colX.obtained, rowY);
+    doc.text(s.grade ?? "-", colX.grade, rowY);
+    rowY += 20;
+  }
+  doc.moveTo(40, rowY + 5).lineTo(555, rowY + 5).stroke();
+  doc.moveDown(1);
+  if (data.percentage !== void 0) {
+    doc.font("Helvetica-Bold").text(`Percentage: ${data.percentage}%`, 40, rowY + 25);
+  }
+  if (data.result) {
+    doc.text(`Result: ${data.result}`, 40, rowY + 42);
+  }
+  doc.moveDown(4);
+  doc.font("Helvetica").fontSize(9).text("This is a digitally generated report card.", 40, rowY + 80);
+  doc.text("___________________________", 350, rowY + 100);
+  doc.text("Class Teacher Signature", 350, rowY + 115);
+  doc.end();
+};
+
 // src/modules/exam/mark.service.ts
 init_db();
 var safeAudit = async (userId, action, targetId, meta) => {
@@ -19647,6 +19885,47 @@ var downloadAdmitCard = async (req, res, next) => {
     next(err);
   }
 };
+var downloadReportCard = async (req, res, next) => {
+  try {
+    const { examId, studentId } = req.params;
+    const exam = await db_default.exam.findUnique({ where: { id: asParamString2(examId) }, select: { id: true, name: true, type: true } });
+    if (!exam) return res.status(404).json({ success: false, message: "Exam not found" });
+    const student = await db_default.student.findUnique({ where: { id: asParamString2(studentId) }, select: { studentId: true, name: true, rollNumber: true, section: { select: { name: true, class: { select: { name: true } } } } } });
+    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+    const published = await db_default.reportCard.findFirst({
+      where: { studentId: asParamString2(studentId), examId: asParamString2(examId), status: "PUBLISHED" }
+    });
+    if (!published) return res.status(404).json({ success: false, message: "Report card not published yet" });
+    const marks = await db_default.mark.findMany({
+      where: { studentId: asParamString2(studentId), examId: asParamString2(examId) },
+      include: { subject: { select: { name: true, fullMarks: true } } }
+    });
+    const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
+    const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
+    const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
+    const data = {
+      exam: { id: exam.id, name: exam.name, type: exam.type },
+      student: {
+        studentId: student.studentId,
+        name: student.name,
+        rollNumber: student.rollNumber,
+        className: student.section.class.name,
+        sectionName: student.section.name
+      },
+      subjects: marks.map((m) => ({
+        name: m.subject.name,
+        fullMarks: m.subject.fullMarks,
+        marksObtained: m.marksObtained,
+        grade: m.grade ?? void 0
+      })),
+      percentage,
+      result: percentage >= 40 ? "Passed" : "Failed"
+    };
+    streamReportCardPdf(data, res);
+  } catch (err) {
+    next(err);
+  }
+};
 var listAdmitCardDataForClass = async (req, res, next) => {
   try {
     const { examId, classId } = req.params;
@@ -19937,6 +20216,11 @@ router6.get(
   "/:examId/students/:studentId/admit-card",
   authorizeRoles("EXAM_CONTROLLER", "SCHOOL_ADMIN", "STUDENT", "PARENT"),
   downloadAdmitCard
+);
+router6.get(
+  "/:examId/students/:studentId/report-card",
+  authorizeRoles("EXAM_CONTROLLER", "SCHOOL_ADMIN", "STUDENT", "PARENT"),
+  downloadReportCard
 );
 router6.get(
   "/:examId/classes/:classId/admit-cards",
@@ -20998,6 +21282,57 @@ var getResultByStudent = async (studentId, examId, limit = 10) => {
   const percentage = totalFull > 0 ? Math.round(totalObtained / totalFull * 100) : 0;
   return { studentId, examId: examId ?? null, totalObtained, totalFull, percentage, marks };
 };
+var getClassHighestMarks = async (studentId, examId) => {
+  const student = await db_default.student.findUnique({
+    where: { id: studentId },
+    select: { classId: true }
+  });
+  if (!student) throw { status: 404, message: "Student not found" };
+  const publishedExamIds = await db_default.reportCard.findMany({
+    where: {
+      student: { classId: student.classId },
+      status: ResultStatus.PUBLISHED,
+      ...examId && { examId }
+    },
+    select: { examId: true },
+    distinct: ["examId"]
+  }).then((rows) => rows.map((r) => r.examId));
+  if (!publishedExamIds.length) {
+    return [];
+  }
+  const marks = await db_default.mark.findMany({
+    where: {
+      examId: { in: publishedExamIds },
+      student: { classId: student.classId }
+    },
+    select: {
+      examId: true,
+      subjectId: true,
+      marksObtained: true,
+      exam: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, fullMarks: true } }
+    }
+  });
+  const highestByExamSubject = /* @__PURE__ */ new Map();
+  for (const mark of marks) {
+    const key = `${mark.examId}:${mark.subjectId}`;
+    const existing = highestByExamSubject.get(key);
+    if (!existing || mark.marksObtained > existing.highestMark) {
+      highestByExamSubject.set(key, {
+        examId: mark.exam.id,
+        examName: mark.exam.name,
+        subjectId: mark.subject.id,
+        subjectName: mark.subject.name,
+        fullMarks: mark.subject.fullMarks,
+        highestMark: mark.marksObtained
+      });
+    }
+  }
+  return Array.from(highestByExamSubject.values()).sort((a, b) => {
+    if (a.examId !== b.examId) return a.examName.localeCompare(b.examName);
+    return a.subjectName.localeCompare(b.subjectName);
+  });
+};
 var getResultByExam = async (examId) => {
   const marks = await db_default.mark.findMany({
     where: { examId },
@@ -21210,6 +21545,20 @@ var getMyResults2 = async (req, res, next) => {
     next(err);
   }
 };
+var getMyClassHighest = async (req, res, next) => {
+  try {
+    const student = await db_default.student.findFirst({
+      where: { userId: req.user.id },
+      select: { id: true }
+    });
+    if (!student) throw { status: 404, message: "Student profile not found" };
+    const examId = toSingleString(req.query.examId);
+    const data = await getClassHighestMarks(student.id, examId);
+    sendSuccess(res, data, "Class highest marks fetched");
+  } catch (err) {
+    next(err);
+  }
+};
 var getChildResults2 = async (req, res, next) => {
   try {
     const parent = await db_default.parent.findFirst({ where: { userId: req.user.id }, select: { id: true } });
@@ -21239,6 +21588,7 @@ router9.get("/exam/:examId", authorizeRoles("TEACHER", ...EXAM_STAFF3), getResul
 router9.get("/exam/:examId/failed", authorizeRoles("TEACHER", ...EXAM_STAFF3), getFailedStudents4);
 router9.patch("/marks/:id", authorizeRoles("TEACHER", ...EXAM_STAFF3), updateMark2);
 router9.get("/my-results", authorizeRoles("STUDENT"), getMyResults2);
+router9.get("/my-results/class-highest", authorizeRoles("STUDENT"), getMyClassHighest);
 router9.get("/child/:studentId/results", authorizeRoles("PARENT"), getChildResults2);
 var result_router_default = router9;
 
@@ -21247,197 +21597,6 @@ var import_express10 = require("express");
 
 // src/modules/admission/admission.service.ts
 init_db();
-
-// src/config/mail.ts
-var import_nodemailer2 = __toESM(require("nodemailer"));
-var transporter = import_nodemailer2.default.createTransport({
-  host: process.env.MAIL_HOST || "smtp.gmail.com",
-  port: Number(process.env.MAIL_PORT) || 587,
-  secure: process.env.MAIL_SECURE === "true",
-  // true for 465, false for other ports
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASSWORD
-  }
-});
-var mailService = {
-  async send(options) {
-    try {
-      const from = process.env.MAIL_FROM || process.env.MAIL_USER || "noreply@sms.local";
-      const info = await transporter.sendMail({
-        from,
-        ...options
-      });
-      console.log("Email sent:", info.messageId);
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      console.error("Email send error:", error);
-      return { success: false, error };
-    }
-  },
-  // Send student account creation email with credentials
-  async sendStudentCredentials(email, studentName, tempPassword, loginUrl) {
-    const subject = "\u{1F393} Your Student Account Has Been Created";
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-            .header h2 { margin: 0; }
-            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
-            .credentials { background: white; padding: 15px; border-left: 4px solid #667eea; margin: 15px 0; border-radius: 4px; }
-            .field { margin: 10px 0; }
-            .label { font-weight: bold; color: #333; }
-            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
-            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
-            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h2>Welcome to School Management System \u{1F393}</h2>
-            </div>
-            <div class="content">
-              <p>Dear <strong>${studentName}</strong>,</p>
-              
-              <p>Congratulations! Your admission has been <strong>approved</strong> \u2705</p>
-              
-              <p>Your student account has been created. Use the credentials below to log in:</p>
-              
-              <div class="credentials">
-                <div class="field">
-                  <div class="label">\u{1F4E7} Email (Username):</div>
-                  <div class="value">${email}</div>
-                </div>
-                <div class="field">
-                  <div class="label">\u{1F510} Temporary Password:</div>
-                  <div class="value">${tempPassword}</div>
-                </div>
-              </div>
-              
-              <div class="warning">
-                <strong> Important:</strong> This is a temporary password. After logging in, you must change it immediately to a secure password of your choice.
-              </div>
-              
-              <p>
-                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
-              </p>
-              
-              <p><strong>Next Steps:</strong></p>
-              <ol>
-                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
-                <li>Log in with your email and temporary password</li>
-                <li>Change your password immediately</li>
-                <li>Start using your student dashboard!</li>
-              </ol>
-              
-              <p>If you have any issues, please contact the school administration.</p>
-              
-              <p>Best regards,<br><strong>School Management System</strong></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message. Please do not reply to this email.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-    return this.send({
-      to: email,
-      subject,
-      html
-    });
-  },
-  // Send parent/guardian account creation email with credentials.
-  // The parent account is provisioned by the school on admission approval
-  // (the parent does NOT self sign-up), so credentials are emailed here.
-  async sendParentCredentials(email, parentName, studentName, tempPassword, loginUrl) {
-    const subject = "\u{1F468}\u200D\u{1F469}\u200D\u{1F466} Your Parent Account Has Been Created";
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-            .header h2 { margin: 0; }
-            .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 8px 8px; }
-            .credentials { background: white; padding: 15px; border-left: 4px solid #11998e; margin: 15px 0; border-radius: 4px; }
-            .field { margin: 10px 0; }
-            .label { font-weight: bold; color: #333; }
-            .value { color: #666; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px; margin-top: 5px; }
-            .button { display: inline-block; background: #11998e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
-            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ffc107; }
-            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h2>Welcome, Parent/Guardian </h2>
-            </div>
-            <div class="content">
-              <p>Dear <strong>${parentName}</strong>,</p>
-
-              <p>A student account for <strong>${studentName}</strong> has been approved, and a parent account has been created for you.</p>
-
-              <p>Use the credentials below to log in and monitor <strong>${studentName}</strong>'s academic progress:</p>
-
-              <div class="credentials">
-                <div class="field">
-                  <div class="label">\u{1F4E7} Email (Username):</div>
-                  <div class="value">${email}</div>
-                </div>
-                <div class="field">
-                  <div class="label"> Temporary Password:</div>
-                  <div class="value">${tempPassword}</div>
-                </div>
-              </div>
-
-              <div class="warning">
-                <strong>Important:</strong> This is a temporary password. After logging in, please change it immediately to a secure password of your choice.
-              </div>
-
-              <p>
-                <a href="${loginUrl}" class="button">Go to Dashboard \u2192</a>
-              </p>
-
-              <p><strong>Next Steps:</strong></p>
-              <ol>
-                <li>Click the button above or visit: <br><code>${loginUrl}</code></li>
-                <li>Log in with your email and temporary password</li>
-                <li>Change your password immediately</li>
-                <li>Track attendance, results, fees and notices for your child</li>
-              </ol>
-
-              <p>If you have any issues, please contact the school administration.</p>
-
-              <p>Best regards,<br><strong>School Management System</strong></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message. Please do not reply to this email.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-    return this.send({
-      to: email,
-      subject,
-      html
-    });
-  }
-};
-
-// src/modules/admission/admission.service.ts
 var import_bcryptjs5 = __toESM(require("bcryptjs"));
 var import_node_crypto3 = require("crypto");
 var MAX_PAGE_LIMIT = 100;
@@ -21456,7 +21615,7 @@ var AdmissionService = class {
     return db_default.admissionApplication.create({
       data: {
         applicantName: dto.applicantName,
-        studentEmail: dto.studentEmail,
+        studentEmail: dto.studentEmail.trim().toLowerCase(),
         dob: new Date(dto.dob),
         gender: dto.gender,
         religion: dto.religion,
@@ -21464,7 +21623,7 @@ var AdmissionService = class {
         address: dto.address,
         guardianName: dto.guardianName,
         guardianPhone: dto.guardianPhone,
-        guardianEmail: dto.guardianEmail,
+        guardianEmail: dto.guardianEmail.trim().toLowerCase(),
         targetClassId: dto.targetClassId,
         photoUrl: dto.photoUrl,
         birthCertUrl: dto.birthCertUrl,
@@ -21530,7 +21689,7 @@ var AdmissionService = class {
         address: dto.address,
         guardianName: dto.guardianName,
         guardianPhone: dto.guardianPhone,
-        guardianEmail: dto.guardianEmail,
+        guardianEmail: dto.guardianEmail?.trim().toLowerCase(),
         targetClassId: dto.targetClassId,
         photoUrl: dto.photoUrl,
         birthCertUrl: dto.birthCertUrl
@@ -21619,6 +21778,7 @@ var AdmissionService = class {
   async createStudentFromAdmission(admissionId) {
     return db_default.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SET LOCAL statement_timeout = 30000`;
         const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
         if (!admission) throw new Error("Admission record not found");
         if (admission.studentId) return admission;
@@ -21689,8 +21849,7 @@ var AdmissionService = class {
           __parentTempPassword: parentResult?.tempPassword ?? null,
           __parentEmail: parentResult?.email ?? null
         };
-      },
-      { isolationLevel: "Serializable" }
+      }
     ).then(async (result) => {
       const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
       if (result.__tempPassword) {
@@ -22281,6 +22440,49 @@ var getstudentFeeSummary = async (studentId) => {
   const totalPaid = totals._sum.Paidamount ?? 0;
   return { totalFees, totalPaid, outstanding: totalFees - totalPaid, overDue };
 };
+var getStudentFeeList = async (studentId) => {
+  const fees = await db_default.feeStructure.findMany({
+    where: { studentId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          class: { select: { id: true, name: true } }
+        }
+      },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          status: true,
+          paidAt: true,
+          transactionId: true,
+          createdAt: true
+        }
+      }
+    },
+    orderBy: { dueDate: "desc" }
+  });
+  return fees.map((fee) => ({
+    id: fee.id,
+    studentId: fee.studentId,
+    feeType: fee.feeType,
+    title: fee.title,
+    amount: fee.amount,
+    paidAmount: fee.Paidamount,
+    dueAmount: Math.max(fee.amount - fee.Paidamount, 0),
+    dueDate: fee.dueDate,
+    month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
+    status: fee.status,
+    student: fee.student,
+    payments: fee.payments,
+    createdAt: fee.createdAt
+  }));
+};
 var getCollectionReport = async (month, type) => {
   const { start, end } = monthRange(month);
   const baseWhere = {
@@ -22697,11 +22899,24 @@ var FeesController = class {
   }
   async getMyFees(req, res, next) {
     try {
-      if (!req.user?.studentId) {
-        throw new Error("Student ID not found in token");
+      const studentId = req.user?.studentId || (req.user?.id ? await StudentService.getStudentIdByUserId(req.user.id) : null);
+      if (!studentId) {
+        return res.status(403).json({ success: false, message: "Student profile not found" });
       }
-      const data = await getstudentFeeSummary(req.user.studentId);
+      const data = await getstudentFeeSummary(studentId);
       sendSuccess(res, data, "Your fees fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getMyFeeList(req, res, next) {
+    try {
+      const studentId = req.user?.studentId || (req.user?.id ? await StudentService.getStudentIdByUserId(req.user.id) : null);
+      if (!studentId) {
+        return res.status(403).json({ success: false, message: "Student profile not found" });
+      }
+      const data = await getStudentFeeList(studentId);
+      sendSuccess(res, data, "Your fee list fetched");
     } catch (err) {
       next(err);
     }
@@ -22726,11 +22941,10 @@ var FeesController = class {
   }
   async createPaymentIntent(req, res, next) {
     try {
-      const { feeId } = req.body;
+      const { feeId, studentId } = req.body;
       if (!feeId) throw new Error("feeId is required");
-      const studentId = req.user?.studentId || req.user?.id;
-      if (!studentId) throw new Error("Student identity not found on request");
-      const targetStudentId = req.body.studentId || studentId;
+      const targetStudentId = studentId || req.user?.studentId;
+      if (!targetStudentId) throw new Error("Student identity not found on request");
       const paymentIntentData = await createPaymentIntent(feeId, targetStudentId);
       sendSuccess(res, paymentIntentData, "Payment Intent created");
     } catch (err) {
@@ -22762,6 +22976,7 @@ var c3 = new FeesController();
 router11.use(authenticate);
 router11.post("/create-payment-intent", authorizeRoles("STUDENT", "PARENT"), c3.createPaymentIntent.bind(c3));
 router11.get("/my-fees", authorizeRoles("STUDENT"), c3.getMyFees.bind(c3));
+router11.get("/my-fees-list", authorizeRoles("STUDENT"), c3.getMyFeeList.bind(c3));
 router11.get("/report/collection", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getCollectionReport.bind(c3));
 router11.get("/report/overdue", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getOverdueFees.bind(c3));
 router11.get("/summary", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getSummary.bind(c3));
@@ -23347,6 +23562,7 @@ var import_express14 = require("express");
 init_db();
 var SLOT_SELECT = {
   id: true,
+  classId: true,
   dayOfWeek: true,
   startTime: true,
   endTime: true,
@@ -23551,8 +23767,13 @@ var getMyClassTimetable = async (studentId) => {
     where: { id: studentId },
     select: { classId: true }
   });
-  if (!student) throw new Error("Student not found");
-  return getClassWeeklyView(student.classId);
+  if (!student) throw { status: 404, message: "Student not found" };
+  const slots = await db_default.timetable.findMany({
+    where: { classId: student.classId },
+    select: SLOT_SELECT,
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+  });
+  return slots;
 };
 var getChildClassTimetable = async (parentId, studentId) => {
   const student = await db_default.student.findFirst({
@@ -23671,13 +23892,13 @@ var ParentsService = class {
       select: PARENT_SELECT
     });
   }
-  // ─── ADMIN: update any parent's profile ─────────────────────────
+  // ─── ADMIN: update any parent's profile 
   static async updateParent(parentId, dto) {
     const existing = await db_default.parent.findUnique({ where: { id: parentId }, select: { id: true } });
     if (!existing) throw new Error("Parent not found");
     return db_default.parent.update({ where: { id: parentId }, data: dto, select: PARENT_SELECT });
   }
-  // ─── ADMIN: delete a parent profile ──────────────────────────────
+  // ─── ADMIN: delete a parent profile 
   static async deleteParent(parentId) {
     const existing = await db_default.parent.findUnique({
       where: { id: parentId },
@@ -23711,7 +23932,7 @@ var ParentsService = class {
     ]);
     return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
-  // ─── ADMIN: single parent, with children list ────────────────────
+  // ─── ADMIN: single parent, with children list
   static async getParentById(parentId) {
     const parent = await db_default.parent.findUnique({
       where: { id: parentId },
@@ -23723,7 +23944,7 @@ var ParentsService = class {
     if (!parent) throw new Error("Parent not found");
     return parent;
   }
-  // ─── ADMIN: link a student to this parent ────────────────────────
+  // ─── ADMIN: link a student to this parent 
   static async linkChild(parentId, studentId) {
     const [parent, student] = await Promise.all([
       db_default.parent.findUnique({ where: { id: parentId }, select: { id: true } }),
@@ -23734,15 +23955,13 @@ var ParentsService = class {
     if (student.parentId === parentId) throw new Error("This student is already linked to this parent");
     return db_default.student.update({ where: { id: studentId }, data: { parentId } });
   }
-  // ─── ADMIN: unlink a student from this parent ────────────────────
+  // ─── ADMIN: unlink a student from this parent 
   static async unlinkChild(parentId, studentId) {
     const student = await db_default.student.findFirst({ where: { id: studentId, parentId }, select: { id: true } });
     if (!student) throw new Error("This student is not linked to this parent");
     return db_default.student.update({ where: { id: studentId }, data: { parentId: null } });
   }
-  // =====================================================================
   // PARENT SELF-SERVICE
-  // =====================================================================
   // WHAT: resolves the logged-in User's own Parent id.
   // WHY: used by the timetable module and every method below — since
   //      Parent.userId is @unique, this is a single indexed lookup.
@@ -23804,6 +24023,206 @@ var ParentsService = class {
       skip: (page - 1) * pageSize,
       take: pageSize
     });
+  }
+  // PARENT SELF-SERVICE: CHILD ACADEMIC DATA
+  // 
+  static async assertParentOwnsChild(parentId, childId) {
+    const child = await db_default.student.findFirst({
+      where: { id: childId, parentId },
+      select: { id: true }
+    });
+    if (!child) throw new Error("Child not found or not linked to your account");
+    return child;
+  }
+  static async getChildProfile(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    return db_default.student.findUnique({
+      where: { id: childId },
+      select: {
+        id: true,
+        studentId: true,
+        name: true,
+        rollNumber: true,
+        dob: true,
+        gender: true,
+        bloodGroup: true,
+        address: true,
+        photo: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        user: { select: { email: true } },
+        createdAt: true
+      }
+    });
+  }
+  static async getChildAttendance(parentId, childId, month, year) {
+    await this.assertParentOwnsChild(parentId, childId);
+    const where = { studentId: childId };
+    if (month && year) {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 1);
+      where.date = { gte: start, lt: end };
+    }
+    const [records, summary] = await Promise.all([
+      db_default.studentAttendance.findMany({
+        where,
+        select: { id: true, date: true, status: true },
+        orderBy: { date: "desc" }
+      }),
+      db_default.studentAttendance.groupBy({
+        by: ["status"],
+        where: { studentId: childId },
+        _count: { _all: true }
+      })
+    ]);
+    const total = summary.reduce((sum, c13) => sum + c13._count._all, 0);
+    const present = summary.find((c13) => c13.status === "PRESENT")?._count._all ?? 0;
+    const absent = summary.find((c13) => c13.status === "ABSENT")?._count._all ?? 0;
+    const late = summary.find((c13) => c13.status === "LATE")?._count._all ?? 0;
+    const percentage = total > 0 ? Math.round(present / total * 100) : 0;
+    return {
+      records: records.map((r) => ({ ...r, date: r.date.toISOString() })),
+      summary: { total, present, absent, late, percentage }
+    };
+  }
+  static async getChildResults(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    return getResults(childId);
+  }
+  static async getChildHomework(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    const student = await db_default.student.findUnique({
+      where: { id: childId },
+      select: { classId: true, sectionId: true }
+    });
+    if (!student) throw new Error("Student not found");
+    const today2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    return db_default.homework.findMany({
+      where: {
+        classId: student.classId,
+        sectionId: student.sectionId,
+        dueDate: { gte: today2 },
+        isActive: true
+      },
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { user: { select: { name: true } } } }
+      },
+      orderBy: { dueDate: "asc" }
+    });
+  }
+  static async getChildTimetable(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    const student = await db_default.student.findUnique({
+      where: { id: childId },
+      select: { classId: true }
+    });
+    if (!student || !student.classId) throw new Error("Student class not assigned");
+    const timetable = await db_default.timetable.findMany({
+      where: { classId: student.classId },
+      select: {
+        id: true,
+        dayOfWeek: true,
+        startTime: true,
+        endTime: true,
+        roomNumber: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { user: { select: { name: true } } } }
+      },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+    });
+    return timetable;
+  }
+  static async getChildReportCards(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    const reportCards = await db_default.reportCard.findMany({
+      where: { studentId: childId, status: "PUBLISHED" },
+      include: {
+        exam: { select: { id: true, name: true, type: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    const examIds = reportCards.map((rc) => rc.examId);
+    const marks = examIds.length > 0 ? await db_default.mark.findMany({
+      where: { studentId: childId, examId: { in: examIds } },
+      include: { subject: { select: { name: true, fullMarks: true } } }
+    }) : [];
+    const marksByExam = /* @__PURE__ */ new Map();
+    for (const mark of marks) {
+      const list = marksByExam.get(mark.examId) ?? [];
+      list.push(mark);
+      marksByExam.set(mark.examId, list);
+    }
+    return reportCards.map((rc) => ({
+      id: rc.id,
+      examId: rc.exam.id,
+      examName: rc.exam.name,
+      examType: rc.exam.type,
+      status: rc.status,
+      createdAt: rc.createdAt,
+      marks: (marksByExam.get(rc.examId) ?? []).map((m) => ({
+        subjectName: m.subject.name,
+        fullMarks: m.subject.fullMarks,
+        marksObtained: m.marksObtained,
+        grade: m.grade
+      }))
+    }));
+  }
+  static async getChildAdmitCards(parentId, childId) {
+    await this.assertParentOwnsChild(parentId, childId);
+    const exams = await db_default.exam.findMany({
+      where: {
+        reportCards: {
+          some: { studentId: childId, status: "PUBLISHED" }
+        }
+      },
+      select: { id: true, name: true, type: true }
+    });
+    return exams.map((e) => ({
+      examId: e.id,
+      examName: e.name,
+      examType: e.type,
+      url: `/api/v1/exams/${e.id}/students/${childId}/admit-card`
+    }));
+  }
+  static async createParentPaymentIntent(parentId, feeId) {
+    const parent = await db_default.parent.findUnique({ where: { userId: parentId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    const fee = await db_default.feeStructure.findFirst({
+      where: { id: feeId, student: { parentId: parent.id } },
+      select: { id: true, studentId: true, amount: true, Paidamount: true }
+    });
+    if (!fee) throw new Error("Fee not found or not linked to your children");
+    if (!fee.studentId) throw new Error("Fee student not found");
+    const dueAmount = Math.max((fee.amount ?? 0) - (fee.Paidamount ?? 0), 0);
+    if (dueAmount <= 0) throw new Error("Fee already paid");
+    return createPaymentIntent(fee.id, fee.studentId);
+  }
+  static async getLowAttendanceAlerts(parentId) {
+    const parent = await db_default.parent.findUnique({ where: { userId: parentId }, select: { id: true } });
+    if (!parent) throw new Error("Parent profile not found");
+    const children = await db_default.student.findMany({
+      where: { parentId: parent.id },
+      select: { id: true, name: true, classId: true, sectionId: true }
+    });
+    const alerts = [];
+    for (const child of children) {
+      const attendance = await getAttendance(child.id);
+      if (attendance.percentage < 75 && attendance.total > 0) {
+        alerts.push({
+          childId: child.id,
+          childName: child.name,
+          className: child.classId,
+          sectionId: child.sectionId,
+          attendancePercentage: attendance.percentage,
+          totalDays: attendance.total,
+          absentDays: attendance.absent
+        });
+      }
+    }
+    return alerts;
   }
 };
 
@@ -23891,7 +24310,7 @@ var TimetableController = class {
   //       own profile, so there is nothing to fake or guess.
   async getMyRoutine(req, res, next) {
     try {
-      const studentId = await StudentsService.getStudentIdByUserId(req.user?.id);
+      const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
       if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
       const data = await getMyClassTimetable(studentId);
       sendSuccess(res, data, "Your weekly routine fetched");
@@ -23902,7 +24321,7 @@ var TimetableController = class {
   // ── STUDENT dashboard widget: today's classes only ────────────────
   async getMyTodayRoutine(req, res, next) {
     try {
-      const studentId = await StudentsService.getStudentIdByUserId(req.user?.id);
+      const studentId = await StudentService.getStudentIdByUserId(req.user?.id);
       if (!studentId) return res.status(404).json({ success: false, message: "Student profile not found" });
       const data = await getTodaysClassesForStudent(studentId);
       sendSuccess(res, data, "Today's classes fetched");
@@ -24006,6 +24425,7 @@ var timetable_routes_default = router14;
 var import_express15 = require("express");
 
 // src/modules/parents/parents.controller.ts
+init_db();
 var ParentsController = class {
   // ── ADMIN: create a parent profile ────────────────────────────────
   async create(req, res, next) {
@@ -24128,6 +24548,143 @@ var ParentsController = class {
       next(err);
     }
   }
+  // =====================================================================
+  // PARENT SELF-SERVICE: CHILD ACADEMIC DATA
+  // =====================================================================
+  async getMyChildrenDetailed(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const children = await db_default.student.findMany({
+        where: { parentId },
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          classId: true,
+          sectionId: true,
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } }
+        },
+        orderBy: { name: "asc" }
+      });
+      const childrenWithAttendance = await Promise.all(
+        children.map(async (child) => {
+          try {
+            const attendance = await getAttendance(child.id);
+            return {
+              ...child,
+              attendancePercentage: attendance.percentage,
+              attendanceSummary: attendance
+            };
+          } catch {
+            return { ...child, attendancePercentage: 0, attendanceSummary: null };
+          }
+        })
+      );
+      sendSuccess(res, childrenWithAttendance, "Your children fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildProfile(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const profile = await ParentsService.getChildProfile(parentId, req.params.childId);
+      sendSuccess(res, profile, "Child profile fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildAttendance(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const { month, year } = req.query;
+      const data = await ParentsService.getChildAttendance(
+        parentId,
+        req.params.childId,
+        month ? Number(month) : void 0,
+        year ? Number(year) : void 0
+      );
+      sendSuccess(res, data, "Child attendance fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildResults(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getChildResults(parentId, req.params.childId);
+      sendSuccess(res, data, "Child results fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildHomework(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getChildHomework(parentId, req.params.childId);
+      sendSuccess(res, data, "Child homework fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildTimetable(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getChildTimetable(parentId, req.params.childId);
+      sendSuccess(res, data, "Child timetable fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildReportCards(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getChildReportCards(parentId, req.params.childId);
+      sendSuccess(res, data, "Child report cards fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getChildAdmitCards(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getChildAdmitCards(parentId, req.params.childId);
+      sendSuccess(res, data, "Child admit cards fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async createParentPaymentIntent(req, res, next) {
+    try {
+      const parentId = req.user?.id;
+      if (!parentId) throw new Error("Unauthorized");
+      const { feeId } = req.body;
+      if (!feeId) throw new Error("feeId is required");
+      const data = await ParentsService.createParentPaymentIntent(parentId, feeId);
+      sendSuccess(res, data, "Payment intent created");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getLowAttendanceAlerts(req, res, next) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId(req.user?.id);
+      if (!parentId) throw new Error("Parent profile not found");
+      const data = await ParentsService.getLowAttendanceAlerts(parentId);
+      sendSuccess(res, data, "Low attendance alerts fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/modules/parents/parents.routes.ts
@@ -24137,6 +24694,16 @@ router15.use(authenticate);
 router15.get("/me", authorizeRoles("PARENT"), c7.getMyProfile.bind(c7));
 router15.patch("/me", authorizeRoles("PARENT"), c7.updateMyProfile.bind(c7));
 router15.get("/me/children", authorizeRoles("PARENT"), c7.getMyChildren.bind(c7));
+router15.get("/me/children-detailed", authorizeRoles("PARENT"), c7.getMyChildrenDetailed.bind(c7));
+router15.get("/me/alerts", authorizeRoles("PARENT"), c7.getLowAttendanceAlerts.bind(c7));
+router15.get("/me/children/:childId/profile", authorizeRoles("PARENT"), c7.getChildProfile.bind(c7));
+router15.get("/me/children/:childId/attendance", authorizeRoles("PARENT"), c7.getChildAttendance.bind(c7));
+router15.get("/me/children/:childId/results", authorizeRoles("PARENT"), c7.getChildResults.bind(c7));
+router15.get("/me/children/:childId/homework", authorizeRoles("PARENT"), c7.getChildHomework.bind(c7));
+router15.get("/me/children/:childId/timetable", authorizeRoles("PARENT"), c7.getChildTimetable.bind(c7));
+router15.get("/me/children/:childId/report-cards", authorizeRoles("PARENT"), c7.getChildReportCards.bind(c7));
+router15.get("/me/children/:childId/admit-cards", authorizeRoles("PARENT"), c7.getChildAdmitCards.bind(c7));
+router15.post("/me/create-payment-intent", authorizeRoles("PARENT"), c7.createParentPaymentIntent.bind(c7));
 router15.get("/me/payments", authorizeRoles("PARENT"), c7.getMyPayments.bind(c7));
 router15.get("/me/notices", authorizeRoles("PARENT"), c7.getMyNotices.bind(c7));
 router15.get("/", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c7.findAll.bind(c7));
@@ -24643,7 +25210,7 @@ var import_express19 = require("express");
 // src/modules/hr/hr.service.ts
 init_db();
 init_pagination_util();
-var import_pdfkit2 = __toESM(require("pdfkit"));
+var import_pdfkit3 = __toESM(require("pdfkit"));
 async function createDepartment(dto) {
   const existing = await db_default.department.findFirst({
     where: { OR: [{ name: dto.name }, ...dto.code ? [{ code: dto.code }] : []] }
@@ -25284,7 +25851,7 @@ async function generatePayslipPdf(payrollId) {
     include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, department: { select: { name: true } } } } }
   });
   if (!payroll) throw { status: 404, message: "Payroll not found" };
-  const doc = new import_pdfkit2.default({ size: "A4", margin: 50 });
+  const doc = new import_pdfkit3.default({ size: "A4", margin: 50 });
   const chunks = [];
   return new Promise((resolve, reject) => {
     doc.on("data", (chunk) => chunks.push(chunk));
@@ -26446,7 +27013,7 @@ var recruitment_routes_default = router22;
 var import_express23 = require("express");
 
 // src/modules/student/tc.controller.ts
-var import_pdfkit3 = __toESM(require("pdfkit"));
+var import_pdfkit4 = __toESM(require("pdfkit"));
 init_db();
 var TCController = class {
   async getAll(req, res, next) {
@@ -26493,7 +27060,7 @@ var TCController = class {
         return;
       }
       const student = tc.student;
-      const doc = new import_pdfkit3.default({ margin: 50 });
+      const doc = new import_pdfkit4.default({ margin: 50 });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename=TC_${student.studentId}.pdf`);
       doc.pipe(res);
@@ -26545,7 +27112,7 @@ var TCController = class {
         where: { id: studentId },
         data: { isActive: false }
       });
-      const doc = new import_pdfkit3.default({ margin: 50 });
+      const doc = new import_pdfkit4.default({ margin: 50 });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename=TC_${student.studentId}.pdf`);
       doc.pipe(res);
@@ -26648,12 +27215,12 @@ var import_express25 = require("express");
 
 // src/modules/report/reports.service.ts
 init_db();
-var import_pdfkit4 = __toESM(require("pdfkit"));
+var import_pdfkit5 = __toESM(require("pdfkit"));
 var import_json2csv = require("json2csv");
 function sendPdf(res, filename, buildDoc) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-  const doc = new import_pdfkit4.default({ margin: 50 });
+  const doc = new import_pdfkit5.default({ margin: 50 });
   doc.pipe(res);
   buildDoc(doc);
   doc.end();
