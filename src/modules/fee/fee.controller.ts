@@ -19,6 +19,7 @@ import {
   handleStripeWebhook as handleStripeWebhookService,
 } from './fee.service';
 import { StudentService } from '../student/student.service';
+import { ParentsService } from '../parents/parents.service';
 import { sendSuccess } from '../../utils/response.util';
 
 export class FeesController {
@@ -156,6 +157,34 @@ export class FeesController {
       }
       const data = await getStudentFeeList(studentId);
       sendSuccess(res, data, 'Your fee list fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getMyChildrenFees(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parentId = await ParentsService.getParentIdByUserId((req.user as any)?.id);
+      if (!parentId) {
+        return res.status(403).json({ success: false, message: 'Parent profile not found' });
+      }
+
+      const children = await ParentsService.getMyChildren((req.user as any)?.id);
+      const fees = await Promise.all(
+        children.map(async (child) => {
+          const list = await getStudentFeeList(child.id);
+          return list.map((fee: any) => ({ ...fee, studentName: child.name }));
+        })
+      );
+
+      const flat = fees.flat();
+      const totalFees = flat.reduce((sum, f) => sum + (f.amount ?? 0), 0);
+      const totalPaid = flat.reduce((sum, f) => sum + (f.paidAmount ?? 0), 0);
+      const overdueCount = flat.filter((f) => f.status === 'PENDING' && f.dueDate && new Date(f.dueDate) < new Date()).length;
+
+      sendSuccess(res, {
+        children,
+        fees: flat,
+        summary: { totalFees, totalPaid, outstanding: totalFees - totalPaid, overDue: overdueCount },
+      }, 'Children fees fetched');
     } catch (err) { next(err); }
   }
 

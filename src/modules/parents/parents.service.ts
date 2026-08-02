@@ -187,13 +187,36 @@ export class ParentsService {
     const page = pagination.page ?? 1;
     const pageSize = Math.min(pagination.pageSize ?? 20, 100);
 
-    return prisma.payment.findMany({
-      where: { parentId: parent.id },
-      select: { id: true, amount: true, status: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where: { parentId: parent.id },
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          method: true,
+          paidAt: true,
+          transactionId: true,
+          pdfReceiptUrl: true,
+          note: true,
+          createdAt: true,
+          student: { select: { id: true, name: true, rollNumber: true } },
+          feeStructure: { select: { id: true, title: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.payment.count({ where: { parentId: parent.id } }),
+    ]);
+
+    return {
+      data: payments,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   // WHAT: notices addressed to this parent (school-wide or class-specific

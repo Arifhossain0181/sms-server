@@ -25,6 +25,7 @@ router.use(authenticate);
 router.post('/create-payment-intent', authorizeRoles('STUDENT', 'PARENT'), c.createPaymentIntent.bind(c));
 router.get('/my-fees', authorizeRoles('STUDENT'), c.getMyFees.bind(c));
 router.get('/my-fees-list', authorizeRoles('STUDENT'), c.getMyFeeList.bind(c));
+router.get('/my-children-fees', authorizeRoles('PARENT'), c.getMyChildrenFees.bind(c));
 
 // ── Reports (before :id to avoid param clash) ──────────────────────
 router.get('/report/collection',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getCollectionReport.bind(c));
