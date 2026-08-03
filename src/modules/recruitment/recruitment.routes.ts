@@ -9,6 +9,9 @@ const c = new RecruitmentController();
 // All routes require authentication
 router.use(authenticate);
 
+// Public open jobs - no auth required
+router.get('/jobs/public', c.findPublicJobPostings.bind(c));
+
 // ─── Dashboard ───────────────────────────────────────────────────
 router.get('/dashboard', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.getDashboardStats.bind(c));
 

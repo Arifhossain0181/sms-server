@@ -52,6 +52,15 @@ export class RecruitmentController {
     }
   }
 
+  async findPublicJobPostings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await findAllJobPostings({ ...req.query, status: 'OPEN' });
+      sendSuccess(res, data, 'Open job postings fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async findJobPostingById(req: Request, res: Response, next: NextFunction) {
     try {
       const posting = await findJobPostingById(String(req.params.id));
