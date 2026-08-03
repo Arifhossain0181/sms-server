@@ -4,6 +4,8 @@ model Staff {
   name            String
   email           String      @unique
   phone           String?
+  schoolId        String?
+  school          School?     @relation(fields: [schoolId], references: [id])
   designation     String?
   departmentId    String?
   department      Department? @relation(fields: [departmentId], references: [id])

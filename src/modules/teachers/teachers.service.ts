@@ -370,6 +370,63 @@ export const TeachersService = {
     });
   },
 
+  async getMyStudents(teacherId: string, query: { page?: string; limit?: string; search?: string; gender?: string }) {
+    const teacher = await prisma.teacher.findUnique({
+      where: { id: teacherId },
+      select: { sectionTeacher: { select: { classId: true } } },
+    });
+
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
+
+    const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+
+    const { page = '1', limit = '10', search, gender } = query;
+    const where: any = {
+      ...(classIds.length > 0 ? { section: { classId: { in: classIds } } } : { id: '__none__' }),
+      ...(gender && { gender }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          ...(isNaN(Number(search)) ? [] : [{ rollNumber: Number(search) }]),
+        ],
+      }),
+    };
+
+    const { skip, take, meta } = await paginate(prisma.student, where, parseInt(page, 10), parseInt(limit, 10));
+
+    const students = await prisma.student.findMany({
+      where,
+      skip,
+      take,
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true } },
+        parent: {
+          select: {
+            phone: true,
+            name: true,
+            user: { select: { email: true } },
+          },
+        },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        admissionRecord: { select: { guardianPhone: true, guardianEmail: true, guardianName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const flattened = students.map((student) => {
+      const guardianEmail = student.parent?.user?.email ?? student.admissionRecord?.guardianEmail ?? null;
+      return {
+        ...student,
+        email: student.user?.email,
+        guardianEmail: guardianEmail ?? "—",
+        phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null,
+      };
+    });
+
+    return { data: flattened, meta };
+  },
+
   async getDashboardStats(teacherId: string) {
     const teacher = await prisma.teacher.findUnique({
       where: { id: teacherId },

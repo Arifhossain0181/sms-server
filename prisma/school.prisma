@@ -1,0 +1,54 @@
+model School {
+  id            String    @id @default(uuid())
+  name          String
+  code          String    @unique
+  address       String?
+  phone         String?
+  email         String?
+  principalName String?
+  principalEmail String?
+  isActive      Boolean   @default(true)
+  academicYear  String?
+  gradingScale  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  adminUsers    User[]
+  students      Student[]
+  teachers      Teacher[]
+  classes       Class[]
+  staff         Staff[]
+
+  @@index([code])
+  @@map("schools")
+}
+
+model SystemSettings {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model Subscription {
+  id              String   @id @default(uuid())
+  schoolId        String
+  plan            String
+  status          String   @default("ACTIVE")
+  startDate       DateTime
+  endDate         DateTime
+  amount          Float?
+  currency        String?  @default("USD")
+  stripeCustomerId String?
+  stripeSubId     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId])
+  @@map("subscriptions")
+}

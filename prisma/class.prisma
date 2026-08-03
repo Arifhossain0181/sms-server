@@ -1,5 +1,7 @@
 model Class {
   id           String   @id @default(uuid())
+  schoolId     String?
+  school       School?  @relation(fields: [schoolId], references: [id])
   name         String   @unique
   numericLevel Int
   createdAt    DateTime @default(now())

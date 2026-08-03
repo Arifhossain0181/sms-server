@@ -30,6 +30,7 @@ router.post("/me/create-payment-intent", authorizeRoles("PARENT"), c.createParen
 
 router.get("/me/payments", authorizeRoles("PARENT"), c.getMyPayments.bind(c));
 router.get("/me/notices", authorizeRoles("PARENT"), c.getMyNotices.bind(c));
+router.post("/me/contact", authorizeRoles("PARENT"), c.contactSchool.bind(c));
 
 // ── ADMIN / EXAM_CONTROLLER: full CRUD + child linking ─────────────────────────────────
 router.get("/", authorizeRoles("SCHOOL_ADMIN", "EXAM_CONTROLLER"), c.findAll.bind(c));

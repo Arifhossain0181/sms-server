@@ -144,6 +144,19 @@ export class TeacherController {
     }
   }
 
+  async getMyStudents(req: Request, res: Response, next: NextFunction) {
+    try {
+      let teacherId = String(req.params.id);
+      const teacherByUserId = await teacherService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+
+      const data = await teacherService.getMyStudents(teacherId, req.query as any);
+      sendSuccess(res, data, 'Students fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getDashboardStats(req: Request, res: Response, next: NextFunction) {
     try {
       let teacherId = String(req.params.id);

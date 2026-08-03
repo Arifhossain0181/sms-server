@@ -66,6 +66,12 @@ router.get(
 );
 
 router.get(
+  '/:id/students',
+  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  teacherController.getMyStudents.bind(teacherController)
+);
+
+router.get(
   '/:id/dashboard',
   authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getDashboardStats.bind(teacherController)

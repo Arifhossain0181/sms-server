@@ -4,6 +4,8 @@ model Student {
   id         String      @id @default(uuid())
   userId     String      @unique
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schoolId   String?
+  school     School?     @relation(fields: [schoolId], references: [id])
   studentId  String      @unique
   name       String
   dob        DateTime    @db.Date

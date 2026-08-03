@@ -254,4 +254,15 @@ export class ParentsController {
       sendSuccess(res, data, 'Low attendance alerts fetched');
     } catch (err) { next(err); }
   }
+
+  async contactSchool(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req.user as any)?.id;
+      if (!userId) throw new Error('Unauthorized');
+      const { subject, message, childName } = req.body;
+      if (!subject || !message) throw new Error('Subject and message are required');
+      const data = await ParentsService.contactSchool(userId, { subject, message, childName });
+      sendSuccess(res, data, 'Message sent to school');
+    } catch (err) { next(err); }
+  }
 }

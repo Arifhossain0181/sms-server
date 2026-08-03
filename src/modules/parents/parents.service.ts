@@ -9,6 +9,7 @@ import { getAttendance } from "../student/student.attendence";
 import { getResults } from "../student/student.result";
 import { getClassHighestMarks } from "../result/result.service";
 import { createPaymentIntent as createFeePaymentIntent } from "../fee/fee.service";
+import { mailService } from "../../config/mail";
 
 
 
@@ -488,5 +489,37 @@ export class ParentsService {
     }
 
     return alerts;
+  }
+
+  static async contactSchool(userId: string, dto: { subject: string; message: string; childName?: string }) {
+    const parent = await prisma.parent.findUnique({
+      where: { userId },
+      select: { id: true, name: true, phone: true, user: { select: { email: true } } },
+    });
+    if (!parent) throw new Error('Parent profile not found');
+
+    const schoolEmail = process.env.SCHOOL_ADMIN_EMAIL || process.env.SMTP_FROM || "school@example.com";
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #4f46e5;">New Parent Contact Message</h2>
+        <p><strong>From:</strong> ${parent.name} (${parent.user?.email ?? "no email"})</p>
+        <p><strong>Phone:</strong> ${parent.phone ?? "N/A"}</p>
+        ${dto.childName ? `<p><strong>Child:</strong> ${dto.childName}</p>` : ""}
+        <p><strong>Subject:</strong> ${dto.subject}</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+        <p style="white-space: pre-wrap;">${dto.message}</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+        <p style="font-size: 12px; color: #9ca3af;">Sent from School Management System</p>
+      </div>
+    `;
+
+    const result = await mailService.send({
+      to: schoolEmail,
+      subject: `Parent Contact: ${dto.subject}`,
+      html,
+    });
+
+    return result;
   }
 }
