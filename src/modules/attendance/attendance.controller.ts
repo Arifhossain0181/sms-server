@@ -7,6 +7,7 @@ import {
     getStudentAttendance,
     updateAttendance,
     getMonthlyReport,
+    getYearlyReport,
 } from './attendance.service';
 
 export class AttendanceController {
@@ -102,6 +103,15 @@ export class AttendanceController {
             const { classId, sectionId, month, year } = req.query as Record<string, string>;
             const data = await getMonthlyReport(classId, sectionId, Number(month), Number(year));
             sendSuccess(res, data, 'Monthly report generated');
+        } catch (err) { next(err); }
+    }
+
+    /** Teacher / School Admin — yearly per-student report for a section */
+    async yearlyReport(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { classId, sectionId, year } = req.query as Record<string, string>;
+            const data = await getYearlyReport(classId, sectionId, Number(year));
+            sendSuccess(res, data, 'Yearly report generated');
         } catch (err) { next(err); }
     }
 }

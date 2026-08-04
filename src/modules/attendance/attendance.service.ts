@@ -216,10 +216,6 @@ export const updateAttendance = async (
 };
 
 export const getMonthlyReport = async (classId: string, sectionId: string, month: number, year: number) => {
-    // FIX: StudentAttendance has no `classId` column — it only exists via
-    // the section relation (section.classId). The original `where: { classId }`
-    // was filtering on a field that doesn't exist on this model and would
-    // throw a Prisma validation error at runtime.
     const records = await prisma.studentAttendance.findMany({
         where: {
             sectionId,
@@ -238,7 +234,45 @@ export const getMonthlyReport = async (classId: string, sectionId: string, month
         },
     });
 
-    // Group by student
+    const grouped: Record<string, any> = {};
+    for (const r of records) {
+        if (!grouped[r.studentId]) {
+            grouped[r.studentId] = {
+                student: r.student,
+                present: 0, absent: 0, late: 0, total: 0,
+            };
+        }
+        grouped[r.studentId].total += 1;
+        if (r.status === 'PRESENT') grouped[r.studentId].present += 1;
+        else if (r.status === 'ABSENT') grouped[r.studentId].absent += 1;
+        else if (r.status === 'LATE') grouped[r.studentId].late += 1;
+    }
+    return Object.values(grouped).map((g: any) => ({
+        ...g,
+        percentage: Math.round((g.present / g.total) * 100),
+        belowThreshold: Math.round((g.present / g.total) * 100) < 75,
+    }));
+};
+
+export const getYearlyReport = async (classId: string, sectionId: string, year: number) => {
+    const records = await prisma.studentAttendance.findMany({
+        where: {
+            sectionId,
+            section: { classId },
+            date: {
+                gte: new Date(year, 0, 1),
+                lte: new Date(year, 11, 31),
+            },
+        },
+        select: {
+            studentId: true,
+            status: true,
+            student: {
+                select: { id: true, name: true, rollNumber: true },
+            },
+        },
+    });
+
     const grouped: Record<string, any> = {};
     for (const r of records) {
         if (!grouped[r.studentId]) {

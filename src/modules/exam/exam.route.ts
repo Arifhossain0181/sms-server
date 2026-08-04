@@ -30,8 +30,8 @@ router.delete('/schedules/:id',         authorizeRoles(...EXAM_STAFF), examContr
 router.post('/:examId/marks',            authorizeRoles('TEACHER', ...EXAM_STAFF), examController.submitExamMarks);
 router.get('/:examId/failed-students',   authorizeRoles('TEACHER', ...EXAM_STAFF), examController.getFailedStudents);
 router.get('/:examId/marks/pending',     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'), examController.getPendingMarks);
-router.post('/:examId/marks/approve',    authorizeRoles('EXAM_CONTROLLER'), examController.postApproveMarks);
-router.post('/:examId/marks/reject',     authorizeRoles('EXAM_CONTROLLER'), examController.postRejectMarks);
+router.post('/:examId/marks/approve',    authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'), examController.postApproveMarks);
+router.post('/:examId/marks/reject',     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'), examController.postRejectMarks);
 
 // ── Student dashboard: own class schedule + own published results ───
 router.get('/my/schedule',               authorizeRoles('STUDENT'), examController.getMyExamSchedule);

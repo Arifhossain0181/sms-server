@@ -5,22 +5,21 @@ import { getIO } from "../../config/socket";
 
 const STAFF_OVERRIDE_ROLES = new Set(["SCHOOL_ADMIN", "SUPER_ADMIN", "EXAM_CONTROLLER"]);
 
-type GradingRule = { minPercent: number; maxPercent: number; grade: string; gpa: number };
+type GradingRule = { minMark: number; maxMark: number; grade: string; gpaPoint: number };
 
 // FIX: was a hardcoded ladder duplicating (and disagreeing with) the grading
 // logic in exam.service.ts. Now reads the same DB-driven GradingRule table
 // so a student's grade is identical no matter which endpoint entered it.
 async function loadGradingRules(): Promise<GradingRule[]> {
     return prisma.gradingRule.findMany({
-        orderBy: { minPercent: 'asc' },
-        select: { minPercent: true, maxPercent: true, grade: true, gpa: true },
+        orderBy: { minMark: 'asc' },
+        select: { minMark: true, maxMark: true, grade: true, gpaPoint: true },
     });
 }
 
 function resolveGrade(marksObtained: number, fullMarks: number, rules: GradingRule[]) {
-    const percent = fullMarks === 0 ? 0 : (marksObtained / fullMarks) * 100;
-    const matchedRule = rules.find((rule) => percent >= rule.minPercent && percent <= rule.maxPercent);
-    return { grade: matchedRule?.grade ?? 'F', gpa: matchedRule?.gpa ?? 0, percent };
+    const matchedRule = rules.find((rule) => marksObtained >= rule.minMark && marksObtained <= rule.maxMark);
+    return { grade: matchedRule?.grade ?? 'F', gpa: matchedRule?.gpaPoint ?? 0 };
 }
 
 const recalculateAndSaveReportCard = async (
@@ -35,20 +34,20 @@ const recalculateAndSaveReportCard = async (
 
     const totalObtained = marks.reduce((sum, m) => sum + m.marksObtained, 0);
     const totalFull = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
-    // grade is now computed from the *unrounded* percentage — rounding
-    // first could nudge a borderline score (79.6%) across a grade boundary.
-    const rawPercentage = totalFull > 0 ? (totalObtained / totalFull) * 100 : 0;
-    const percentage = Math.round(rawPercentage);
+    const percentage = totalFull > 0 ? Math.round((totalObtained / totalFull) * 100) : 0;
     const failed = marks.some((m) => m.marksObtained < m.subject.passMarks);
-    const { grade, gpa } = resolveGrade(totalObtained, totalFull, gradingRules);
+
+    const gpas = marks.filter((m) => m.gpa != null).map((m) => m.gpa as number);
+    const avgGpa = gpas.length ? gpas.reduce((a, b) => a + b, 0) / gpas.length : null;
+    const worstGrade = marks.reduce((min, m) => ((m.gpa ?? 0) < (min.gpa ?? Infinity) ? m : min)).grade ?? null;
 
     const reportCard = await prisma.reportCard.upsert({
         where: { studentId_examId: { studentId, examId } },
-        create: { studentId, examId, gpa, status: ResultStatus.UNPUBLISHED },
-        update: { gpa },
+        create: { studentId, examId, gpa: avgGpa, status: ResultStatus.UNPUBLISHED },
+        update: { gpa: avgGpa },
     });
 
-    return { reportCard, totalObtained, totalFull, percentage, grade, gpa, isPassed: !failed };
+    return { reportCard, totalObtained, totalFull, percentage, grade: worstGrade, gpa: avgGpa, isPassed: !failed };
 };
 
 export const submitResult = async (
@@ -331,8 +330,6 @@ export const getResultByExam = async (examId: string) => {
         include: { student: true, subject: true },
     });
 
-    const gradingRules = await loadGradingRules();
-
     const grouped = new Map<
         string,
         {
@@ -382,24 +379,26 @@ export const getResultByExam = async (examId: string) => {
     const results = Array.from(grouped.values())
         .map((item) => {
             const percentage = item.fullMarks > 0 ? Math.round((item.totalMarks / item.fullMarks) * 100) : 0;
-            const calculated = resolveGrade(item.totalMarks, item.fullMarks, gradingRules);
+            const gpas = item.marks.filter((m) => m.gpa != null).map((m) => m.gpa as number);
+            const avgGpa = gpas.length ? gpas.reduce((a, b) => a + b, 0) / gpas.length : null;
+            const worstGrade = item.marks.reduce((min, m) => ((m.gpa ?? 0) < (min.gpa ?? Infinity) ? m : min)).grade ?? null;
             return {
                 student: item.student,
                 marks: item.marks,
                 totalMarks: item.totalMarks,
                 fullMarks: item.fullMarks,
                 percentage,
-                grade: calculated.grade,
-                gpa: calculated.gpa,
+                grade: worstGrade,
+                gpa: avgGpa,
                 isPassed: item.isPassed,
             };
         })
-        .sort((a, b) => b.gpa - a.gpa);
+        .sort((a, b) => (b.gpa ?? 0) - (a.gpa ?? 0));
 
     const total = results.length;
     const passed = results.filter((r) => r.isPassed).length;
     const failedCount = total - passed;
-    const avgGpa = total > 0 ? Number((results.reduce((sum, r) => sum + r.gpa, 0) / total).toFixed(2)) : 0;
+    const avgGpa = total > 0 ? Number((results.reduce((sum, r) => sum + (r.gpa ?? 0), 0) / total).toFixed(2)) : 0;
 
     return { results, summary: { total, passed, failed: failedCount, avgGpa } };
 };

@@ -275,28 +275,18 @@ export const generateReportCards = async (examId: string, studentIds?: string[])
 
   const results = [];
   for (const [studentId, marks] of byStudent.entries()) {
-    const totalMarks = marks.reduce((sum, m) => sum + m.subject.fullMarks, 0);
-    const obtainedMarks = marks.reduce((sum, m) => sum + m.marksObtained, 0);
     const gpas = marks.filter((m) => m.gpa != null).map((m) => m.gpa as number);
     const avgGpa = gpas.length ? gpas.reduce((a, b) => a + b, 0) / gpas.length : null;
-
-    const worst = marks.reduce((min, m) => ((m.gpa ?? 0) < (min.gpa ?? Infinity) ? m : min));
 
     const reportCard = await prisma.reportCard.upsert({
       where: { studentId_examId: { studentId, examId } },
       update: {
-        totalMarks,
-        obtainedMarks,
         gpa: avgGpa,
-        grade: worst.grade ?? null,
       },
       create: {
         studentId,
         examId,
-        totalMarks,
-        obtainedMarks,
         gpa: avgGpa,
-        grade: worst.grade ?? null,
         status: 'UNPUBLISHED',
       },
     });

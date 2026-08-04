@@ -28,6 +28,7 @@ import {
   getPendingPayrolls,
   createPerformanceReview,
   findPerformanceReviews,
+  findAllPerformanceReviews,
   requestCriticalAction,
   findPendingCriticalActions,
   findCriticalActionById,
@@ -331,6 +332,15 @@ export class HRController {
     try {
       const reviews = await findPerformanceReviews(String(req.params.id));
       sendSuccess(res, reviews, 'Performance reviews fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async findAllPerformanceReviews(req: Request, res: Response, next: NextFunction) {
+    try {
+      const reviews = await findAllPerformanceReviews();
+      sendSuccess(res, reviews, 'All performance reviews fetched');
     } catch (err) {
       next(err);
     }

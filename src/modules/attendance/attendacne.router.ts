@@ -12,6 +12,7 @@ router.use(authenticate); // every attendance route requires login
 router.post('/take', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.take.bind(c));
 router.get('/by-date', authorizeRoles('TEACHER', 'SCHOOL_ADMIN', 'ADMIN'), c.byDate.bind(c));
 router.get('/monthly-report', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.monthlyReport.bind(c));
+router.get('/yearly-report', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.yearlyReport.bind(c));
 router.patch('/:id', authorizeRoles('TEACHER', 'SCHOOL_ADMIN'), c.update.bind(c));
 
 // ── Student: own attendance only ────────────────────────────────────

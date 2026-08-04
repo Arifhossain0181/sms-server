@@ -51,6 +51,7 @@ router.patch('/payroll/:id/mark-paid', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACC
 
 // ─── Performance Reviews ──────────────────────────────────────────
 router.post('/performance', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.createPerformanceReview.bind(c));
+router.get('/performance', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findAllPerformanceReviews.bind(c));
 router.get('/performance/staff/:id', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findPerformanceReviews.bind(c));
 
 // ─── Critical Actions (approval workflow) ─────────────────────────

@@ -673,6 +673,13 @@ export async function findPerformanceReviews(staffId: string) {
   });
 }
 
+export async function findAllPerformanceReviews() {
+  return prisma.performanceReview.findMany({
+    orderBy: { reviewDate: 'desc' },
+    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+  });
+}
+
 // ─── Critical Action helpers 
 
 export async function requestCriticalAction(dto: CreateCriticalActionDto, actorId: string) {
