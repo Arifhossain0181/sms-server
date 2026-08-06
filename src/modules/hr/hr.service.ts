@@ -18,6 +18,59 @@ import { paginate } from '../../utils/pagination.util';
 import { randomBytes } from 'node:crypto';
 import PDFDocument from 'pdfkit';
 
+async function resolveStaffIdForUser(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
+  if (!user?.email) {
+    throw { status: 404, message: 'User not found' };
+  }
+
+  let staff = await prisma.staff.findUnique({
+    where: { email: user.email },
+  });
+
+  if (!staff) {
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId },
+      select: { id: true, name: true, email: true, employeeId: true, designation: true, department: true, phone: true, qualification: true, experience: true, address: true, gender: true, dateOfBirth: true, joiningDate: true, bloodGroup: true },
+    });
+
+    if (teacher) {
+      staff = await prisma.staff.create({
+        data: {
+          employeeId: teacher.employeeId ?? `T-${teacher.id.slice(0, 8)}`,
+          name: teacher.name,
+          email: teacher.email,
+          phone: teacher.phone,
+          designation: teacher.designation,
+          departmentId: undefined,
+          staffType: 'TEACHING',
+          qualification: teacher.qualification,
+          experience: teacher.experience,
+          address: teacher.address,
+          gender: teacher.gender,
+          dateOfBirth: teacher.dateOfBirth,
+          joiningDate: teacher.joiningDate,
+          bloodGroup: teacher.bloodGroup,
+          photo: undefined,
+          certificates: [],
+        },
+      });
+
+      await initializeDefaultLeaveBalances(staff.id, new Date().getFullYear());
+    }
+  }
+
+  if (!staff) {
+    throw { status: 404, message: 'Staff record not found' };
+  }
+
+  return staff.id;
+}
+
 // ─── Department helpers 
 
 export async function createDepartment(dto: CreateDepartmentDto) {
@@ -389,13 +442,12 @@ export async function getAttendanceMonthlySummary(year: number, month: number) {
 
 // ─── Leave helpers ────────────────────────────────────────────────
 
-export async function createLeaveRequest(dto: CreateLeaveDto, staffId: string) {
-  const staff = await prisma.staff.findUnique({ where: { id: dto.staffId || staffId } });
-  if (!staff) throw { status: 404, message: 'Staff member not found' };
+export async function createLeaveRequest(dto: CreateLeaveDto, userId: string) {
+  const staffId = await resolveStaffIdForUser(userId);
 
   const leave = await prisma.leave.create({
     data: {
-      staffId: dto.staffId || staffId,
+      staffId,
       leaveType: dto.leaveType,
       startDate: new Date(dto.startDate),
       endDate: new Date(dto.endDate),
@@ -473,7 +525,7 @@ export async function approveLeaveRequest(id: string, dto: ApproveLeaveDto, acto
       });
     }
 
-    const isTeacher = await prisma.teacher.findUnique({ where: { id: leave.staffId } });
+    const isTeacher = (await prisma.staff.findUnique({ where: { id: leave.staffId } }))?.staffType === 'TEACHING';
     if (isTeacher) {
       try {
         const { broadcast } = await import('../../modules/notifiction/notification.service');
@@ -499,6 +551,37 @@ export async function getLeaveBalance(staffId: string, year?: number) {
     where: { staffId, year: targetYear },
     orderBy: { leaveType: 'asc' },
   });
+}
+
+export async function getMyLeaveRequests(userId: string, query: any) {
+  const staffId = await resolveStaffIdForUser(userId);
+  const { page = '1', limit = '10', status, leaveType } = query;
+
+  const where: any = { staffId };
+  if (status) where.status = status;
+  if (leaveType) where.leaveType = leaveType;
+
+  const { skip, take, meta } = await paginate(
+    prisma.leave,
+    where,
+    parseInt(page, 10),
+    parseInt(limit, 10)
+  );
+
+  const [leaves, total] = await Promise.all([
+    prisma.leave.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.leave.count({ where }),
+  ]);
+
+  return {
+    leaves,
+    meta: { ...meta, total },
+  };
 }
 
 export async function initializeDefaultLeaveBalances(staffId: string, year: number) {
@@ -677,6 +760,18 @@ export async function findAllPerformanceReviews() {
   return prisma.performanceReview.findMany({
     orderBy: { reviewDate: 'desc' },
     include: { staff: { select: { id: true, name: true, employeeId: true, designation: true } } },
+  });
+}
+
+export async function getMyPerformanceReviews(userId: string) {
+  const staffId = await resolveStaffIdForUser(userId);
+
+  return prisma.performanceReview.findMany({
+    where: { staffId },
+    orderBy: { reviewDate: 'desc' },
+    include: {
+      staff: { select: { id: true, name: true, employeeId: true, designation: true } },
+    },
   });
 }
 

@@ -321,6 +321,88 @@ export const getPublishedResultsForStudent = async (studentId: string, examId?: 
   }));
 };
 
+export const getTeacherMarksForExam = async (examId: string, teacherId: string) => {
+  const marks = await prisma.mark.findMany({
+    where: { examId, teacherId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          studentId: true,
+          name: true,
+          rollNumber: true,
+          section: {
+            select: {
+              id: true,
+              name: true,
+              class: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+      subject: {
+        select: { id: true, name: true, fullMarks: true, passMarks: true },
+      },
+    },
+    orderBy: [
+      { subjectId: 'asc' },
+      { student: { name: 'asc' } },
+    ],
+  });
+
+  const grouped = new Map<string, {
+    student: typeof marks[number]['student'];
+    subjectMarks: Array<{
+      subjectId: string;
+      subjectName: string;
+      marksObtained: number;
+      fullMarks: number;
+      passMarks: number;
+      grade: string | null;
+      gpa: number | null;
+      status: string;
+    }>;
+  }>();
+
+  for (const mark of marks) {
+    const existing = grouped.get(mark.studentId);
+    if (existing) {
+      existing.subjectMarks.push({
+        subjectId: mark.subjectId,
+        subjectName: mark.subject.name,
+        marksObtained: mark.marksObtained,
+        fullMarks: mark.subject.fullMarks,
+        passMarks: mark.subject.passMarks,
+        grade: mark.grade,
+        gpa: mark.gpa,
+        status: mark.status,
+      });
+    } else {
+      grouped.set(mark.studentId, {
+        student: mark.student,
+        subjectMarks: [{
+          subjectId: mark.subjectId,
+          subjectName: mark.subject.name,
+          marksObtained: mark.marksObtained,
+          fullMarks: mark.subject.fullMarks,
+          passMarks: mark.subject.passMarks,
+          grade: mark.grade,
+          gpa: mark.gpa,
+          status: mark.status,
+        }],
+      });
+    }
+  }
+
+  return {
+    examId,
+    teacherId,
+    totalStudents: grouped.size,
+    totalEntries: marks.length,
+    students: Array.from(grouped.values()),
+  };
+};
+
 export const getFailedStudents = async (examId: string, classId?: string) => {
   await getExamById(examId);
 

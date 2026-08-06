@@ -178,6 +178,62 @@ export class HomeworkService {
     return { ..._withComputedStatus(homework), viewedCount, totalStudents };
   }
 
+  // ── TEACHER: evaluate homework - get students with view status ──
+  static async getEvaluationDetails(homeworkId: string) {
+    const homework = await prisma.homework.findUnique({
+      where: { id: homeworkId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        dueDate: true,
+        isReviewed: true,
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true, code: true } },
+        teacher: { select: { id: true, employeeId: true, user: { select: { name: true } } } },
+      },
+    });
+    if (!homework) throw new Error('Homework not found');
+
+    const [students, views] = await Promise.all([
+      prisma.student.findMany({
+        where: { sectionId: homework.section.id },
+        select: { id: true, name: true, rollNumber: true },
+        orderBy: { rollNumber: 'asc' },
+      }),
+      prisma.homeworkView.findMany({
+        where: { homeworkId },
+        select: { studentId: true, viewedAt: true },
+      }),
+    ]);
+
+    const viewedSet = new Set(views.map(v => v.studentId));
+    const viewedMap = new Map(views.map(v => [v.studentId, v.viewedAt]));
+
+    const studentsWithStatus = students.map((student) => ({
+      id: student.id,
+      name: student.name,
+      rollNumber: student.rollNumber,
+      hasViewed: viewedSet.has(student.id),
+      viewedAt: viewedMap.get(student.id) || null,
+    }));
+
+    const totalStudents = students.length;
+    const viewedCount = viewedSet.size;
+    const notViewedCount = totalStudents - viewedCount;
+
+    return {
+      homework,
+      students: studentsWithStatus,
+      stats: {
+        totalStudents,
+        viewedCount,
+        notViewedCount,
+        viewPercentage: totalStudents > 0 ? Math.round((viewedCount / totalStudents) * 100) : 0,
+      },
+    };
+  }
+
   // ── TEACHER dashboard widget: own overdue-and-unreviewed homework ──
   static async listOverdue(teacherId: string) {
     const homework = await prisma.homework.findMany({

@@ -37,6 +37,7 @@ router.get('/attendance/monthly-summary', authorizeRoles('HR', 'SCHOOL_ADMIN'), 
 // ─── Leave ────────────────────────────────────────────────────────
 router.post('/leave', authorizeRoles('HR', 'SCHOOL_ADMIN', 'TEACHER'), c.createLeaveRequest.bind(c));
 router.get('/leave', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findAllLeaveRequests.bind(c));
+router.get('/leave/me', authorizeRoles('TEACHER'), c.getMyLeaveRequests.bind(c));
 router.patch('/leave/:id/approve', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.approveLeaveRequest.bind(c));
 router.get('/leave/staff/:id/balance', authorizeRoles('HR', 'SCHOOL_ADMIN', 'TEACHER'), c.getLeaveBalance.bind(c));
 router.post('/leave/staff/:id/balance/init', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.initializeLeaveBalances.bind(c));
@@ -53,6 +54,7 @@ router.patch('/payroll/:id/mark-paid', authorizeRoles('HR', 'SCHOOL_ADMIN', 'ACC
 router.post('/performance', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.createPerformanceReview.bind(c));
 router.get('/performance', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findAllPerformanceReviews.bind(c));
 router.get('/performance/staff/:id', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findPerformanceReviews.bind(c));
+router.get('/performance/me', authorizeRoles('TEACHER'), c.getMyPerformanceReviews.bind(c));
 
 // ─── Critical Actions (approval workflow) ─────────────────────────
 router.post('/critical-actions', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.requestCriticalAction.bind(c));

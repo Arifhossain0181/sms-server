@@ -18,6 +18,7 @@ import {
   getAttendanceMonthlySummary,
   createLeaveRequest,
   findAllLeaveRequests,
+  getMyLeaveRequests,
   approveLeaveRequest,
   getLeaveBalance,
   initializeDefaultLeaveBalances,
@@ -29,6 +30,7 @@ import {
   createPerformanceReview,
   findPerformanceReviews,
   findAllPerformanceReviews,
+  getMyPerformanceReviews,
   requestCriticalAction,
   findPendingCriticalActions,
   findCriticalActionById,
@@ -248,6 +250,15 @@ export class HRController {
     }
   }
 
+  async getMyLeaveRequests(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await getMyLeaveRequests(req.user!.id, req.query);
+      sendSuccess(res, data, 'My leave requests fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async initializeLeaveBalances(req: Request, res: Response, next: NextFunction) {
     try {
       const { year } = req.body;
@@ -341,6 +352,15 @@ export class HRController {
     try {
       const reviews = await findAllPerformanceReviews();
       sendSuccess(res, reviews, 'All performance reviews fetched');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getMyPerformanceReviews(req: Request, res: Response, next: NextFunction) {
+    try {
+      const reviews = await getMyPerformanceReviews(req.user!.id);
+      sendSuccess(res, reviews, 'My performance reviews fetched');
     } catch (err) {
       next(err);
     }

@@ -4,6 +4,7 @@ import { sendSuccess } from '../../utils/response.util';
 import { TeachersService } from '../teachers/teachers.service';
 import { StudentService } from '../student/student.service';
 import { ParentsService } from '../parents/parents.service';
+import prisma from '../../config/db';
 
 export class HomeworkController {
   // ── TEACHER: create 
@@ -88,6 +89,27 @@ export class HomeworkController {
     try {
       const homework = await HomeworkService.getById(req.params.id as string);
       sendSuccess(res, homework, 'Homework fetched');
+    } catch (err) { next(err); }
+  }
+
+  // ── TEACHER: evaluate homework with student view details 
+  async getEvaluationDetails(req: Request, res: Response, next: NextFunction) {
+    try {
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+
+      const result = await HomeworkService.getEvaluationDetails(req.params.id as string);
+      
+      // Verify teacher owns this homework
+      const homework = await prisma.homework.findUnique({
+        where: { id: req.params.id as string },
+        select: { teacherId: true },
+      });
+      if (!homework) throw new Error('Homework not found');
+      if (homework.teacherId !== teacherId) throw new Error('You can only evaluate your own homework');
+
+      sendSuccess(res, result, 'Evaluation details fetched');
     } catch (err) { next(err); }
   }
 

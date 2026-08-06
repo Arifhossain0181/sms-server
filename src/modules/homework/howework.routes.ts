@@ -25,5 +25,6 @@ router.delete('/:id',                   authorizeRoles('TEACHER'), c.delete.bind
 
 // ── ADMIN / TEACHER: single item with view stats 
 router.get('/:id',                      authorizeRoles('SCHOOL_ADMIN', 'TEACHER'), c.getById.bind(c));
+router.get('/:id/evaluate',              authorizeRoles('TEACHER'), c.getEvaluationDetails.bind(c));
 
 export default router;

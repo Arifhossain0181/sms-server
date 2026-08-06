@@ -131,6 +131,69 @@ export const getExamById = async (id: string) => {
     return exam;
 };
 
+export const getTeacherExams = async (teacherId: string) => {
+    const assignments = await prisma.subjectAssignment.findMany({
+        where: { teacherId },
+        include: {
+            subject: {
+                include: {
+                    class: {
+                        include: {
+                            sections: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    const classSubjectMap = new Map<string, { classId: string; className: string; subjects: any[] }>();
+    for (const assignment of assignments) {
+        const classId = assignment.subject.classId;
+        if (!classSubjectMap.has(classId)) {
+            classSubjectMap.set(classId, {
+                classId,
+                className: assignment.subject.class.name,
+                subjects: [],
+            });
+        }
+        const entry = classSubjectMap.get(classId)!;
+        if (!entry.subjects.find((s) => s.id === assignment.subject.id)) {
+            entry.subjects.push(assignment.subject);
+        }
+    }
+
+    const exams = await prisma.exam.findMany({
+        include: {
+            schedules: {
+                include: { subject: true, class: true },
+                orderBy: { examDate: 'asc' },
+            },
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+
+    const relevantExams = exams.filter((exam) => {
+        return exam.schedules.some((schedule) => {
+            const classEntry = classSubjectMap.get(schedule.classId);
+            if (!classEntry) return false;
+            return classEntry.subjects.some((s) => s.id === schedule.subjectId);
+        });
+    });
+
+    return relevantExams.map((exam) => ({
+        id: exam.id,
+        name: exam.name,
+        type: exam.type,
+        totalMarks: exam.totalMarks,
+        schedules: exam.schedules.filter((schedule) => {
+            const classEntry = classSubjectMap.get(schedule.classId);
+            if (!classEntry) return false;
+            return classEntry.subjects.some((s) => s.id === schedule.subjectId);
+        }),
+    }));
+};
+
 export const updateExam = async (id: string, dto: UpdateExamDto) => {
     await getExamById(id);
     const examType = mapExamType(dto.type);
