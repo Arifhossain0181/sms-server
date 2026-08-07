@@ -6,11 +6,13 @@ import { authorizeRoles } from '../../middleware/role.middleware';
 const router = Router();
 const c = new RecruitmentController();
 
-// All routes require authentication
-router.use(authenticate);
-
-// Public open jobs - no auth required
+// Public routes - no auth required
 router.get('/jobs/public', c.findPublicJobPostings.bind(c));
+router.get('/jobs/:id', c.findJobPostingById.bind(c));
+router.post('/applicants/public', c.createApplicant.bind(c));
+
+// All other routes require authentication
+router.use(authenticate);
 
 // ─── Dashboard ───────────────────────────────────────────────────
 router.get('/dashboard', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.getDashboardStats.bind(c));
@@ -18,7 +20,6 @@ router.get('/dashboard', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.
 // ─── Job Postings ────────────────────────────────────────────────
 router.post('/jobs', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.createJobPosting.bind(c));
 router.get('/jobs', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'TEACHER'), c.findAllJobPostings.bind(c));
-router.get('/jobs/:id', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'TEACHER'), c.findJobPostingById.bind(c));
 router.patch('/jobs/:id', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.updateJobPosting.bind(c));
 router.patch('/jobs/:id/close', authorizeRoles('HR', 'SCHOOL_ADMIN', 'SUPER_ADMIN'), c.closeJobPosting.bind(c));
 

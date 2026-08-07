@@ -49,10 +49,17 @@ export const assignTeacher = async (req: Request, res: Response, next: NextFunct
 };
 
 // NEW: pairs with subjectService.unassignTeacher — no way to clear a
-// subject back to "no teacher" existed before.
+// subject back to "no teacher assigned" existed before.
 export const unassignTeacher = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await subjectService.unassignTeacher(String(req.params.id));
     sendSuccess(res, data, 'Teacher unassigned');
+  } catch (err) { next(err); }
+};
+
+export const getMySubjects = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await subjectService.getMySubjects(req.user!.id);
+    sendSuccess(res, data, 'My subjects fetched');
   } catch (err) { next(err); }
 };

@@ -234,13 +234,29 @@ export const TeachersService = {
       where: { userId },
       include: {
         user: { select: { id: true, name: true, email: true } },
-        subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
+        subjectAssignments: {
+          include: {
+            subject: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                fullMarks: true,
+                passMarks: true,
+                isCompulsory: true,
+                class: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
         sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
       },
     });
 
     if (!teacher) {
-      throw { status: 404, message: 'Teacher profile not found' };
+      const err = new Error('Teacher profile not found');
+      (err as any).status = 404;
+      throw err;
     }
     return teacher;
   },
@@ -370,19 +386,26 @@ export const TeachersService = {
     });
   },
 
-  async getMyStudents(teacherId: string, query: { page?: string; limit?: string; search?: string; gender?: string }) {
+  async getMyStudents(teacherId: string, query: { page?: string; limit?: string; search?: string; gender?: string; classId?: string; sectionId?: string }) {
     const teacher = await prisma.teacher.findUnique({
       where: { id: teacherId },
-      select: { sectionTeacher: { select: { classId: true } } },
+      select: { sectionTeacher: { select: { classId: true, id: true } } },
     });
 
     if (!teacher) throw { status: 404, message: "Teacher not found" };
 
     const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
 
-    const { page = '1', limit = '10', search, gender } = query;
+    const { page = '1', limit = '10', search, gender, classId, sectionId } = query;
+
+    const sectionFilter: any = {};
+    if (classIds.length > 0) {
+      sectionFilter.classId = classId ? classId : { in: classIds };
+    }
+
     const where: any = {
-      ...(classIds.length > 0 ? { section: { classId: { in: classIds } } } : { id: '__none__' }),
+      ...(Object.keys(sectionFilter).length > 0 ? { section: sectionFilter } : { id: '__none__' }),
+      ...(sectionId && { sectionId }),
       ...(gender && { gender }),
       ...(search && {
         OR: [

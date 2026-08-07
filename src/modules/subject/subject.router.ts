@@ -15,5 +15,6 @@ router.patch('/:id/assign-teacher', authenticate, authorizeRoles('SCHOOL_ADMIN')
 // NEW: matches subjectService.unassignTeacher — previously no route
 // could clear a subject back to "no teacher assigned".
 router.delete('/:id/assign-teacher', authenticate, authorizeRoles('SCHOOL_ADMIN'), subjectController.unassignTeacher);
+router.get('/teacher/my-subjects', authenticate, authorizeRoles('TEACHER'), subjectController.getMySubjects);
 
 export default router;

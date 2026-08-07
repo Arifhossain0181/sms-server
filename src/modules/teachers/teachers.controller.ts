@@ -49,10 +49,15 @@ export class TeacherController {
 
   async getMyProfile(req: Request, res: Response, next: NextFunction) {
     try {
-      // Own profile — never redacted, this is the teacher's own data.
+      console.log(`[TEACHER] getMyProfile called - User ID: ${req.user?.id}`);
       const teacher = await teacherService.findByUserId(req.user!.id);
+      console.log(`[TEACHER] Profile found and returned`);
       sendSuccess(res, teacher, 'Teacher profile fetched');
-    } catch (err) {
+    } catch (err: any) {
+      console.log(`[TEACHER] Error fetching profile:`, err?.message);
+      if (err?.message?.includes('not found')) {
+        console.log(`[TEACHER] Profile not found for user: ${req.user!.id}`);
+      }
       next(err);
     }
   }

@@ -201,3 +201,30 @@ export const unassignTeacher = async (subjectId: string) => {
     await prisma.subjectAssignment.deleteMany({ where: { subjectId } });
     return await getSubjectById(subjectId);
 };
+
+export const getMySubjects = async (userId: string) => {
+    const teacher = await prisma.teacher.findUnique({
+        where: { userId },
+        select: { id: true },
+    });
+
+    if (!teacher) {
+        return [];
+    }
+
+    const assignments = await prisma.subjectAssignment.findMany({
+        where: { teacherId: teacher.id },
+        include: {
+            subject: {
+                include: {
+                    class: true,
+                },
+            },
+        },
+        orderBy: {
+            subject: { name: 'asc' },
+        },
+    });
+
+    return assignments.map((a) => a.subject);
+};

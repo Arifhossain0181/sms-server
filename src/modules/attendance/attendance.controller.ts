@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../../config/db';
 import { sendSuccess } from '../../utils/response.util';
+import { TeachersService } from '../teachers/teachers.service';
 import {
     takeAttendance,
     getAttendanceByDate,
@@ -101,6 +102,37 @@ export class AttendanceController {
     async monthlyReport(req: Request, res: Response, next: NextFunction) {
         try {
             const { classId, sectionId, month, year } = req.query as Record<string, string>;
+            if (!classId || !sectionId || !month || !year) {
+                throw { status: 400, message: 'classId, sectionId, month and year are required' };
+            }
+
+            if (req.user!.role === 'TEACHER') {
+                const teacherId = await TeachersService.getTeacherIdByUserId(req.user!.id);
+                if (!teacherId) {
+                    throw { status: 404, message: 'Teacher profile not found' };
+                }
+
+                const assignment = await prisma.teacher.findUnique({
+                    where: { id: teacherId },
+                    select: {
+                        sectionTeacher: {
+                            select: {
+                                id: true,
+                                classId: true,
+                            },
+                        },
+                    },
+                });
+
+                const canView = assignment?.sectionTeacher?.some(
+                    (entry) => entry.id === sectionId && entry.classId === classId
+                );
+
+                if (!canView) {
+                    throw { status: 403, message: 'You can only view attendance reports for your assigned class and section' };
+                }
+            }
+
             const data = await getMonthlyReport(classId, sectionId, Number(month), Number(year));
             sendSuccess(res, data, 'Monthly report generated');
         } catch (err) { next(err); }
@@ -110,6 +142,37 @@ export class AttendanceController {
     async yearlyReport(req: Request, res: Response, next: NextFunction) {
         try {
             const { classId, sectionId, year } = req.query as Record<string, string>;
+            if (!classId || !sectionId || !year) {
+                throw { status: 400, message: 'classId, sectionId and year are required' };
+            }
+
+            if (req.user!.role === 'TEACHER') {
+                const teacherId = await TeachersService.getTeacherIdByUserId(req.user!.id);
+                if (!teacherId) {
+                    throw { status: 404, message: 'Teacher profile not found' };
+                }
+
+                const assignment = await prisma.teacher.findUnique({
+                    where: { id: teacherId },
+                    select: {
+                        sectionTeacher: {
+                            select: {
+                                id: true,
+                                classId: true,
+                            },
+                        },
+                    },
+                });
+
+                const canView = assignment?.sectionTeacher?.some(
+                    (entry) => entry.id === sectionId && entry.classId === classId
+                );
+
+                if (!canView) {
+                    throw { status: 403, message: 'You can only view attendance reports for your assigned class and section' };
+                }
+            }
+
             const data = await getYearlyReport(classId, sectionId, Number(year));
             sendSuccess(res, data, 'Yearly report generated');
         } catch (err) { next(err); }
