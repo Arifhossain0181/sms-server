@@ -34,6 +34,7 @@ router.post('/:examId/marks/approve',    authorizeRoles('EXAM_CONTROLLER', 'SCHO
 router.post('/:examId/marks/reject',     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'), examController.postRejectMarks);
 router.get('/teacher/my-exams',          authorizeRoles('TEACHER'), examController.getTeacherExams);
 router.get('/:examId/teacher/my-marks',  authorizeRoles('TEACHER'), examController.getTeacherMarksForExam);
+router.get('/:examId/teacher/students',  authorizeRoles('TEACHER'), examController.getStudentsForExam);
 
 // ── Student dashboard: own class schedule + own published results ───
 router.get('/my/schedule',               authorizeRoles('STUDENT'), examController.getMyExamSchedule);

@@ -403,6 +403,135 @@ export const getTeacherMarksForExam = async (examId: string, teacherId: string) 
   };
 };
 
+export const getStudentsForExam = async (examId: string, teacherId: string) => {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    include: {
+      schedules: {
+        include: {
+          class: {
+            include: {
+              sections: {
+                include: {
+                  students: {
+                    select: {
+                      id: true,
+                      studentId: true,
+                      name: true,
+                      rollNumber: true,
+                      sectionId: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          subject: {
+            select: { id: true, name: true, fullMarks: true, passMarks: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!exam) {
+    throw { status: 404, message: 'Exam not found' };
+  }
+
+  const teacherAssignments = await prisma.subjectAssignment.findMany({
+    where: { teacherId },
+    select: { subjectId: true, classId: true },
+  });
+  const assignmentSet = new Set(teacherAssignments.map((a) => `${a.classId}:${a.subjectId}`));
+
+  const studentsMap = new Map<string, {
+    id: string;
+    studentId: string | undefined;
+    name: string;
+    rollNumber: string | number;
+    section: {
+      id: string;
+      name: string;
+      class: { id: string; name: string };
+    };
+  }>();
+
+  for (const schedule of exam.schedules) {
+    const key = `${schedule.classId}:${schedule.subjectId}`;
+    if (!assignmentSet.has(key)) continue;
+
+    const classData = schedule.class;
+    if (!classData?.sections) continue;
+
+    for (const section of classData.sections) {
+      for (const student of section.students) {
+        if (!studentsMap.has(student.id)) {
+          studentsMap.set(student.id, {
+            id: student.id,
+            studentId: student.studentId,
+            name: student.name,
+            rollNumber: student.rollNumber,
+            section: {
+              id: section.id,
+              name: section.name,
+              class: { id: classData.id, name: classData.name },
+            },
+          });
+        }
+      }
+    }
+  }
+
+  const studentIds = Array.from(studentsMap.keys());
+  const existingMarks = studentIds.length > 0 ? await prisma.mark.findMany({
+    where: { examId, studentId: { in: studentIds }, teacherId },
+    include: {
+      subject: {
+        select: { id: true, name: true, fullMarks: true, passMarks: true },
+      },
+    },
+  }) : [];
+
+  const marksByStudent = new Map<string, Array<{
+    subjectId: string;
+    subjectName: string;
+    marksObtained: number;
+    fullMarks: number;
+    passMarks: number;
+    grade: string | null;
+    gpa: number | null;
+    status: string;
+  }>>();
+
+  for (const mark of existingMarks) {
+    const list = marksByStudent.get(mark.studentId) ?? [];
+    list.push({
+      subjectId: mark.subjectId,
+      subjectName: mark.subject.name,
+      marksObtained: mark.marksObtained,
+      fullMarks: mark.subject.fullMarks,
+      passMarks: mark.subject.passMarks,
+      grade: mark.grade,
+      gpa: mark.gpa,
+      status: mark.status,
+    });
+    marksByStudent.set(mark.studentId, list);
+  }
+
+  const students = Array.from(studentsMap.values()).map((student) => ({
+    student,
+    subjectMarks: marksByStudent.get(student.id) ?? [],
+  }));
+
+  return {
+    examId,
+    teacherId,
+    totalStudents: students.length,
+    totalEntries: existingMarks.length,
+    students,
+  };
+};
+
 export const getFailedStudents = async (examId: string, classId?: string) => {
   await getExamById(examId);
 

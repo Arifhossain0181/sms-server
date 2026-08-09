@@ -427,6 +427,7 @@ export const TeachersService = {
           select: {
             phone: true,
             name: true,
+            relation: true,
             user: { select: { email: true } },
           },
         },
@@ -441,9 +442,17 @@ export const TeachersService = {
       const guardianEmail = student.parent?.user?.email ?? student.admissionRecord?.guardianEmail ?? null;
       return {
         ...student,
+        studentId: student.studentId,
         email: student.user?.email,
         guardianEmail: guardianEmail ?? "—",
         phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null,
+        dateOfBirth: student.dob ? new Date(student.dob).toISOString() : null,
+        parent: student.parent
+          ? {
+              ...student.parent,
+              email: student.parent.user?.email ?? null,
+            }
+          : null,
       };
     });
 

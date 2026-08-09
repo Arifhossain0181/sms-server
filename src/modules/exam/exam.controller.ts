@@ -5,7 +5,7 @@ import { sendSuccess } from '../../utils/response.util';
 import { streamAdmitCardPdf } from './admit-card.pdf';
 import { streamReportCardPdf } from './report-card.pdf';
 import { getAdmitCardData, getAdmitCardDataForClass } from './exam.service';
-import { listPendingMarks, approveMarks, rejectMarks, getPublishedResultsForStudent as getPublishedResultsSvc, getFailedStudents as getFailedStudentsSvc, submitExamMarks as submitExamMarksSvc, getTeacherMarksForExam as getTeacherMarksForExamSvc } from './mark.service';
+import { listPendingMarks, approveMarks, rejectMarks, getPublishedResultsForStudent as getPublishedResultsSvc, getFailedStudents as getFailedStudentsSvc, submitExamMarks as submitExamMarksSvc, getTeacherMarksForExam as getTeacherMarksForExamSvc, getStudentsForExam as getStudentsForExamSvc } from './mark.service';
 
 interface ReportCardPdfData {
     exam: { id: string; name: string; type: string };
@@ -165,6 +165,18 @@ export const getTeacherMarksForExam = async (req: Request, res: Response, next: 
     teacherId = teacher.id;
 
     const data = await getTeacherMarksForExamSvc(asParamString(req.params.examId), teacherId);
+    sendSuccess(res, data);
+  } catch (err) { next(err); }
+};
+
+export const getStudentsForExam = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let teacherId = String((req.user as any)?.id);
+    const teacher = await prisma.teacher.findUnique({ where: { userId: teacherId }, select: { id: true } });
+    if (!teacher) throw { status: 403, message: 'Teacher profile not found' };
+    teacherId = teacher.id;
+
+    const data = await getStudentsForExamSvc(asParamString(req.params.examId), teacherId);
     sendSuccess(res, data);
   } catch (err) { next(err); }
 };
