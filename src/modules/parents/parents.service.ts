@@ -338,7 +338,7 @@ export class ParentsService {
       where: { id: childId },
       select: { classId: true, sectionId: true },
     });
-    if (!student) throw new Error('Student not found');
+    if (!student || !student.classId || !student.sectionId) throw new Error('Student class not assigned');
 
     const today = new Date().toISOString().split('T')[0];
 
