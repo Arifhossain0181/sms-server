@@ -138,22 +138,43 @@ export class ParentsController {
         orderBy: { name: 'asc' },
       });
 
-      const childrenWithAttendance = await Promise.all(
+      const childrenWithDetails = await Promise.all(
         children.map(async (child) => {
           try {
-            const attendance = await getAttendance(child.id);
+            const [attendance, results, feeStructures] = await Promise.all([
+              getAttendance(child.id),
+              getResults(child.id),
+              prisma.feeStructure.findMany({
+                where: { studentId: child.id },
+                select: { amount: true, Paidamount: true },
+              }),
+            ]);
+
+            const pendingFees = feeStructures.reduce(
+              (sum, f) => sum + Math.max((f.amount ?? 0) - (f.Paidamount ?? 0), 0),
+              0
+            );
+
             return {
               ...child,
               attendancePercentage: attendance.percentage,
               attendanceSummary: attendance,
+              pendingFees,
+              recentResultPercent: results.percentage,
             };
           } catch {
-            return { ...child, attendancePercentage: 0, attendanceSummary: null };
+            return {
+              ...child,
+              attendancePercentage: 0,
+              attendanceSummary: null,
+              pendingFees: 0,
+              recentResultPercent: 0,
+            };
           }
         })
       );
 
-      sendSuccess(res, childrenWithAttendance, 'Your children fetched');
+      sendSuccess(res, childrenWithDetails, 'Your children fetched');
     } catch (err) { next(err); }
   }
 

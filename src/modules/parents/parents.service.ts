@@ -323,7 +323,52 @@ export class ParentsService {
 
   static async getChildResults(parentId: string, childId: string) {
     await this.assertParentOwnsChild(parentId, childId);
-    return getResults(childId);
+
+    const publishedExamIds = await prisma.reportCard.findMany({
+      where: { studentId: childId, status: 'PUBLISHED' },
+      select: { examId: true },
+    }).then((rows) => rows.map((r) => r.examId));
+
+    if (!publishedExamIds.length) {
+      return {
+        studentId: childId,
+        examId: null,
+        totalObtained: 0,
+        totalFull: 0,
+        percentage: 0,
+        marks: [],
+      };
+    }
+
+    const marks = await prisma.mark.findMany({
+      where: { studentId: childId, examId: { in: publishedExamIds } },
+      select: {
+        id: true,
+        marksObtained: true,
+        grade: true,
+        exam: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true, fullMarks: true } },
+      },
+    });
+
+    const totalObtained = marks.reduce((sum, r) => sum + r.marksObtained, 0);
+    const totalFull = marks.reduce((sum, r) => sum + r.subject.fullMarks, 0);
+    const percentage = totalFull > 0 ? Math.round((totalObtained / totalFull) * 100) : 0;
+
+    return {
+      studentId: childId,
+      examId: null,
+      totalObtained,
+      totalFull,
+      percentage,
+      marks: marks.map((m) => ({
+        id: m.id,
+        exam: { id: m.exam.id, name: m.exam.name },
+        subject: { id: m.subject.id, name: m.subject.name, fullMarks: m.subject.fullMarks },
+        marksObtained: m.marksObtained,
+        grade: m.grade,
+      })),
+    };
   }
 
   static async getChildClassHighestMarks(parentId: string, childId: string) {
@@ -336,17 +381,16 @@ export class ParentsService {
 
     const student = await prisma.student.findUnique({
       where: { id: childId },
-      select: { classId: true, sectionId: true },
+      select: { sectionId: true },
     });
-    if (!student || !student.classId || !student.sectionId) throw new Error('Student class not assigned');
+    if (!student || !student.sectionId) throw new Error('Student section not assigned');
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    return prisma.homework.findMany({
+    const homeworks = await prisma.homework.findMany({
       where: {
-        classId: student.classId,
         sectionId: student.sectionId,
-        dueDate: { gte: today },
       },
       include: {
         subject: { select: { id: true, name: true } },
@@ -354,6 +398,11 @@ export class ParentsService {
       },
       orderBy: { dueDate: 'asc' },
     });
+
+    return homeworks.map((hw) => ({
+      ...hw,
+      isOverdue: hw.dueDate < today,
+    }));
   }
 
   static async getChildTimetable(parentId: string, childId: string) {
