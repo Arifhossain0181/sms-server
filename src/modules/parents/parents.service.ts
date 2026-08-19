@@ -27,10 +27,7 @@ const PARENT_SELECT = {
 // ─── ADMIN: create a Parent profile 
 export class ParentsService {
   static async createParent(dto: CreateParentDto) {
-    // WHAT: confirm the linked User exists AND isn't already a Parent.
-    // WHY: userId is @unique on Parent — inserting a duplicate would
-    //      throw a raw Prisma P2002 error; catching it here first gives
-    //      a clean, specific error message instead.
+ 
     const [user, existingParent] = await Promise.all([
       prisma.user.findUnique({ where: { id: dto.userId }, select: { id: true } }),
       prisma.parent.findUnique({ where: { userId: dto.userId }, select: { id: true } }),
@@ -220,8 +217,7 @@ export class ParentsService {
     };
   }
 
-  // WHAT: notices addressed to this parent (school-wide or class-specific
-  //       notices get fanned out into NoticeRecipient rows elsewhere).
+  
   static async getMyNotices(userId: string, pagination: PaginationDto = {}) {
     const parent = await prisma.parent.findUnique({ where: { userId }, select: { id: true } });
     if (!parent) throw new Error('Parent profile not found');
