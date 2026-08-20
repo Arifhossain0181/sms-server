@@ -398,9 +398,14 @@ export const TeachersService = {
 
     const { page = '1', limit = '10', search, gender, classId, sectionId } = query;
 
+    // WHAT: prevent teachers from requesting classes they are not assigned to.
+    // WHY: without this guard, a teacher could pass any classId and view students
+    //      outside their assigned classes.
+    const allowedClassId = classId && classIds.includes(classId) ? classId : undefined;
+
     const sectionFilter: any = {};
     if (classIds.length > 0) {
-      sectionFilter.classId = classId ? classId : { in: classIds };
+      sectionFilter.classId = allowedClassId ? allowedClassId : { in: classIds };
     }
 
     const where: any = {

@@ -33,6 +33,7 @@ model Student {
   invoices        Invoice[]
   payments        Payment[]
   homeworkViews   HomeworkView[]
+  homeworkSubmissions HomeworkSubmission[]
   reportCards     ReportCard[]
   admitCards      AdmitCard[]
   notices         NoticeRecipient[]

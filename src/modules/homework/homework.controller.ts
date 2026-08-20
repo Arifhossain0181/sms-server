@@ -148,7 +148,32 @@ export class HomeworkController {
       const result = await HomeworkService.getChildHomework(parentId, req.params.studentId as string, {
         status, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined,
       });
-      sendSuccess(res, result, "Child's homework fetched");
+      sendSuccess(res, "Child's homework fetched", result as any);
+    } catch (err) { next(err); }
+  }
+
+  // ── TEACHER: submit/update marks for a student's homework ─────────
+  async submitMark(req: Request, res: Response, next: NextFunction) {
+    try {
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+
+      const { studentId, marks, feedback } = req.body;
+      const result = await HomeworkService.submitMark(teacherId, req.params.id as string, studentId, marks, feedback);
+      sendSuccess(res, 'Mark submitted', result);
+    } catch (err) { next(err); }
+  }
+
+  // ── TEACHER: get all submissions for a homework ───────────────────
+  async getSubmissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+
+      const result = await HomeworkService.getSubmissions(teacherId, req.params.id as string);
+      sendSuccess(res, 'Submissions fetched', result);
     } catch (err) { next(err); }
   }
 }

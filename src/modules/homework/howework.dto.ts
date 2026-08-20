@@ -30,3 +30,10 @@ export interface StudentHomeworkQueryDto {
   page?: number;
   pageSize?: number;
 }
+
+// ─── TEACHER: submit marks for a student's homework 
+export interface SubmitMarkDto {
+  studentId: string;
+  marks: number;
+  feedback?: string;
+}

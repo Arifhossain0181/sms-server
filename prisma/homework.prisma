@@ -15,7 +15,8 @@ model Homework {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  views HomeworkView[]
+  views          HomeworkView[]
+  submissions    HomeworkSubmission[]
 }
 
 model HomeworkView {
@@ -25,6 +26,21 @@ model HomeworkView {
   studentId  String
   student    Student  @relation(fields: [studentId], references: [id])
   viewedAt   DateTime @default(now())
+
+  @@unique([homeworkId, studentId])
+}
+
+model HomeworkSubmission {
+  id         String   @id @default(uuid())
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id])
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id])
+  marks      Float?
+  feedback   String?
+  submittedAt DateTime @default(now())
+  gradedAt   DateTime?
+  gradedBy   String?
 
   @@unique([homeworkId, studentId])
 }

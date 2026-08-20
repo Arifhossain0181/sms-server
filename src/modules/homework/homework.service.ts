@@ -135,14 +135,26 @@ export class HomeworkService {
 
   // WHAT: paginated list of a teacher's own homework, with optional
   //       status filter (PENDING / REVIEWED / OVERDUE) computed in JS
-  //       since these aren't stored columns.
+  //       since these aren't stored columns. Restricts results to the
+  //       teacher's assigned sections only.
   static async listMine(teacherId: string, query: HomeworkQueryDto) {
     const page = query.page ?? 1;
     const pageSize = Math.min(query.pageSize ?? 20, 100);
 
+    const teacher = await prisma.teacher.findUnique({
+      where: { id: teacherId },
+      select: { sectionTeacher: { select: { id: true } } },
+    });
+    if (!teacher) throw new Error('Teacher not found');
+
+    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    if (assignedSectionIds.size === 0) {
+      return { data: [], total: 0, page, pageSize, totalPages: 1 };
+    }
+
     const where: any = {
       teacherId,
-      ...(query.sectionId && { sectionId: query.sectionId }),
+      sectionId: { in: Array.from(assignedSectionIds) },
       ...(query.subjectId && { subjectId: query.subjectId }),
     };
 
@@ -195,7 +207,7 @@ export class HomeworkService {
     });
     if (!homework) throw new Error('Homework not found');
 
-    const [students, views] = await Promise.all([
+    const [students, views, submissions] = await Promise.all([
       prisma.student.findMany({
         where: { sectionId: homework.section.id },
         select: { id: true, name: true, rollNumber: true },
@@ -205,18 +217,29 @@ export class HomeworkService {
         where: { homeworkId },
         select: { studentId: true, viewedAt: true },
       }),
+      prisma.homeworkSubmission.findMany({
+        where: { homeworkId },
+        select: { studentId: true, marks: true, feedback: true, gradedAt: true },
+      }),
     ]);
 
     const viewedSet = new Set(views.map(v => v.studentId));
     const viewedMap = new Map(views.map(v => [v.studentId, v.viewedAt]));
+    const submissionMap = new Map(submissions.map(s => [s.studentId, s]));
 
-    const studentsWithStatus = students.map((student) => ({
-      id: student.id,
-      name: student.name,
-      rollNumber: student.rollNumber,
-      hasViewed: viewedSet.has(student.id),
-      viewedAt: viewedMap.get(student.id) || null,
-    }));
+    const studentsWithStatus = students.map((student) => {
+      const submission = submissionMap.get(student.id);
+      return {
+        id: student.id,
+        name: student.name,
+        rollNumber: student.rollNumber,
+        hasViewed: viewedSet.has(student.id),
+        viewedAt: viewedMap.get(student.id) || null,
+        marks: submission?.marks ?? null,
+        feedback: submission?.feedback ?? '',
+        gradedAt: submission?.gradedAt ?? null,
+      };
+    });
 
     const totalStudents = students.length;
     const viewedCount = viewedSet.size;
@@ -235,9 +258,26 @@ export class HomeworkService {
   }
 
   // ── TEACHER dashboard widget: own overdue-and-unreviewed homework ──
+  // Restricts to the teacher's assigned sections only.
   static async listOverdue(teacherId: string) {
+    const teacher = await prisma.teacher.findUnique({
+      where: { id: teacherId },
+      select: { sectionTeacher: { select: { id: true } } },
+    });
+    if (!teacher) throw new Error('Teacher not found');
+
+    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    if (assignedSectionIds.size === 0) {
+      return [];
+    }
+
     const homework = await prisma.homework.findMany({
-      where: { teacherId, isReviewed: false, dueDate: { lt: new Date() } },
+      where: {
+        teacherId,
+        sectionId: { in: Array.from(assignedSectionIds) },
+        isReviewed: false,
+        dueDate: { lt: new Date() },
+      },
       select: HOMEWORK_SELECT,
       orderBy: { dueDate: 'asc' },
     });
@@ -322,5 +362,70 @@ export class HomeworkService {
     if (!student) throw new Error('Child not found for this parent');
 
     return this._getHomeworkForStudent(student.sectionId, studentId, query);
+  }
+
+  // ── TEACHER: submit/update marks for a student's homework ──────────
+  static async submitMark(teacherId: string, homeworkId: string, studentId: string, marks: number, feedback?: string) {
+    const homework = await prisma.homework.findUnique({
+      where: { id: homeworkId },
+      select: { id: true, teacherId: true, sectionId: true },
+    });
+    if (!homework) throw new Error('Homework not found');
+    if (homework.teacherId !== teacherId) throw new Error('You can only grade your own homework');
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: { sectionId: true },
+    });
+    if (!student) throw new Error('Student not found');
+    if (student.sectionId !== homework.sectionId) throw new Error('Student is not in this homework\'s section');
+
+    const submission = await prisma.homeworkSubmission.upsert({
+      where: { homeworkId_studentId: { homeworkId, studentId } },
+      update: {
+        marks,
+        feedback: feedback ?? '',
+        gradedAt: new Date(),
+        gradedBy: teacherId,
+      },
+      create: {
+        homeworkId,
+        studentId,
+        marks,
+        feedback: feedback ?? '',
+        gradedAt: new Date(),
+        gradedBy: teacherId,
+      },
+      select: {
+        id: true,
+        marks: true,
+        feedback: true,
+        submittedAt: true,
+        gradedAt: true,
+        student: { select: { id: true, name: true, rollNumber: true } },
+      },
+    });
+
+    return submission;
+  }
+
+  // ── TEACHER: get all submissions for a homework ───────────────────
+  static async getSubmissions(teacherId: string, homeworkId: string) {
+    const homework = await prisma.homework.findUnique({
+      where: { id: homeworkId },
+      select: { id: true, teacherId: true },
+    });
+    if (!homework) throw new Error('Homework not found');
+    if (homework.teacherId !== teacherId) throw new Error('You can only view submissions for your own homework');
+
+    const submissions = await prisma.homeworkSubmission.findMany({
+      where: { homeworkId },
+      include: {
+        student: { select: { id: true, name: true, rollNumber: true } },
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    return submissions;
   }
 }
