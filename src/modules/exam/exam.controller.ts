@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../../config/db';
 import * as examService from './exam.service';
 import { sendSuccess } from '../../utils/response.util'; 
-import { streamAdmitCardPdf } from './admit-card.pdf';
+import { streamAdmitCardPdf, streamAdmitCardsPdf } from './admit-card.pdf';
 import { streamReportCardPdf } from './report-card.pdf';
 import { getAdmitCardData, getAdmitCardDataForClass } from './exam.service';
 import { listPendingMarks, approveMarks, rejectMarks, getPublishedResultsForStudent as getPublishedResultsSvc, getFailedStudents as getFailedStudentsSvc, submitExamMarks as submitExamMarksSvc, getTeacherMarksForExam as getTeacherMarksForExamSvc, getStudentsForExam as getStudentsForExamSvc } from './mark.service';
@@ -305,6 +305,16 @@ export const listAdmitCardDataForClass = async (req: Request, res: Response, nex
         const { examId, classId } = req.params;
         const data = await getAdmitCardDataForClass(asParamString(examId), asParamString(classId));
         res.json({ success: true, data });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const downloadAdmitCardsForClass = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { examId, classId } = req.params;
+        const data = await getAdmitCardDataForClass(asParamString(examId), asParamString(classId));
+        streamAdmitCardsPdf(data, res);
     } catch (err) {
         next(err);
     }

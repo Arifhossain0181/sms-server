@@ -391,20 +391,50 @@ export const getAdmitCardData = async (examId: string, studentId: string) => {
 };
 
 export const getAdmitCardDataForClass = async (examId: string, classId: string) => {
-    await getExamById(examId);
+    const exam = await getExamById(examId);
 
     const students = await prisma.student.findMany({
-        where: { section: { classId } },
-        select: { id: true },
+        where: { classId },
+        include: {
+            section: {
+                include: {
+                    class: { select: { id: true, name: true } },
+                },
+            },
+        },
+        orderBy: { rollNumber: 'asc' },
     });
 
     if (!students.length) {
         throw { status: 404, message: 'No students found in this class' };
     }
 
-    const results = [];
-    for (const s of students) {
-        results.push(await getAdmitCardData(examId, s.id));
+    const schedules = await prisma.examSchedule.findMany({
+        where: { examId, classId },
+        include: { subject: { select: { id: true, name: true, fullMarks: true } } },
+        orderBy: { examDate: 'asc' },
+    });
+
+    if (!schedules.length) {
+        throw { status: 404, message: 'No exam schedule found for this class under this exam' };
     }
-    return results;
+
+    return students.map((s) => ({
+        exam: { id: exam.id, name: exam.name, type: exam.type },
+        student: {
+            id: s.id,
+            studentId: s.studentId,
+            name: s.name,
+            rollNumber: s.rollNumber,
+            className: s.section.class.name,
+            sectionName: s.section.name,
+        },
+        schedules: schedules.map((sch) => ({
+            subjectName: sch.subject.name,
+            fullMarks: sch.subject.fullMarks,
+            examDate: sch.examDate,
+            startTime: sch.startTime,
+            endTime: sch.endTime,
+        })),
+    }));
 };

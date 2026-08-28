@@ -62,4 +62,10 @@ router.get(
     authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'),
     examController.listAdmitCardDataForClass
 );
+
+router.get(
+    '/:examId/classes/:classId/admit-cards/download',
+    authorizeRoles('EXAM_CONTROLLER', 'SCHOOL_ADMIN'),
+    examController.downloadAdmitCardsForClass
+);
 export default router;

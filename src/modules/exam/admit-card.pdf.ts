@@ -22,25 +22,24 @@ interface AdmitCardData {
 const formatDate = (d: Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export const streamAdmitCardPdf = (data: AdmitCardData, res: Response, schoolName = 'School Name') => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+const formatExamType = (type: string) => type.replace(/_/g, ' ');
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="admit-card-${data.student.studentId}-${data.exam.id}.pdf"`
-    );
+const sanitizeFilenamePart = (value: string) =>
+    value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'admit-cards';
 
-    doc.pipe(res);
+type AdmitCardDocument = InstanceType<typeof PDFDocument>;
 
-    // Header
+const renderAdmitCard = (doc: AdmitCardDocument, data: AdmitCardData, schoolName: string) => {
     doc.fontSize(16).font('Helvetica-Bold').text(schoolName, { align: 'center' });
     doc.fontSize(12).font('Helvetica').text('Admit Card', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(11).text(`Exam: ${data.exam.name} (${data.exam.type})`, { align: 'center' });
+    doc.fontSize(11).text(`Exam: ${data.exam.name} (${formatExamType(data.exam.type)})`, { align: 'center' });
     doc.moveDown(1);
 
-    // Student info box
     doc.rect(40, doc.y, 515, 90).stroke();
     const boxTop = doc.y + 10;
     doc.fontSize(10);
@@ -52,7 +51,6 @@ export const streamAdmitCardPdf = (data: AdmitCardData, res: Response, schoolNam
     doc.y = boxTop + 90;
     doc.moveDown(2);
 
-    // Schedule table
     doc.fontSize(11).font('Helvetica-Bold').text('Exam Schedule', 40, doc.y);
     doc.moveDown(0.5);
 
@@ -78,11 +76,44 @@ export const streamAdmitCardPdf = (data: AdmitCardData, res: Response, schoolNam
 
     doc.moveTo(40, rowY + 5).lineTo(555, rowY + 5).stroke();
 
-    // Footer
     doc.moveDown(4);
     doc.fontSize(9).text('This admit card must be produced at the examination hall.', 40, rowY + 40);
     doc.text('_____________________', 380, rowY + 60);
     doc.text('Exam Controller Signature', 380, rowY + 75);
+};
+
+export const streamAdmitCardPdf = (data: AdmitCardData, res: Response, schoolName = 'School Name') => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="admit-card-${data.student.studentId}-${data.exam.id}.pdf"`
+    );
+
+    doc.pipe(res);
+    renderAdmitCard(doc, data, schoolName);
+    doc.end();
+};
+
+export const streamAdmitCardsPdf = (cards: AdmitCardData[], res: Response, schoolName = 'School Name') => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const firstCard = cards[0];
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${sanitizeFilenamePart(firstCard?.student.className ?? 'class')}-admit-cards-${firstCard?.exam.id ?? 'exam'}.pdf"`
+    );
+
+    doc.pipe(res);
+
+    cards.forEach((card, index) => {
+        if (index > 0) {
+            doc.addPage();
+        }
+        renderAdmitCard(doc, card, schoolName);
+    });
 
     doc.end();
 };

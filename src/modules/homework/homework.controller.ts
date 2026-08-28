@@ -165,7 +165,7 @@ export class HomeworkController {
     } catch (err) { next(err); }
   }
 
-  // ── TEACHER: get all submissions for a homework ───────────────────
+  //  TEACHER: get all submissions for a homework 
   async getSubmissions(req: Request, res: Response, next: NextFunction) {
     try {
       let teacherId = String((req.user as any)?.id);
