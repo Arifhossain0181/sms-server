@@ -65,7 +65,9 @@ export interface UpdateDepartmentDto {
 }
 
 export interface CreateAttendanceDto {
-  staffId: string;
+  staffId?: string;
+  teacherId?: string;
+  personType?: 'STAFF' | 'TEACHER';
   date: string;
   status?: 'PRESENT' | 'ABSENT' | 'LATE';
   note?: string;
@@ -73,7 +75,13 @@ export interface CreateAttendanceDto {
 
 export interface BulkAttendanceDto {
   date: string;
-  attendances: Array<{ staffId: string; status: 'PRESENT' | 'ABSENT' | 'LATE'; note?: string }>;
+  attendances: Array<{
+    staffId?: string;
+    teacherId?: string;
+    personType?: 'STAFF' | 'TEACHER';
+    status: 'PRESENT' | 'ABSENT' | 'LATE';
+    note?: string;
+  }>;
 }
 
 export interface CreateLeaveDto {

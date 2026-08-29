@@ -297,11 +297,37 @@ export async function getStaffDirectory() {
 // ─── Attendance helpers 
 
 export async function recordAttendance(dto: CreateAttendanceDto, actorId: string) {
-  const staff = await prisma.staff.findUnique({ where: { id: dto.staffId } });
-  if (!staff) throw { status: 404, message: 'Staff member not found' };
-
+  const personType = dto.personType ?? (dto.teacherId ? 'TEACHER' : 'STAFF');
   const date = new Date(dto.date);
   date.setHours(0, 0, 0, 0);
+
+  if (personType === 'TEACHER') {
+    if (!dto.teacherId) throw { status: 400, message: 'Teacher ID is required' };
+
+    const teacher = await prisma.teacher.findUnique({ where: { id: dto.teacherId } });
+    if (!teacher) throw { status: 404, message: 'Teacher not found' };
+
+    return prisma.teacherAttendance.upsert({
+      where: {
+        teacherId_date: { teacherId: dto.teacherId, date },
+      },
+      create: {
+        teacherId: dto.teacherId,
+        date,
+        status: dto.status ?? 'PRESENT',
+        note: dto.note,
+      },
+      update: {
+        status: dto.status ?? 'PRESENT',
+        note: dto.note,
+      },
+    });
+  }
+
+  if (!dto.staffId) throw { status: 400, message: 'Staff ID is required' };
+
+  const staff = await prisma.staff.findUnique({ where: { id: dto.staffId } });
+  if (!staff) throw { status: 404, message: 'Staff member not found' };
 
   return prisma.staffAttendance.upsert({
     where: {
@@ -326,6 +352,35 @@ export async function recordBulkAttendance(dto: BulkAttendanceDto, actorId: stri
 
   const results = [];
   for (const entry of dto.attendances) {
+    const personType = entry.personType ?? (entry.teacherId ? 'TEACHER' : 'STAFF');
+
+    if (personType === 'TEACHER') {
+      if (!entry.teacherId) continue;
+
+      const teacher = await prisma.teacher.findUnique({ where: { id: entry.teacherId } });
+      if (!teacher) continue;
+
+      const record = await prisma.teacherAttendance.upsert({
+        where: {
+          teacherId_date: { teacherId: entry.teacherId, date },
+        },
+        create: {
+          teacherId: entry.teacherId,
+          date,
+          status: entry.status,
+          note: entry.note,
+        },
+        update: {
+          status: entry.status,
+          note: entry.note,
+        },
+      });
+      results.push({ personType: 'TEACHER', ...record });
+      continue;
+    }
+
+    if (!entry.staffId) continue;
+
     const staff = await prisma.staff.findUnique({ where: { id: entry.staffId } });
     if (!staff) continue;
 
@@ -344,7 +399,7 @@ export async function recordBulkAttendance(dto: BulkAttendanceDto, actorId: stri
         note: entry.note,
       },
     });
-    results.push(record);
+    results.push({ personType: 'STAFF', ...record });
   }
 
   return { date: dto.date, count: results.length, records: results };
@@ -368,11 +423,70 @@ export async function getDailyAttendance(date: string) {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
-  const records = await prisma.staffAttendance.findMany({
-    where: { date: targetDate },
-    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, staffType: true, department: { select: { name: true } } } } },
-    orderBy: { staff: { name: 'asc' } },
-  });
+  const [staffRecords, teacherRecords] = await Promise.all([
+    prisma.staffAttendance.findMany({
+      where: { date: targetDate },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            staffType: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { staff: { name: 'asc' } },
+    }),
+    prisma.teacherAttendance.findMany({
+      where: { date: targetDate },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            department: true,
+            subjectSpecialization: true,
+          },
+        },
+      },
+      orderBy: { teacher: { name: 'asc' } },
+    }),
+  ]);
+
+  const staffAttendance = staffRecords.map((r) => ({
+    id: r.id,
+    staffId: r.staffId,
+    staffName: r.staff.name,
+    employeeId: r.staff.employeeId,
+    designation: r.staff.designation,
+    staffType: r.staff.staffType,
+    department: r.staff.department?.name,
+    personType: 'STAFF' as const,
+    status: r.status,
+    note: r.note,
+  }));
+
+  const teacherAttendance = teacherRecords.map((r) => ({
+    id: r.id,
+    staffId: r.teacherId,
+    staffName: r.teacher.name,
+    employeeId: r.teacher.employeeId,
+    designation: r.teacher.designation,
+    staffType: r.teacher.subjectSpecialization ?? 'TEACHING',
+    department: r.teacher.department,
+    personType: 'TEACHER' as const,
+    status: r.status,
+    note: r.note,
+  }));
+
+  const records = [...staffAttendance, ...teacherAttendance].sort((a, b) =>
+    a.staffName.localeCompare(b.staffName)
+  );
 
   return {
     date,
@@ -380,17 +494,7 @@ export async function getDailyAttendance(date: string) {
     present: records.filter((r) => r.status === 'PRESENT').length,
     absent: records.filter((r) => r.status === 'ABSENT').length,
     late: records.filter((r) => r.status === 'LATE').length,
-    records: records.map((r) => ({
-      id: r.id,
-      staffId: r.staffId,
-      staffName: r.staff.name,
-      employeeId: r.staff.employeeId,
-      designation: r.staff.designation,
-      staffType: r.staff.staffType,
-      department: r.staff.department?.name,
-      status: r.status,
-      note: r.note,
-    })),
+    records,
   };
 }
 

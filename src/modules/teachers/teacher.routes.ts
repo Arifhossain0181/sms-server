@@ -13,67 +13,67 @@ router.use(authenticate);
 // Teacher: view own profile & schedule
 router.get('/me', authorizeRoles('TEACHER'), teacherController.getMyProfile.bind(teacherController));
 
-// Admin / Exam Controller / Teacher access
-router.post('/', authorizeRoles('SCHOOL_ADMIN'), teacherController.create.bind(teacherController));
+// Admin / HR / Exam Controller / Teacher access
+router.post('/', authorizeRoles('SCHOOL_ADMIN', 'HR'), teacherController.create.bind(teacherController));
 
 router.get(
   '/',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  authorizeRoles('SCHOOL_ADMIN', 'HR', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.findAll.bind(teacherController)
 );
 
 router.get(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  authorizeRoles('SCHOOL_ADMIN', 'HR', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.findById.bind(teacherController)
 );
 
 router.patch(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN',),
+  authorizeRoles('SCHOOL_ADMIN', 'HR'),
   teacherController.update.bind(teacherController)
 );
 
 router.delete(
   '/:id',
-  authorizeRoles('SCHOOL_ADMIN',),
+  authorizeRoles('SCHOOL_ADMIN', 'HR'),
   teacherController.delete.bind(teacherController)
 );
 
 router.patch(
   '/:id/avatar',
-  authorizeRoles('SCHOOL_ADMIN',),
+  authorizeRoles('SCHOOL_ADMIN', 'HR'),
   upload.single('avatar'),
   teacherController.uploadAvatar.bind(teacherController)
 );
 
 router.patch(
   '/:id/assign-subjects',
-  authorizeRoles('SCHOOL_ADMIN',),
+  authorizeRoles('SCHOOL_ADMIN', 'HR'),
   teacherController.assignSubjects.bind(teacherController)
 );
 
 router.patch(
   '/:id/assign-classes',
-  authorizeRoles('SCHOOL_ADMIN',),
+  authorizeRoles('SCHOOL_ADMIN', 'HR'),
   teacherController.assignClasses.bind(teacherController)
 );
 
 router.get(
   '/:id/schedule',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  authorizeRoles('SCHOOL_ADMIN', 'HR', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getSchedule.bind(teacherController)
 );
 
 router.get(
   '/:id/students',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  authorizeRoles('SCHOOL_ADMIN', 'HR', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getMyStudents.bind(teacherController)
 );
 
 router.get(
   '/:id/dashboard',
-  authorizeRoles('SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'),
+  authorizeRoles('SCHOOL_ADMIN', 'HR', 'TEACHER', 'EXAM_CONTROLLER'),
   teacherController.getDashboardStats.bind(teacherController)
 );
 
