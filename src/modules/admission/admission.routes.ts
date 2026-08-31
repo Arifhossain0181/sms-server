@@ -27,8 +27,8 @@ router.post(
 // ── Authenticated: get user's own applications ──────────────────────
 router.get('/my-applications', authenticate, c.getMyApplications.bind(c));
 
-// ── All routes below require School Admin auth ──────────────────────
-router.use(authenticate, authorizeRoles('SCHOOL_ADMIN'));
+// ── All routes below require School Admin or HR auth ──────────────────────
+router.use(authenticate, authorizeRoles('SCHOOL_ADMIN', 'HR'));
 
 router.get('/stats',                  c.getStats.bind(c));
 router.post('/convert-to-student',    c.convertToStudent.bind(c));
