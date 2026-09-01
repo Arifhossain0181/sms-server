@@ -18381,12 +18381,15 @@ var StudentController = class {
 
 // src/middleware/role.middleware.ts
 init_logger();
+var normalizeRole = (value) => String(value ?? "").trim().replace(/[-_\s]+/g, "_").toUpperCase();
 var authorizeRoles = (...roles) => {
+  const allowedRoles = new Set(roles.map(normalizeRole));
   return (req, res, next) => {
     if (!req.user) {
       return res.status(403).json({ success: false, message: "Forbidden: You do not have the required role to access this resource" });
     }
-    if (!roles.includes(req.user.role)) {
+    const userRole = normalizeRole(req.user.role);
+    if (!allowedRoles.has(userRole)) {
       logger_default.warn(`[ROLE] Access denied - User ${req.user.role}, required [${roles.join(", ")}]`);
       return res.status(403).json({ success: false, message: "Forbidden: You do not have the required role to access this resource" });
     }
@@ -21600,56 +21603,56 @@ var router8 = (0, import_express8.Router)();
 var teacherController = new TeacherController();
 router8.use(authenticate);
 router8.get("/me", authorizeRoles("TEACHER"), teacherController.getMyProfile.bind(teacherController));
-router8.post("/", authorizeRoles("SCHOOL_ADMIN"), teacherController.create.bind(teacherController));
+router8.post("/", authorizeRoles("SCHOOL_ADMIN", "HR"), teacherController.create.bind(teacherController));
 router8.get(
   "/",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
+  authorizeRoles("SCHOOL_ADMIN", "HR", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.findAll.bind(teacherController)
 );
 router8.get(
   "/:id",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
+  authorizeRoles("SCHOOL_ADMIN", "HR", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.findById.bind(teacherController)
 );
 router8.patch(
   "/:id",
-  authorizeRoles("SCHOOL_ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "HR"),
   teacherController.update.bind(teacherController)
 );
 router8.delete(
   "/:id",
-  authorizeRoles("SCHOOL_ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "HR"),
   teacherController.delete.bind(teacherController)
 );
 router8.patch(
   "/:id/avatar",
-  authorizeRoles("SCHOOL_ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "HR"),
   upload.single("avatar"),
   teacherController.uploadAvatar.bind(teacherController)
 );
 router8.patch(
   "/:id/assign-subjects",
-  authorizeRoles("SCHOOL_ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "HR"),
   teacherController.assignSubjects.bind(teacherController)
 );
 router8.patch(
   "/:id/assign-classes",
-  authorizeRoles("SCHOOL_ADMIN"),
+  authorizeRoles("SCHOOL_ADMIN", "HR"),
   teacherController.assignClasses.bind(teacherController)
 );
 router8.get(
   "/:id/schedule",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
+  authorizeRoles("SCHOOL_ADMIN", "HR", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.getSchedule.bind(teacherController)
 );
 router8.get(
   "/:id/students",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
+  authorizeRoles("SCHOOL_ADMIN", "HR", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.getMyStudents.bind(teacherController)
 );
 router8.get(
   "/:id/dashboard",
-  authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"),
+  authorizeRoles("SCHOOL_ADMIN", "HR", "TEACHER", "EXAM_CONTROLLER"),
   teacherController.getDashboardStats.bind(teacherController)
 );
 var teacher_routes_default = router8;
@@ -22650,7 +22653,7 @@ router10.post(
   c2.uploadDocument.bind(c2)
 );
 router10.get("/my-applications", authenticate, c2.getMyApplications.bind(c2));
-router10.use(authenticate, authorizeRoles("SCHOOL_ADMIN"));
+router10.use(authenticate, authorizeRoles("SCHOOL_ADMIN", "HR"));
 router10.get("/stats", c2.getStats.bind(c2));
 router10.post("/convert-to-student", c2.convertToStudent.bind(c2));
 router10.patch("/:id/status", c2.updateStatus.bind(c2));
@@ -26969,10 +26972,32 @@ async function getStaffDirectory() {
   return staff;
 }
 async function recordAttendance(dto, actorId) {
-  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId } });
-  if (!staff) throw { status: 404, message: "Staff member not found" };
+  const personType = dto.personType ?? (dto.teacherId ? "TEACHER" : "STAFF");
   const date = new Date(dto.date);
   date.setHours(0, 0, 0, 0);
+  if (personType === "TEACHER") {
+    if (!dto.teacherId) throw { status: 400, message: "Teacher ID is required" };
+    const teacher = await db_default.teacher.findUnique({ where: { id: dto.teacherId } });
+    if (!teacher) throw { status: 404, message: "Teacher not found" };
+    return db_default.teacherAttendance.upsert({
+      where: {
+        teacherId_date: { teacherId: dto.teacherId, date }
+      },
+      create: {
+        teacherId: dto.teacherId,
+        date,
+        status: dto.status ?? "PRESENT",
+        note: dto.note
+      },
+      update: {
+        status: dto.status ?? "PRESENT",
+        note: dto.note
+      }
+    });
+  }
+  if (!dto.staffId) throw { status: 400, message: "Staff ID is required" };
+  const staff = await db_default.staff.findUnique({ where: { id: dto.staffId } });
+  if (!staff) throw { status: 404, message: "Staff member not found" };
   return db_default.staffAttendance.upsert({
     where: {
       staffId_date: { staffId: dto.staffId, date }
@@ -26994,6 +27019,30 @@ async function recordBulkAttendance(dto, actorId) {
   date.setHours(0, 0, 0, 0);
   const results = [];
   for (const entry of dto.attendances) {
+    const personType = entry.personType ?? (entry.teacherId ? "TEACHER" : "STAFF");
+    if (personType === "TEACHER") {
+      if (!entry.teacherId) continue;
+      const teacher = await db_default.teacher.findUnique({ where: { id: entry.teacherId } });
+      if (!teacher) continue;
+      const record2 = await db_default.teacherAttendance.upsert({
+        where: {
+          teacherId_date: { teacherId: entry.teacherId, date }
+        },
+        create: {
+          teacherId: entry.teacherId,
+          date,
+          status: entry.status,
+          note: entry.note
+        },
+        update: {
+          status: entry.status,
+          note: entry.note
+        }
+      });
+      results.push({ personType: "TEACHER", ...record2 });
+      continue;
+    }
+    if (!entry.staffId) continue;
     const staff = await db_default.staff.findUnique({ where: { id: entry.staffId } });
     if (!staff) continue;
     const record = await db_default.staffAttendance.upsert({
@@ -27011,7 +27060,7 @@ async function recordBulkAttendance(dto, actorId) {
         note: entry.note
       }
     });
-    results.push(record);
+    results.push({ personType: "STAFF", ...record });
   }
   return { date: dto.date, count: results.length, records: results };
 }
@@ -27029,28 +27078,74 @@ async function getStaffAttendance(staffId, from, to) {
 async function getDailyAttendance(date) {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
-  const records = await db_default.staffAttendance.findMany({
-    where: { date: targetDate },
-    include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, staffType: true, department: { select: { name: true } } } } },
-    orderBy: { staff: { name: "asc" } }
-  });
+  const [staffRecords, teacherRecords] = await Promise.all([
+    db_default.staffAttendance.findMany({
+      where: { date: targetDate },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            staffType: true,
+            department: { select: { name: true } }
+          }
+        }
+      },
+      orderBy: { staff: { name: "asc" } }
+    }),
+    db_default.teacherAttendance.findMany({
+      where: { date: targetDate },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            department: true,
+            subjectSpecialization: true
+          }
+        }
+      },
+      orderBy: { teacher: { name: "asc" } }
+    })
+  ]);
+  const staffAttendance = staffRecords.map((r) => ({
+    id: r.id,
+    staffId: r.staffId,
+    staffName: r.staff.name,
+    employeeId: r.staff.employeeId,
+    designation: r.staff.designation,
+    staffType: r.staff.staffType,
+    department: r.staff.department?.name,
+    personType: "STAFF",
+    status: r.status,
+    note: r.note
+  }));
+  const teacherAttendance = teacherRecords.map((r) => ({
+    id: r.id,
+    staffId: r.teacherId,
+    staffName: r.teacher.name,
+    employeeId: r.teacher.employeeId,
+    designation: r.teacher.designation,
+    staffType: r.teacher.subjectSpecialization ?? "TEACHING",
+    department: r.teacher.department,
+    personType: "TEACHER",
+    status: r.status,
+    note: r.note
+  }));
+  const records = [...staffAttendance, ...teacherAttendance].sort(
+    (a, b) => a.staffName.localeCompare(b.staffName)
+  );
   return {
     date,
     total: records.length,
     present: records.filter((r) => r.status === "PRESENT").length,
     absent: records.filter((r) => r.status === "ABSENT").length,
     late: records.filter((r) => r.status === "LATE").length,
-    records: records.map((r) => ({
-      id: r.id,
-      staffId: r.staffId,
-      staffName: r.staff.name,
-      employeeId: r.staff.employeeId,
-      designation: r.staff.designation,
-      staffType: r.staff.staffType,
-      department: r.staff.department?.name,
-      status: r.status,
-      note: r.note
-    }))
+    records
   };
 }
 async function getAttendanceMonthlySummary(year, month) {
