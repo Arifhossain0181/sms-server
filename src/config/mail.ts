@@ -1,3 +1,6 @@
+// Load SMTP settings before this module reads process.env. This module is
+// imported by routes before the application entrypoint runs its setup code.
+import "dotenv/config";
 import nodemailer from "nodemailer";
 
 const mailHost = process.env.MAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com";
@@ -34,12 +37,18 @@ export const mailService = {
         throw new Error("Mail credentials are not configured");
       }
 
+      const recipient = options.to?.trim();
+      if (!recipient) {
+        throw new Error("Mail recipient is missing");
+      }
+
       const info = await transporter.sendMail({
         from: mailFrom,
         ...options,
+        to: recipient,
       });
 
-      console.log("Email sent:", info.messageId);
+      console.log(`Email sent to ${recipient}:`, info.messageId);
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error("Email send error:", error);
@@ -89,11 +98,11 @@ export const mailService = {
               
               <div class="credentials">
                 <div class="field">
-                  <div class="label">📧 Email (Username):</div>
+                  <div class="label"> Email (Username):</div>
                   <div class="value">${email}</div>
                 </div>
                 <div class="field">
-                  <div class="label">🔐 Temporary Password:</div>
+                  <div class="label"> Temporary Password:</div>
                   <div class="value">${tempPassword}</div>
                 </div>
               </div>
@@ -143,7 +152,7 @@ export const mailService = {
     tempPassword: string,
     loginUrl: string
   ) {
-    const subject = "👨‍👩 Your Parent Account Has Been Created";
+    const subject = "Your Parent Account Has Been Created";
     const html = `
       <!DOCTYPE html>
       <html>
@@ -178,7 +187,7 @@ export const mailService = {
 
               <div class="credentials">
                 <div class="field">
-                  <div class="label">📧 Email (Username):</div>
+                  <div class="label"> Email (Username):</div>
                   <div class="value">${email}</div>
                 </div>
                 <div class="field">
@@ -219,6 +228,19 @@ export const mailService = {
       to: email,
       subject,
       html,
+    });
+  },
+
+  async sendParentStudentAdded(email: string, parentName: string, studentName: string, loginUrl: string) {
+    return this.send({
+      to: email,
+      subject: "A student has been added to your parent account",
+      html: `
+        <p>Dear <strong>${parentName}</strong>,</p>
+        <p><strong>${studentName}</strong> has been added to your parent account.</p>
+        <p>You can sign in with your existing parent credentials:</p>
+        <p><a href="${loginUrl}">Open Parent Dashboard</a></p>
+      `,
     });
   },
 };

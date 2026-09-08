@@ -1,5 +1,5 @@
 import prisma from "../../config/db";
-import { AdmissionQueryDto, CreateAdmissionDto, UpdateAdmissionDto, UpdateAdmissionStatusDto, ConvertToStudentDto } from "./admission.dto";
+import { AdmissionQueryDto, CreateAdmissionDto, UpdateAdmissionDto, UpdateAdmissionStatusDto, ConvertToStudentDto, isValidGmailAddress } from "./admission.dto";
 import { mailService } from "../../config/mail";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
@@ -8,6 +8,10 @@ const MAX_PAGE_LIMIT = 100;
 
 export class AdmissionService {
     async create(dto: CreateAdmissionDto) {
+        if (!isValidGmailAddress(dto.guardianEmail)) {
+            throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+        }
+
         const classExists = await prisma.class.findUnique({
             where: { id: dto.targetClassId },
         });
@@ -94,6 +98,9 @@ export class AdmissionService {
 
     async update(id: string, dto: UpdateAdmissionDto) {
         await this._exists(id);
+        if (dto.guardianEmail !== undefined && !isValidGmailAddress(dto.guardianEmail)) {
+            throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+        }
         return prisma.admissionApplication.update({
             where: { id },
             data: {
@@ -134,12 +141,6 @@ export class AdmissionService {
             rejectionReason: dto.rejectionReason,
         });
 
-        if (dto.status === "APPROVED" && !admission.studentId) {
-            const studentProfile = await this.createStudentFromAdmission(admission.id);
-            const updatedAdmission = await prisma.admissionApplication.findUnique({ where: { id } });
-            return updatedAdmission || { ...admission, studentId: studentProfile?.id };
-        }
-
         return admission;
     }
 
@@ -164,6 +165,22 @@ export class AdmissionService {
         ]);
 
         return { total, pending, approved, rejected };
+    }
+
+    async getPaidPayments() {
+        return prisma.admissionApplication.findMany({
+            where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+            select: {
+                id: true,
+                applicantName: true,
+                paymentAmount: true,
+                paymentMethod: true,
+                paymentDate: true,
+                createdAt: true,
+            },
+            orderBy: { paymentDate: "desc" },
+            take: 100,
+        });
     }
 
     async getPublicClasses() {
@@ -215,7 +232,34 @@ export class AdmissionService {
                 await tx.$executeRaw`SET LOCAL statement_timeout = 30000`;
                 const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
                 if (!admission) throw new Error("Admission record not found");
-                if (admission.studentId) return admission;
+                // Allow retrying an already-converted admission. This is useful
+                // when SMTP was unavailable during the first conversion: issue
+                // a fresh guardian password and resend the credentials.
+                if (admission.studentId) {
+                    const existingParent = await tx.parent.findFirst({
+                        where: { user: { email: admission.guardianEmail } },
+                        include: { user: { select: { id: true } } },
+                    });
+                    if (!existingParent) return admission;
+
+                    const tempPassword = randomBytes(6).toString("hex").toUpperCase();
+                    await tx.user.update({
+                        where: { id: existingParent.user.id },
+                        data: { passwordHash: await bcrypt.hash(tempPassword, 10) },
+                    });
+                    return {
+                        ...admission,
+                        name: admission.applicantName,
+                        __tempPassword: null,
+                        __email: admission.studentEmail,
+                        __guardianName: admission.guardianName,
+                        __parentTempPassword: tempPassword,
+                        __parentEmail: admission.guardianEmail,
+                    };
+                }
+                if (admission.status !== "APPROVED") {
+                    throw new Error("Admission must be approved before creating a student account");
+                }
 
                 const studentEmail = admission.studentEmail;
                 if (!studentEmail) throw new Error("Student email is required to create account");
@@ -298,20 +342,28 @@ export class AdmissionService {
         ).then(async (result: any) => {
             const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
             if (result.__tempPassword) {
-                mailService
+                await mailService
                     .sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl)
-                    .catch((err) => console.warn("Student welcome email failed:", err?.message));
+                    .then((mailResult) => {
+                        if (!mailResult.success) console.warn("Student welcome email failed:", mailResult.error);
+                    });
             }
-            if (result.__parentTempPassword) {
-                mailService
-                    .sendParentCredentials(
+            if (result.__parentEmail) {
+                const parentMailResult = result.__parentTempPassword
+                    ? await mailService.sendParentCredentials(
                         result.__parentEmail,
                         result.__guardianName,
                         result.name,
                         result.__parentTempPassword,
                         loginUrl,
                     )
-                    .catch((err) => console.warn("Parent welcome email failed:", err?.message));
+                    : await mailService.sendParentStudentAdded(
+                        result.__parentEmail,
+                        result.__guardianName,
+                        result.name,
+                        loginUrl,
+                    );
+                if (!parentMailResult.success) console.warn("Parent welcome email failed:", parentMailResult.error);
             }
             return result;
         });
@@ -329,7 +381,12 @@ export class AdmissionService {
             where: { user: { email: guardianEmail } },
         });
         if (existingParent) {
-            return { parent: existingParent, email: guardianEmail, tempPassword: null };
+            const tempPassword = randomBytes(6).toString("hex").toUpperCase();
+            await tx.user.update({
+                where: { id: existingParent.userId },
+                data: { passwordHash: await bcrypt.hash(tempPassword, 10) },
+            });
+            return { parent: existingParent, email: guardianEmail, tempPassword };
         }
 
         // Reuse an existing user (no parent profile yet) or create a new one.

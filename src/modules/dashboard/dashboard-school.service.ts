@@ -54,19 +54,63 @@ async function getTodayAttendanceSummary() {
 }
 
 async function getFeeSummary() {
-  const [totalPending, totalPaid, totalCollected] = await Promise.all([
+  const [totalPending, totalPaid, totalCollected, paymentMethods, paymentStatuses, admissionPayments] = await Promise.all([
     prisma.feeStructure.count({ where: { status: "PENDING" } }),
     prisma.feeStructure.count({ where: { status: "PAID" } }),
-    prisma.feeStructure.aggregate({
+    prisma.payment.aggregate({
       where: { status: "PAID" },
-      _sum: { Paidamount: true },
+      _sum: { amount: true },
+    }),
+    prisma.payment.groupBy({
+      by: ["method"],
+      where: { status: "PAID" },
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+    prisma.payment.groupBy({
+      by: ["status"],
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+    prisma.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+      _sum: { paymentAmount: true },
+      _count: { id: true },
     }),
   ]);
+
+  const admissionMethodGroups = await prisma.admissionApplication.groupBy({
+    by: ["paymentMethod"],
+    where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+    _sum: { paymentAmount: true },
+    _count: { id: true },
+  });
+
+  const byMethod = Object.fromEntries(
+    paymentMethods.map((item) => [item.method, { amount: item._sum.amount ?? 0, count: item._count.id }])
+  );
+  const byStatus = Object.fromEntries(
+    paymentStatuses.map((item) => [item.status, { amount: item._sum.amount ?? 0, count: item._count.id }])
+  );
 
   return {
     totalPending,
     totalPaid,
-    totalCollected: totalCollected._sum.Paidamount ?? 0,
+    totalCollected: (totalCollected._sum.amount ?? 0) + (admissionPayments._sum.paymentAmount ?? 0),
+    totalPayments: paymentStatuses.reduce((sum, item) => sum + item._count.id, 0) + admissionPayments._count.id,
+    cashCollected:
+      (byMethod.CASH?.amount ?? 0) +
+      (admissionMethodGroups.find((item) => item.paymentMethod === "CASH")?._sum.paymentAmount ?? 0),
+    cashPayments:
+      (byMethod.CASH?.count ?? 0) +
+      (admissionMethodGroups.find((item) => item.paymentMethod === "CASH")?._count.id ?? 0),
+    stripeCollected:
+      (byMethod.STRIPE?.amount ?? 0) +
+      (admissionMethodGroups.find((item) => item.paymentMethod === "STRIPE")?._sum.paymentAmount ?? 0),
+    stripePayments:
+      (byMethod.STRIPE?.count ?? 0) +
+      (admissionMethodGroups.find((item) => item.paymentMethod === "STRIPE")?._count.id ?? 0),
+    paymentStatuses: byStatus,
   };
 }
 

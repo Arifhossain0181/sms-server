@@ -57,7 +57,10 @@ export class RecruitmentController {
       const data = await findAllJobPostings({ ...req.query, status: 'OPEN' });
       sendSuccess(res, data, 'Open job postings fetched');
     } catch (err) {
-      next(err);
+      // Careers is public and optional; do not break the navbar when the
+      // recruitment table is temporarily unavailable or not yet permitted.
+      console.warn('[RECRUITMENT] Public jobs unavailable:', (err as any)?.message ?? err);
+      sendSuccess(res, { postings: [], meta: { page: 1, limit: 10, total: 0, totalPages: 0 } }, 'No public job postings available');
     }
   }
 

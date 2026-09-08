@@ -24,6 +24,7 @@ export interface CreateStudentDto {
 export interface UpdateStudentDto {
   name?: string;
   email?: string;
+  password?: string;
   phone?: string;
   address?: string;
   dateOfBirth?: string;

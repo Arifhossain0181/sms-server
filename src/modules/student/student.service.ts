@@ -8,6 +8,7 @@ import { notFoundError, findAvailableSection, assertRollNumberAvailable } from '
 import { linkOrCreateGuardian, updateGuardian } from './student.Parents';
 import { getAttendance } from './student.attendence';
 import { getResults } from './student.result';
+import { mailService } from '../../config/mail';
 
 export class StudentService {
     static async getStudentIdByUserId(userId: string) {
@@ -19,6 +20,9 @@ export class StudentService {
     }
 
     async createStudent(dto: CreateStudentDto) {
+        if (!dto.email?.trim()) throw new Error("Student email is required");
+        if (!dto.password?.trim()) throw new Error("Student password is required");
+
         const rollNumber = assertValidRollNumber(dto.rollNumber);
         const dob = assertValidDob(String(dto.dateOfBirth));
 
@@ -30,7 +34,7 @@ export class StudentService {
         const classExists = await prisma.class.findUnique({ where: { id: dto.classId } });
         if (!classExists) throw new Error("Class not found");
 
-        return prisma.$transaction(async (tx) => {
+        const student = await prisma.$transaction(async (tx) => {
             const section = await findAvailableSection(tx, dto.classId);
             await assertRollNumberAvailable(tx, section.id, rollNumber);
 
@@ -69,13 +73,48 @@ export class StudentService {
                 },
             });
 
-            const parentId = await linkOrCreateGuardian(tx, dto);
-            if (parentId && user.studentProfile?.id) {
-                await tx.student.update({ where: { id: user.studentProfile.id }, data: { parentId } });
+            const guardian = await linkOrCreateGuardian(tx, dto);
+            if (guardian && user.studentProfile?.id) {
+                await tx.student.update({ where: { id: user.studentProfile.id }, data: { parentId: guardian.parentId } });
             }
 
-            return user;
+            return { user, guardian };
         }, { isolationLevel: 'Serializable' });
+
+        const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        const mailResult = await mailService.sendStudentCredentials(
+            student.user.email,
+            student.user.name,
+            dto.password,
+            loginUrl,
+        );
+
+        if (!mailResult.success) {
+            console.warn('Student welcome email failed:', mailResult.error);
+        }
+
+        if (student.guardian) {
+            const parentMailResult = student.guardian.tempPassword
+                ? await mailService.sendParentCredentials(
+                    student.guardian.email,
+                    student.guardian.name,
+                    student.user.name,
+                    student.guardian.tempPassword,
+                    loginUrl,
+                )
+                : await mailService.sendParentStudentAdded(
+                    student.guardian.email,
+                    student.guardian.name,
+                    student.user.name,
+                    loginUrl,
+                );
+
+            if (!parentMailResult.success) {
+                console.warn('Parent welcome email failed:', parentMailResult.error);
+            }
+        }
+
+        return student.user;
     }
 
     async findAllStudents(query: StudentQueryDto) {
@@ -117,6 +156,7 @@ export class StudentService {
             return {
                 ...student,
                 email: student.user?.email,
+                guardianName: student.parent?.name ?? student.admissionRecord?.guardianName ?? "—",
                 guardianEmail: guardianEmail ?? "—",
                 phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null,
             };
@@ -225,7 +265,7 @@ export class StudentService {
 
         const {
             name, email, dateOfBirth, address, bloodGroup, avatarUrl, classId,
-            guardianName, guardianPhone, guardianEmail, guardianRelation,
+            guardianName, guardianPhone, guardianEmail, guardianRelation, password,
         } = dto as UpdateStudentDto & { email?: string; dateOfBirth?: string };
 
         const dob = dateOfBirth ? assertValidDob(dateOfBirth) : undefined;
@@ -239,6 +279,7 @@ export class StudentService {
             const userUpdate: Record<string, any> = {};
             if (name !== undefined) userUpdate.name = name;
             if (email !== undefined) userUpdate.email = email;
+            if (password?.trim()) userUpdate.passwordHash = await bcrypt.hash(password.trim(), 10);
 
             const studentUpdateData: Record<string, any> = {};
             if (name !== undefined) studentUpdateData.name = name;

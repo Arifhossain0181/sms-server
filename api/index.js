@@ -17019,7 +17019,7 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
-var import_express27 = __toESM(require("express"));
+var import_express28 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
@@ -17039,7 +17039,7 @@ var errorMiddleware = (err, req, res, next) => {
 init_logger();
 
 // src/routes/index.ts
-var import_express26 = __toESM(require("express"));
+var import_express27 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
@@ -17048,6 +17048,7 @@ var import_express = require("express");
 init_db();
 
 // src/config/mail.ts
+var import_config2 = require("dotenv/config");
 var import_nodemailer = __toESM(require("nodemailer"));
 var mailHost = process.env.MAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com";
 var mailPort = Number(process.env.MAIL_PORT || process.env.SMTP_PORT || 587);
@@ -17071,11 +17072,16 @@ var mailService = {
       if (!mailUser || !mailPass) {
         throw new Error("Mail credentials are not configured");
       }
+      const recipient = options.to?.trim();
+      if (!recipient) {
+        throw new Error("Mail recipient is missing");
+      }
       const info = await transporter.sendMail({
         from: mailFrom,
-        ...options
+        ...options,
+        to: recipient
       });
-      console.log("Email sent:", info.messageId);
+      console.log(`Email sent to ${recipient}:`, info.messageId);
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error("Email send error:", error);
@@ -17119,11 +17125,11 @@ var mailService = {
               
               <div class="credentials">
                 <div class="field">
-                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="label"> Email (Username):</div>
                   <div class="value">${email}</div>
                 </div>
                 <div class="field">
-                  <div class="label">\u{1F510} Temporary Password:</div>
+                  <div class="label"> Temporary Password:</div>
                   <div class="value">${tempPassword}</div>
                 </div>
               </div>
@@ -17165,7 +17171,7 @@ var mailService = {
   // The parent account is provisioned by the school on admission approval
   // (the parent does NOT self sign-up), so credentials are emailed here.
   async sendParentCredentials(email, parentName, studentName, tempPassword, loginUrl) {
-    const subject = "\u{1F468}\u200D\u{1F469} Your Parent Account Has Been Created";
+    const subject = "Your Parent Account Has Been Created";
     const html = `
       <!DOCTYPE html>
       <html>
@@ -17200,7 +17206,7 @@ var mailService = {
 
               <div class="credentials">
                 <div class="field">
-                  <div class="label">\u{1F4E7} Email (Username):</div>
+                  <div class="label"> Email (Username):</div>
                   <div class="value">${email}</div>
                 </div>
                 <div class="field">
@@ -17240,6 +17246,18 @@ var mailService = {
       to: email,
       subject,
       html
+    });
+  },
+  async sendParentStudentAdded(email, parentName, studentName, loginUrl) {
+    return this.send({
+      to: email,
+      subject: "A student has been added to your parent account",
+      html: `
+        <p>Dear <strong>${parentName}</strong>,</p>
+        <p><strong>${studentName}</strong> has been added to your parent account.</p>
+        <p>You can sign in with your existing parent credentials:</p>
+        <p><a href="${loginUrl}">Open Parent Dashboard</a></p>
+      `
     });
   }
 };
@@ -17466,7 +17484,7 @@ var AuthService = class {
       throw new Error("Student profile not found");
     }
     const admission = user.studentProfile.admissionRecord;
-    if (!admission || admission.status !== "APPROVED") {
+    if (admission && admission.status !== "APPROVED") {
       throw new Error("Your admission is not verified yet. Please wait for admin approval.");
     }
     const isMatch = await import_bcryptjs.default.compare(dto.password, user.passwordHash);
@@ -17718,11 +17736,12 @@ async function linkOrCreateGuardian(tx, guardian) {
         `This email (${guardian.guardianEmail}) is already in use by another ${existingUser.role} account`
       );
     }
+    const tempPassword = Math.random().toString(36).slice(-10).toUpperCase();
     const parentUser = await tx.user.create({
       data: {
         name: guardian.guardianName,
         email: guardian.guardianEmail,
-        passwordHash: await import_bcryptjs2.default.hash(Math.random().toString(36), 10),
+        passwordHash: await import_bcryptjs2.default.hash(tempPassword, 10),
         role: "PARENT"
       }
     });
@@ -17734,8 +17753,19 @@ async function linkOrCreateGuardian(tx, guardian) {
         relation: guardian.guardianRelation
       }
     });
+    return {
+      parentId: parentRecord.id,
+      email: guardian.guardianEmail,
+      name: guardian.guardianName,
+      tempPassword
+    };
   }
-  return parentRecord.id;
+  return {
+    parentId: parentRecord.id,
+    email: guardian.guardianEmail,
+    name: guardian.guardianName,
+    tempPassword: null
+  };
 }
 async function updateGuardian(tx, existingParent, guardian) {
   const { guardianName, guardianPhone, guardianEmail, guardianRelation } = guardian;
@@ -17825,6 +17855,8 @@ var StudentService = class {
     return student?.id ?? null;
   }
   async createStudent(dto) {
+    if (!dto.email?.trim()) throw new Error("Student email is required");
+    if (!dto.password?.trim()) throw new Error("Student password is required");
     const rollNumber = assertValidRollNumber(dto.rollNumber);
     const dob = assertValidDob(String(dto.dateOfBirth));
     if (dto.email) {
@@ -17833,7 +17865,7 @@ var StudentService = class {
     }
     const classExists = await db_default.class.findUnique({ where: { id: dto.classId } });
     if (!classExists) throw new Error("Class not found");
-    return db_default.$transaction(async (tx) => {
+    const student = await db_default.$transaction(async (tx) => {
       const section = await findAvailableSection(tx, dto.classId);
       await assertRollNumberAvailable(tx, section.id, rollNumber);
       const hashedPassword = dto.password ? await import_bcryptjs3.default.hash(dto.password, 10) : "";
@@ -17882,12 +17914,40 @@ var StudentService = class {
           }
         }
       });
-      const parentId = await linkOrCreateGuardian(tx, dto);
-      if (parentId && user.studentProfile?.id) {
-        await tx.student.update({ where: { id: user.studentProfile.id }, data: { parentId } });
+      const guardian = await linkOrCreateGuardian(tx, dto);
+      if (guardian && user.studentProfile?.id) {
+        await tx.student.update({ where: { id: user.studentProfile.id }, data: { parentId: guardian.parentId } });
       }
-      return user;
+      return { user, guardian };
     }, { isolationLevel: "Serializable" });
+    const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
+    const mailResult = await mailService.sendStudentCredentials(
+      student.user.email,
+      student.user.name,
+      dto.password,
+      loginUrl
+    );
+    if (!mailResult.success) {
+      console.warn("Student welcome email failed:", mailResult.error);
+    }
+    if (student.guardian) {
+      const parentMailResult = student.guardian.tempPassword ? await mailService.sendParentCredentials(
+        student.guardian.email,
+        student.guardian.name,
+        student.user.name,
+        student.guardian.tempPassword,
+        loginUrl
+      ) : await mailService.sendParentStudentAdded(
+        student.guardian.email,
+        student.guardian.name,
+        student.user.name,
+        loginUrl
+      );
+      if (!parentMailResult.success) {
+        console.warn("Parent welcome email failed:", parentMailResult.error);
+      }
+    }
+    return student.user;
   }
   async findAllStudents(query) {
     const { page = "1", limit = "10", search, classId, gender } = query;
@@ -17926,6 +17986,7 @@ var StudentService = class {
       return {
         ...student,
         email: student.user?.email,
+        guardianName: student.parent?.name ?? student.admissionRecord?.guardianName ?? "\u2014",
         guardianEmail: guardianEmail ?? "\u2014",
         phone: student.parent?.phone ?? student.admissionRecord?.guardianPhone ?? null
       };
@@ -18035,7 +18096,8 @@ var StudentService = class {
       guardianName,
       guardianPhone,
       guardianEmail,
-      guardianRelation
+      guardianRelation,
+      password
     } = dto;
     const dob = dateOfBirth ? assertValidDob(dateOfBirth) : void 0;
     if (email && email !== student.user.email) {
@@ -18046,6 +18108,7 @@ var StudentService = class {
       const userUpdate = {};
       if (name !== void 0) userUpdate.name = name;
       if (email !== void 0) userUpdate.email = email;
+      if (password?.trim()) userUpdate.passwordHash = await import_bcryptjs3.default.hash(password.trim(), 10);
       const studentUpdateData = {};
       if (name !== void 0) studentUpdateData.name = name;
       if (address !== void 0) studentUpdateData.address = address;
@@ -18265,19 +18328,14 @@ var StudentController = class {
         }, "Student profile pending approval");
         return;
       }
-      console.log(`[STUDENT] \u2705 Profile found and returned - Admission: APPROVED`);
-      sendSuccess(res, student, "Student profile fetched");
+      console.log(`[STUDENT]  Profile found and returned - Admission: APPROVED`);
+      sendSuccess(
+        res,
+        { ...student, admissionStatus: admissionStatus ?? "APPROVED" },
+        "Student profile fetched"
+      );
     } catch (err) {
       console.log(`[STUDENT] Error fetching profile:`, err?.message);
-      if (err?.message?.includes("not found")) {
-        console.log(`[STUDENT] \u26A0\uFE0F Student profile not found for user: ${req.user.id}, but user exists`);
-        sendSuccess(res, {
-          id: req.user.id,
-          pending: true,
-          message: "Student profile is pending. Please complete your admission application."
-        }, "Student profile pending approval");
-        return;
-      }
       next(err);
     }
   }
@@ -22158,11 +22216,19 @@ var import_express10 = require("express");
 
 // src/modules/admission/admission.service.ts
 init_db();
+
+// src/modules/admission/admission.dto.ts
+var isValidGmailAddress = (value) => typeof value === "string" && /^[a-z0-9][a-z0-9._%+-]*@gmail\.com$/i.test(value.trim());
+
+// src/modules/admission/admission.service.ts
 var import_bcryptjs5 = __toESM(require("bcryptjs"));
 var import_node_crypto3 = require("crypto");
 var MAX_PAGE_LIMIT = 100;
 var AdmissionService = class {
   async create(dto) {
+    if (!isValidGmailAddress(dto.guardianEmail)) {
+      throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+    }
     const classExists = await db_default.class.findUnique({
       where: { id: dto.targetClassId }
     });
@@ -22238,6 +22304,9 @@ var AdmissionService = class {
   }
   async update(id, dto) {
     await this._exists(id);
+    if (dto.guardianEmail !== void 0 && !isValidGmailAddress(dto.guardianEmail)) {
+      throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+    }
     return db_default.admissionApplication.update({
       where: { id },
       data: {
@@ -22272,11 +22341,6 @@ var AdmissionService = class {
       to: dto.status,
       rejectionReason: dto.rejectionReason
     });
-    if (dto.status === "APPROVED" && !admission.studentId) {
-      const studentProfile = await this.createStudentFromAdmission(admission.id);
-      const updatedAdmission = await db_default.admissionApplication.findUnique({ where: { id } });
-      return updatedAdmission || { ...admission, studentId: studentProfile?.id };
-    }
     return admission;
   }
   async convertToStudent(dto) {
@@ -22297,6 +22361,21 @@ var AdmissionService = class {
       db_default.admissionApplication.count({ where: { status: "REJECTED" } })
     ]);
     return { total, pending, approved, rejected };
+  }
+  async getPaidPayments() {
+    return db_default.admissionApplication.findMany({
+      where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+      select: {
+        id: true,
+        applicantName: true,
+        paymentAmount: true,
+        paymentMethod: true,
+        paymentDate: true,
+        createdAt: true
+      },
+      orderBy: { paymentDate: "desc" },
+      take: 100
+    });
   }
   async getPublicClasses() {
     return db_default.class.findMany({
@@ -22342,7 +22421,30 @@ var AdmissionService = class {
         await tx.$executeRaw`SET LOCAL statement_timeout = 30000`;
         const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
         if (!admission) throw new Error("Admission record not found");
-        if (admission.studentId) return admission;
+        if (admission.studentId) {
+          const existingParent = await tx.parent.findFirst({
+            where: { user: { email: admission.guardianEmail } },
+            include: { user: { select: { id: true } } }
+          });
+          if (!existingParent) return admission;
+          const tempPassword2 = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+          await tx.user.update({
+            where: { id: existingParent.user.id },
+            data: { passwordHash: await import_bcryptjs5.default.hash(tempPassword2, 10) }
+          });
+          return {
+            ...admission,
+            name: admission.applicantName,
+            __tempPassword: null,
+            __email: admission.studentEmail,
+            __guardianName: admission.guardianName,
+            __parentTempPassword: tempPassword2,
+            __parentEmail: admission.guardianEmail
+          };
+        }
+        if (admission.status !== "APPROVED") {
+          throw new Error("Admission must be approved before creating a student account");
+        }
         const studentEmail = admission.studentEmail;
         if (!studentEmail) throw new Error("Student email is required to create account");
         let user = await tx.user.findUnique({ where: { email: studentEmail } });
@@ -22414,16 +22516,24 @@ var AdmissionService = class {
     ).then(async (result) => {
       const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
       if (result.__tempPassword) {
-        mailService.sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl).catch((err) => console.warn("Student welcome email failed:", err?.message));
+        await mailService.sendStudentCredentials(result.__email, result.name, result.__tempPassword, loginUrl).then((mailResult) => {
+          if (!mailResult.success) console.warn("Student welcome email failed:", mailResult.error);
+        });
       }
-      if (result.__parentTempPassword) {
-        mailService.sendParentCredentials(
+      if (result.__parentEmail) {
+        const parentMailResult = result.__parentTempPassword ? await mailService.sendParentCredentials(
           result.__parentEmail,
           result.__guardianName,
           result.name,
           result.__parentTempPassword,
           loginUrl
-        ).catch((err) => console.warn("Parent welcome email failed:", err?.message));
+        ) : await mailService.sendParentStudentAdded(
+          result.__parentEmail,
+          result.__guardianName,
+          result.name,
+          loginUrl
+        );
+        if (!parentMailResult.success) console.warn("Parent welcome email failed:", parentMailResult.error);
       }
       return result;
     });
@@ -22438,7 +22548,12 @@ var AdmissionService = class {
       where: { user: { email: guardianEmail } }
     });
     if (existingParent) {
-      return { parent: existingParent, email: guardianEmail, tempPassword: null };
+      const tempPassword2 = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+      await tx.user.update({
+        where: { id: existingParent.userId },
+        data: { passwordHash: await import_bcryptjs5.default.hash(tempPassword2, 10) }
+      });
+      return { parent: existingParent, email: guardianEmail, tempPassword: tempPassword2 };
     }
     let user = await tx.user.findUnique({ where: { email: guardianEmail } });
     let tempPassword = null;
@@ -22492,6 +22607,11 @@ var AdmissionController = class {
       const missing = REQUIRED_APPLY_FIELDS.filter((f) => !req.body?.[f]);
       if (missing.length) {
         const err = new Error(`Missing required field(s): ${missing.join(", ")}`);
+        err.status = 400;
+        throw err;
+      }
+      if (!isValidGmailAddress(req.body.guardianEmail)) {
+        const err = new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
         err.status = 400;
         throw err;
       }
@@ -22557,6 +22677,14 @@ var AdmissionController = class {
     try {
       const stats = await admissionService.getStats();
       sendSuccess(res, stats, "Stats fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getPaidPayments(req, res, next) {
+    try {
+      const payments = await admissionService.getPaidPayments();
+      sendSuccess(res, payments, "Paid admission payments fetched");
     } catch (err) {
       next(err);
     }
@@ -22653,6 +22781,12 @@ router10.post(
   c2.uploadDocument.bind(c2)
 );
 router10.get("/my-applications", authenticate, c2.getMyApplications.bind(c2));
+router10.get(
+  "/accountant/payments",
+  authenticate,
+  authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "SUPER_ADMIN"),
+  c2.getPaidPayments.bind(c2)
+);
 router10.use(authenticate, authorizeRoles("SCHOOL_ADMIN", "HR"));
 router10.get("/stats", c2.getStats.bind(c2));
 router10.post("/convert-to-student", c2.convertToStudent.bind(c2));
@@ -22680,6 +22814,13 @@ function deriveAcademicYear(year, month) {
 function monthRange(month) {
   const start = /* @__PURE__ */ new Date(`${month}-01`);
   const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  return { start, end };
+}
+function dayRange(date = /* @__PURE__ */ new Date()) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
   return { start, end };
 }
 var createfee = async (dto) => {
@@ -23090,16 +23231,33 @@ var getFeeSummary = async (month) => {
     const { start, end } = monthRange(month);
     where.dueDate = { gte: start, lt: end };
   }
-  const [totals, pendingCount, overdueCount] = await Promise.all([
+  const admissionWhere = { paymentStatus: "PAID", paymentAmount: { not: null } };
+  if (month) {
+    const { start, end } = monthRange(month);
+    admissionWhere.paymentDate = { gte: start, lt: end };
+  }
+  const today2 = dayRange();
+  const [totals, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
     db_default.feeStructure.aggregate({ where, _sum: { amount: true, Paidamount: true } }),
     db_default.feeStructure.count({ where: { ...where, status: "PENDING" } }),
-    db_default.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } } })
+    db_default.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } } }),
+    db_default.admissionApplication.aggregate({ where: admissionWhere, _sum: { paymentAmount: true }, _count: true }),
+    db_default.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentDate: { gte: today2.start, lt: today2.end } },
+      _sum: { paymentAmount: true },
+      _count: true
+    })
   ]);
   const totalAmount = totals._sum.amount ?? 0;
-  const totalPaid = totals._sum.Paidamount ?? 0;
+  const admissionTotalPaid = admissionTotals._sum.paymentAmount ?? 0;
+  const totalPaid = (totals._sum.Paidamount ?? 0) + admissionTotalPaid;
   return {
     totalAmount,
     totalPaid,
+    admissionTotalPaid,
+    admissionPaymentCount: admissionTotals._count,
+    admissionTotalPaidToday: admissionTodayTotals._sum.paymentAmount ?? 0,
+    admissionPaymentCountToday: admissionTodayTotals._count,
     outstanding: totalAmount - totalPaid,
     pendingCount,
     overdueCount,
@@ -23231,6 +23389,41 @@ var getMonthlyAnalytics = async (year) => {
     byMonth,
     byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
     byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }]))
+  };
+};
+var getAccountantDashboardOverview = async () => {
+  const today2 = dayRange();
+  const [summary, recentPayments, todayAggregate, admissionTodayAggregate] = await Promise.all([
+    getFeeSummary(),
+    getAllPayments({ page: "1", limit: "5" }),
+    db_default.payment.aggregate({
+      where: { createdAt: { gte: today2.start, lt: today2.end }, status: "PAID" },
+      _sum: { amount: true },
+      _count: { id: true }
+    }),
+    db_default.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentDate: { gte: today2.start, lt: today2.end } },
+      _sum: { paymentAmount: true },
+      _count: true
+    })
+  ]);
+  const methodBreakdown = await db_default.payment.groupBy({
+    by: ["method"],
+    where: {
+      createdAt: { gte: today2.start, lt: today2.end },
+      status: "PAID"
+    },
+    _sum: { amount: true }
+  });
+  const todayCollection = (todayAggregate._sum.amount ?? 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
+  const todayCount = (todayAggregate._count.id ?? 0) + admissionTodayAggregate._count;
+  return {
+    summary,
+    todayCollection,
+    todayCount,
+    recentPayments: recentPayments.data,
+    recentPaymentsMeta: recentPayments.meta,
+    byMethod: Object.fromEntries(methodBreakdown.map((g) => [g.method, g._sum.amount ?? 0]))
   };
 };
 var createPaymentIntent = async (feeId, studentId) => {
@@ -23996,6 +24189,14 @@ var FeesController = class {
       next(err);
     }
   }
+  async getDashboardOverview(req, res, next) {
+    try {
+      const data = await getAccountantDashboardOverview();
+      sendSuccess(res, data, "Dashboard overview fetched");
+    } catch (err) {
+      next(err);
+    }
+  }
   async createPaymentIntent(req, res, next) {
     try {
       const { feeId, studentId } = req.body;
@@ -24040,6 +24241,7 @@ router11.get("/report/overdue", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "AD
 router11.get("/summary", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "ADMIN"), c3.getSummary.bind(c3));
 router11.get("/transactions", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getTransactions.bind(c3));
 router11.get("/analytics/monthly", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getMonthlyAnalytics.bind(c3));
+router11.get("/dashboard/overview", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN"), c3.getDashboardOverview.bind(c3));
 router11.get("/student/:studentId", authorizeRoles("ACCOUNTANT", "SCHOOL_ADMIN", "STUDENT"), c3.getStudentSummary.bind(c3));
 router11.post("/", authorizeRoles("ACCOUNTANT"), c3.create.bind(c3));
 router11.post("/bulk", authorizeRoles("ACCOUNTANT"), c3.bulkCreate.bind(c3));
@@ -28150,18 +28352,52 @@ async function getTodayAttendanceSummary() {
   return { present, absent, late, total, date: today2.toISOString().split("T")[0] };
 }
 async function getFeeSummary2() {
-  const [totalPending, totalPaid, totalCollected] = await Promise.all([
+  const [totalPending, totalPaid, totalCollected, paymentMethods, paymentStatuses, admissionPayments] = await Promise.all([
     db_default.feeStructure.count({ where: { status: "PENDING" } }),
     db_default.feeStructure.count({ where: { status: "PAID" } }),
-    db_default.feeStructure.aggregate({
+    db_default.payment.aggregate({
       where: { status: "PAID" },
-      _sum: { Paidamount: true }
+      _sum: { amount: true }
+    }),
+    db_default.payment.groupBy({
+      by: ["method"],
+      where: { status: "PAID" },
+      _sum: { amount: true },
+      _count: { id: true }
+    }),
+    db_default.payment.groupBy({
+      by: ["status"],
+      _sum: { amount: true },
+      _count: { id: true }
+    }),
+    db_default.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+      _sum: { paymentAmount: true },
+      _count: { id: true }
     })
   ]);
+  const admissionMethodGroups = await db_default.admissionApplication.groupBy({
+    by: ["paymentMethod"],
+    where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+    _sum: { paymentAmount: true },
+    _count: { id: true }
+  });
+  const byMethod = Object.fromEntries(
+    paymentMethods.map((item) => [item.method, { amount: item._sum.amount ?? 0, count: item._count.id }])
+  );
+  const byStatus = Object.fromEntries(
+    paymentStatuses.map((item) => [item.status, { amount: item._sum.amount ?? 0, count: item._count.id }])
+  );
   return {
     totalPending,
     totalPaid,
-    totalCollected: totalCollected._sum.Paidamount ?? 0
+    totalCollected: (totalCollected._sum.amount ?? 0) + (admissionPayments._sum.paymentAmount ?? 0),
+    totalPayments: paymentStatuses.reduce((sum, item) => sum + item._count.id, 0) + admissionPayments._count.id,
+    cashCollected: (byMethod.CASH?.amount ?? 0) + (admissionMethodGroups.find((item) => item.paymentMethod === "CASH")?._sum.paymentAmount ?? 0),
+    cashPayments: (byMethod.CASH?.count ?? 0) + (admissionMethodGroups.find((item) => item.paymentMethod === "CASH")?._count.id ?? 0),
+    stripeCollected: (byMethod.STRIPE?.amount ?? 0) + (admissionMethodGroups.find((item) => item.paymentMethod === "STRIPE")?._sum.paymentAmount ?? 0),
+    stripePayments: (byMethod.STRIPE?.count ?? 0) + (admissionMethodGroups.find((item) => item.paymentMethod === "STRIPE")?._count.id ?? 0),
+    paymentStatuses: byStatus
   };
 }
 async function getRecentAdmissions() {
@@ -28586,7 +28822,8 @@ var RecruitmentController = class {
       const data = await findAllJobPostings({ ...req.query, status: "OPEN" });
       sendSuccess(res, data, "Open job postings fetched");
     } catch (err) {
-      next(err);
+      console.warn("[RECRUITMENT] Public jobs unavailable:", err?.message ?? err);
+      sendSuccess(res, { postings: [], meta: { page: 1, limit: 10, total: 0, totalPages: 0 } }, "No public job postings available");
     }
   }
   async findJobPostingById(req, res, next) {
@@ -29308,41 +29545,102 @@ router25.get("/results/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CON
 router25.get("/results/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsCsv.bind(c12));
 var reports_route_default = router25;
 
+// src/modules/public/public.route.ts
+var import_express26 = require("express");
+
+// src/modules/public/public.controller.ts
+init_db();
+async function getSchoolOverview(_req, res, next) {
+  try {
+    const school = await db_default.school.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        address: true,
+        phone: true,
+        email: true,
+        principalName: true,
+        academicYear: true
+      }
+    });
+    const schoolFilter = school ? { OR: [{ schoolId: school.id }, { schoolId: null }] } : {};
+    const [teachers, studentCount] = await Promise.all([
+      db_default.teacher.findMany({
+        where: { ...schoolFilter, isActive: true },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          designation: true,
+          department: true,
+          departmentRef: { select: { name: true } }
+        }
+      }),
+      db_default.student.count({ where: { ...schoolFilter, isActive: true } })
+    ]);
+    res.status(200).json({
+      success: true,
+      data: {
+        school,
+        counts: { teachers: teachers.length, students: studentCount },
+        teachers: teachers.map((teacher) => ({
+          id: teacher.id,
+          name: teacher.name,
+          designation: teacher.designation,
+          department: teacher.departmentRef?.name ?? teacher.department ?? "General"
+        }))
+      },
+      message: "School overview fetched"
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// src/modules/public/public.route.ts
+var router26 = (0, import_express26.Router)();
+router26.get("/school-overview", getSchoolOverview);
+var public_route_default = router26;
+
 // src/routes/index.ts
-var router26 = import_express26.default.Router();
-router26.get("/health", (req, res) => {
+var router27 = import_express27.default.Router();
+router27.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router26.use("/auth", auth_route_default);
-router26.use("/students", students_route_default);
-router26.use("/subjects", subject_router_default);
-router26.use("/classes", class_route_default);
-router26.use("/exams", exam_route_default);
-router26.use("/attendance", attendacne_router_default);
-router26.use("/teachers", teacher_routes_default);
-router26.use("/results", result_router_default);
-router26.use("/admission", admission_routes_default);
-router26.use("/fees", router_default);
-router26.use("/teaching", teachingApplication_routes_default);
-router26.use("/notices", notice_route_default);
-router26.use("/timetable", timetable_routes_default);
-router26.use("/homework", howework_routes_default);
-router26.use("/parents", parents_routes_default);
-router26.use("/notifications", notifictaion_routes_default);
-router26.use("/super-admin", superAdmin_route_default);
-router26.use("/hr", hr_routes_default);
-router26.use("/recruitment", recruitment_routes_default);
-router26.use("/grading-rules", gradingRoutes);
-router26.use("/dashboard", dashboard_route_default);
-router26.use("/dashboard", dashboardSchoolRoutes);
-router26.use("/tc", tc_route_default);
-router26.use("/roles", role_route_default);
-router26.use("/reports", reports_route_default);
-var routes_default = router26;
+router27.use("/public", public_route_default);
+router27.use("/auth", auth_route_default);
+router27.use("/students", students_route_default);
+router27.use("/subjects", subject_router_default);
+router27.use("/classes", class_route_default);
+router27.use("/exams", exam_route_default);
+router27.use("/attendance", attendacne_router_default);
+router27.use("/teachers", teacher_routes_default);
+router27.use("/results", result_router_default);
+router27.use("/admission", admission_routes_default);
+router27.use("/fees", router_default);
+router27.use("/teaching", teachingApplication_routes_default);
+router27.use("/notices", notice_route_default);
+router27.use("/timetable", timetable_routes_default);
+router27.use("/homework", howework_routes_default);
+router27.use("/parents", parents_routes_default);
+router27.use("/notifications", notifictaion_routes_default);
+router27.use("/super-admin", superAdmin_route_default);
+router27.use("/hr", hr_routes_default);
+router27.use("/recruitment", recruitment_routes_default);
+router27.use("/grading-rules", gradingRoutes);
+router27.use("/dashboard", dashboard_route_default);
+router27.use("/dashboard", dashboardSchoolRoutes);
+router27.use("/tc", tc_route_default);
+router27.use("/roles", role_route_default);
+router27.use("/reports", reports_route_default);
+var routes_default = router27;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express27.default)();
+var app = (0, import_express28.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
@@ -29377,8 +29675,8 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 var feesController = new FeesController();
-app.post("/api/v1/fees/webhook", import_express27.default.raw({ type: "application/json" }), feesController.handleWebhook.bind(feesController));
-app.use(import_express27.default.json({ limit: "1mb" }));
+app.post("/api/v1/fees/webhook", import_express28.default.raw({ type: "application/json" }), feesController.handleWebhook.bind(feesController));
+app.use(import_express28.default.json({ limit: "1mb" }));
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,

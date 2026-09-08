@@ -25,6 +25,7 @@ import { gradingRoutes } from '../modules/grading/grading.route';
 import tcRoutes from '../modules/student/tc.route';
 import roleRoutes from '../modules/role/role.route';
 import reportRoutes from '../modules/report/reports.route';
+import publicRoutes from '../modules/public/public.route';
 
 const router = express.Router();
 
@@ -32,6 +33,8 @@ const router = express.Router();
 router.get('/health', (req, res) => {
 	res.status(200).json({ success: true, message: 'API is healthy' });
 });
+
+router.use('/public', publicRoutes);
 
 router.use('/auth', authRoutes);
 router.use('/students', studentRoutes);

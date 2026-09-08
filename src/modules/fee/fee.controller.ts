@@ -15,6 +15,7 @@ import {
   getOverdueFees as getOverdueFeesService,
   getAllPayments as getTransactionsService,
   getMonthlyAnalytics as getMonthlyAnalyticsService,
+  getAccountantDashboardOverview as getAccountantDashboardOverviewService,
   createPaymentIntent as createPaymentIntentService,
   handleStripeWebhook as handleStripeWebhookService,
 } from './fee.service';
@@ -201,6 +202,13 @@ export class FeesController {
       const year = yearStr ? parseInt(yearStr) : new Date().getFullYear();
       const data = await getMonthlyAnalyticsService(year);
       sendSuccess(res, data, 'Analytics fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getDashboardOverview(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await getAccountantDashboardOverviewService();
+      sendSuccess(res, data, 'Dashboard overview fetched');
     } catch (err) { next(err); }
   }
 

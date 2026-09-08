@@ -33,6 +33,7 @@ router.get('/report/overdue',     authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', '
 router.get('/summary',            authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'ADMIN'), c.getSummary.bind(c));
 router.get('/transactions',       authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getTransactions.bind(c));
 router.get('/analytics/monthly',  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getMonthlyAnalytics.bind(c));
+router.get('/dashboard/overview', authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN'), c.getDashboardOverview.bind(c));
 
 
 // the controller now verifies req.user.studentId === :studentId before

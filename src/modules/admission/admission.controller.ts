@@ -3,6 +3,7 @@ import { AdmissionService } from './admission.service';
 import { sendSuccess } from '../../utils/response.util';
 import { uploadToCloudinary } from '../../config/cloudinary';
 import stripe from '../../config/striPe';
+import { isValidGmailAddress } from './admission.dto';
 
 const admissionService = new AdmissionService();
 
@@ -21,6 +22,12 @@ export class AdmissionController {
       const missing = REQUIRED_APPLY_FIELDS.filter((f) => !req.body?.[f]);
       if (missing.length) {
         const err = new Error(`Missing required field(s): ${missing.join(', ')}`);
+        (err as any).status = 400;
+        throw err;
+      }
+
+      if (!isValidGmailAddress(req.body.guardianEmail)) {
+        const err = new Error('Guardian email must be a valid Gmail address (example@gmail.com)');
         (err as any).status = 400;
         throw err;
       }
@@ -84,6 +91,13 @@ export class AdmissionController {
     try {
       const stats = await admissionService.getStats();
       sendSuccess(res, stats, 'Stats fetched');
+    } catch (err) { next(err); }
+  }
+
+  async getPaidPayments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const payments = await admissionService.getPaidPayments();
+      sendSuccess(res, payments, 'Paid admission payments fetched');
     } catch (err) { next(err); }
   }
 

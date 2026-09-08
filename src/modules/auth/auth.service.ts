@@ -243,7 +243,9 @@ export class AuthService {
         }
 
         const admission = user.studentProfile.admissionRecord;
-        if (!admission || admission.status !== 'APPROVED') {
+        // Admin-created students do not have an admission record. Only
+        // admission-based accounts need the approval gate.
+        if (admission && admission.status !== 'APPROVED') {
             throw new Error("Your admission is not verified yet. Please wait for admin approval.");
         }
 

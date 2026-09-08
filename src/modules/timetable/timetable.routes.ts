@@ -10,22 +10,7 @@ const VIEWERS = ['SCHOOL_ADMIN', 'TEACHER', 'EXAM_CONTROLLER'] as const;
 
 router.use(authenticate);
 
-/**
- * =====================================================================
- * WHAT CHANGED FROM THE OLD ROUTES FILE
- * =====================================================================
- * - STUDENT removed from '/' and '/class/:classId' — those let a
- *   student pass ANY classId/teacherId and see someone else's data.
- *   Students now only ever hit /my-routine and /my-routine/today,
- *   where the classId is resolved server-side from their own profile.
- * - PARENT added, with its own /parent/child/:studentId routes —
- *   ownership (this child belongs to this parent) is checked in the
- *   service before any data is returned.
- * - '/:id' (single slot lookup) is now ADMIN/TEACHER only — a raw
- *   slot-by-id lookup isn't something a student/parent needs; they
- *   use the weekly/today routes instead.
- * =====================================================================
- */
+
 
 // ── STUDENT: own routine only, classId never passed by the client ───
 router.get('/my-routine',               authorizeRoles('STUDENT'), c.getMyRoutine.bind(c));

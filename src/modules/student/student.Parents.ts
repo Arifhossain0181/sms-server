@@ -7,13 +7,20 @@ type GuardianInput = {
     guardianRelation?: string;
 };
 
+export type GuardianCreationResult = {
+    parentId: string;
+    email: string;
+    name: string;
+    tempPassword: string | null;
+};
+
 /**
  * Used by createStudent — reuses an existing Parent account if this
  * guardian email already belongs to one (sibling already admitted),
  * otherwise creates a new Parent+User. Returns the parentId to link, or
  * null if no guardian info was given.
  */
-export async function linkOrCreateGuardian(tx: any, guardian: GuardianInput): Promise<string | null> {
+export async function linkOrCreateGuardian(tx: any, guardian: GuardianInput): Promise<GuardianCreationResult | null> {
     if (!guardian.guardianName || !guardian.guardianEmail) return null;
 
     let parentRecord = await tx.parent.findFirst({
@@ -27,11 +34,12 @@ export async function linkOrCreateGuardian(tx: any, guardian: GuardianInput): Pr
                 `This email (${guardian.guardianEmail}) is already in use by another ${existingUser.role} account`
             );
         }
+        const tempPassword = Math.random().toString(36).slice(-10).toUpperCase();
         const parentUser = await tx.user.create({
             data: {
                 name: guardian.guardianName,
                 email: guardian.guardianEmail,
-                passwordHash: await bcrypt.hash(Math.random().toString(36), 10),
+                passwordHash: await bcrypt.hash(tempPassword, 10),
                 role: 'PARENT',
             },
         });
@@ -43,9 +51,20 @@ export async function linkOrCreateGuardian(tx: any, guardian: GuardianInput): Pr
                 relation: guardian.guardianRelation,
             },
         });
+        return {
+            parentId: parentRecord.id,
+            email: guardian.guardianEmail,
+            name: guardian.guardianName,
+            tempPassword,
+        };
     }
 
-    return parentRecord.id;
+    return {
+        parentId: parentRecord.id,
+        email: guardian.guardianEmail,
+        name: guardian.guardianName,
+        tempPassword: null,
+    };
 }
 
 /**

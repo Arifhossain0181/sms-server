@@ -27,6 +27,14 @@ router.post(
 // ── Authenticated: get user's own applications ──────────────────────
 router.get('/my-applications', authenticate, c.getMyApplications.bind(c));
 
+// Accountant dashboard visibility for admission cash/card collections.
+router.get(
+  '/accountant/payments',
+  authenticate,
+  authorizeRoles('ACCOUNTANT', 'SCHOOL_ADMIN', 'SUPER_ADMIN'),
+  c.getPaidPayments.bind(c)
+);
+
 // ── All routes below require School Admin or HR auth ──────────────────────
 router.use(authenticate, authorizeRoles('SCHOOL_ADMIN', 'HR'));
 

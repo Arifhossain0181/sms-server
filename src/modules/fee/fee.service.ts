@@ -20,6 +20,14 @@ function monthRange(month: string) {
   return { start, end };
 }
 
+function dayRange(date = new Date()) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
 // student/classId existence should be validated, and dueDate must
 // actually parse — CreateFeeDto's title/description map to real
 // FeeStructure columns.
@@ -519,18 +527,36 @@ export const getFeeSummary = async (month?: string) => {
     where.dueDate = { gte: start, lt: end };
   }
 
-  const [totals, pendingCount, overdueCount] = await Promise.all([
+  const admissionWhere: any = { paymentStatus: "PAID", paymentAmount: { not: null } };
+  if (month) {
+    const { start, end } = monthRange(month);
+    admissionWhere.paymentDate = { gte: start, lt: end };
+  }
+  const today = dayRange();
+
+  const [totals, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
     prisma.feeStructure.aggregate({ where, _sum: { amount: true, Paidamount: true } }),
     prisma.feeStructure.count({ where: { ...where, status: "PENDING" } }),
     prisma.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: new Date() } } }),
+    prisma.admissionApplication.aggregate({ where: admissionWhere, _sum: { paymentAmount: true }, _count: true }),
+    prisma.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentDate: { gte: today.start, lt: today.end } },
+      _sum: { paymentAmount: true },
+      _count: true,
+    }),
   ]);
 
   const totalAmount = totals._sum.amount ?? 0;
-  const totalPaid = totals._sum.Paidamount ?? 0;
+  const admissionTotalPaid = admissionTotals._sum.paymentAmount ?? 0;
+  const totalPaid = (totals._sum.Paidamount ?? 0) + admissionTotalPaid;
 
   return {
     totalAmount,
     totalPaid,
+    admissionTotalPaid,
+    admissionPaymentCount: admissionTotals._count,
+    admissionTotalPaidToday: admissionTodayTotals._sum.paymentAmount ?? 0,
+    admissionPaymentCountToday: admissionTodayTotals._count,
     outstanding: totalAmount - totalPaid,
     pendingCount,
     overdueCount,
@@ -684,6 +710,45 @@ export const getMonthlyAnalytics = async (year: number) => {
     byMonth,
     byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
     byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }])),
+  };
+};
+
+export const getAccountantDashboardOverview = async () => {
+  const today = dayRange();
+  const [summary, recentPayments, todayAggregate, admissionTodayAggregate] = await Promise.all([
+    getFeeSummary(),
+    getAllPayments({ page: "1", limit: "5" }),
+    prisma.payment.aggregate({
+      where: { createdAt: { gte: today.start, lt: today.end }, status: "PAID" },
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+    prisma.admissionApplication.aggregate({
+      where: { paymentStatus: "PAID", paymentDate: { gte: today.start, lt: today.end } },
+      _sum: { paymentAmount: true },
+      _count: true,
+    }),
+  ]);
+
+  const methodBreakdown = await prisma.payment.groupBy({
+    by: ["method"],
+    where: {
+      createdAt: { gte: today.start, lt: today.end },
+      status: "PAID",
+    },
+    _sum: { amount: true },
+  });
+
+  const todayCollection = (todayAggregate._sum.amount ?? 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
+  const todayCount = (todayAggregate._count.id ?? 0) + admissionTodayAggregate._count;
+
+  return {
+    summary,
+    todayCollection,
+    todayCount,
+    recentPayments: recentPayments.data,
+    recentPaymentsMeta: recentPayments.meta,
+    byMethod: Object.fromEntries(methodBreakdown.map((g) => [g.method, g._sum.amount ?? 0])),
   };
 };
 

@@ -60,21 +60,14 @@ export class StudentController {
         return;
       }
       
-      console.log(`[STUDENT] ✅ Profile found and returned - Admission: APPROVED`);
-      sendSuccess(res, student, 'Student profile fetched');
+      console.log(`[STUDENT]  Profile found and returned - Admission: APPROVED`);
+      sendSuccess(
+        res,
+        { ...student, admissionStatus: admissionStatus ?? "APPROVED" },
+        'Student profile fetched'
+      );
     } catch (err) {
       console.log(`[STUDENT] Error fetching profile:`, (err as any)?.message);
-      // যদি student profile না থাকে তাহলে basic user info return করুন
-      if ((err as any)?.message?.includes('not found')) {
-        console.log(`[STUDENT] ⚠️ Student profile not found for user: ${req.user!.id}, but user exists`);
-        // Return user ID so frontend knows who they are
-        sendSuccess(res, { 
-          id: req.user!.id, 
-          pending: true,
-          message: 'Student profile is pending. Please complete your admission application.'
-        }, 'Student profile pending approval');
-        return;
-      }
       next(err);
     }
   }

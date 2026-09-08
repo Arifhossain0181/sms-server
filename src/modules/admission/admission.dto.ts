@@ -2,6 +2,9 @@ export type AdmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 export type BloodGroup = 'A_POS' | 'A_NEG' | 'B_POS' | 'B_NEG' | 'O_POS' | 'O_NEG' | 'AB_POS' | 'AB_NEG';
 
+export const isValidGmailAddress = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-z0-9][a-z0-9._%+-]*@gmail\.com$/i.test(value.trim());
+
 // ─── Apply for admission (public form) ──────────────────────────────
 export interface CreateAdmissionDto {
   applicantName: string;
