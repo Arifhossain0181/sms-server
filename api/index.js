@@ -22390,8 +22390,8 @@ var AdmissionService = class {
     });
     return admission;
   }
-  async convertToStudent(dto) {
-    const result = await this.createStudentFromAdmission(dto.admissionId);
+  async convertToStudent(dto, schoolId) {
+    const result = await this.createStudentFromAdmission(dto.admissionId, schoolId);
     return result;
   }
   async delete(id, actorUserId) {
@@ -22470,11 +22470,14 @@ var AdmissionService = class {
       console.warn("Audit log failed:", err?.message);
     }
   }
-  async createStudentFromAdmission(admissionId) {
+  async createStudentFromAdmission(admissionId, schoolId) {
     return db_default.$transaction(
       async (tx) => {
         await tx.$executeRaw`SET LOCAL statement_timeout = 60000`;
-        const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
+        const admission = await tx.admissionApplication.findUnique({
+          where: { id: admissionId },
+          include: { targetClass: { select: { schoolId: true } } }
+        });
         if (!admission) {
           const err = new Error("Admission record not found");
           err.status = 404;
@@ -22506,6 +22509,12 @@ var AdmissionService = class {
           err.status = 400;
           throw err;
         }
+        if (schoolId && admission.targetClass.schoolId && admission.targetClass.schoolId !== schoolId) {
+          const err = new Error("Admission belongs to another school");
+          err.status = 403;
+          throw err;
+        }
+        const effectiveSchoolId = schoolId ?? admission.targetClass.schoolId;
         const studentEmail = admission.studentEmail;
         if (!studentEmail) {
           const err = new Error("Student email is required to create account");
@@ -22522,7 +22531,8 @@ var AdmissionService = class {
               name: admission.applicantName,
               email: studentEmail,
               passwordHash,
-              role: "STUDENT"
+              role: "STUDENT",
+              schoolId: effectiveSchoolId ?? void 0
             }
           });
         }
@@ -22558,11 +22568,12 @@ var AdmissionService = class {
               rollNumber: nextRoll,
               classId: admission.targetClassId,
               sectionId: section.id,
-              userId: user.id
+              userId: user.id,
+              schoolId: effectiveSchoolId ?? void 0
             }
           });
         }
-        const parentResult = await this._ensureParentFromAdmission(tx, admission);
+        const parentResult = await this._ensureParentFromAdmission(tx, admission, effectiveSchoolId);
         if (parentResult && !studentProfile.parentId) {
           studentProfile = await tx.student.update({
             where: { id: studentProfile.id },
@@ -22670,7 +22681,7 @@ var AdmissionService = class {
   // Creates (or reuses) the guardian's User + Parent account and returns
   // it. Reuses an existing parent account when the guardianEmail already
   // has one (multi-child families). Returns null when no guardianEmail.
-  async _ensureParentFromAdmission(tx, admission) {
+  async _ensureParentFromAdmission(tx, admission, schoolId) {
     const guardianEmail = admission.guardianEmail;
     if (!guardianEmail) return null;
     const existingParent = await tx.parent.findFirst({
@@ -22694,7 +22705,8 @@ var AdmissionService = class {
           name: admission.guardianName,
           email: guardianEmail,
           passwordHash,
-          role: "PARENT"
+          role: "PARENT",
+          schoolId: schoolId ?? void 0
         }
       });
     }
@@ -22794,7 +22806,7 @@ var AdmissionController = class {
         err.status = 400;
         throw err;
       }
-      const student = await admissionService.convertToStudent(req.body);
+      const student = await admissionService.convertToStudent(req.body, req.user?.schoolId);
       sendSuccess(res, student, "Student account created from admission", 201);
     } catch (err) {
       next(err);
@@ -28010,7 +28022,10 @@ var getSchoolAdminDashboard = async (schoolId) => {
     getRecentAdmissions(schoolId),
     getUpcomingExams(schoolId),
     getLibraryStats(schoolId)
-  ]);
+  ]).catch((err) => {
+    console.error("[DASHBOARD] Promise.all failed:", err);
+    throw err;
+  });
   return {
     totalStudents,
     totalTeachers,
@@ -28181,12 +28196,12 @@ var schoolScope = async (req, res, next) => {
     }
     const school = await db_default.school.findUnique({
       where: { id: user.schoolId },
-      select: { id: true, status: true }
+      select: { id: true, isActive: true }
     });
     if (!school) {
       return res.status(403).json({ message: "School not found. Access denied." });
     }
-    if (school.status === "SUSPENDED") {
+    if (!school.isActive) {
       return res.status(403).json({ message: "School is suspended. Access denied." });
     }
     req.schoolId = user.schoolId;
