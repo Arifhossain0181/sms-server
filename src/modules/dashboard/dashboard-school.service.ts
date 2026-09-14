@@ -1,6 +1,6 @@
 import prisma from "../../config/db";
 
-export const getSchoolAdminDashboard = async () => {
+export const getSchoolAdminDashboard = async (schoolId?: string) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -14,15 +14,18 @@ export const getSchoolAdminDashboard = async () => {
     upcomingExams,
     libraryStats,
   ] = await Promise.all([
-    prisma.student.count({ where: { isActive: true } }),
-    prisma.teacher.count({ where: { isActive: true } }),
-    prisma.class.count(),
-    getTodayAttendanceSummary(),
-    getFeeSummary(),
-    getRecentAdmissions(),
-    getUpcomingExams(),
-    getLibraryStats(),
-  ]);
+    prisma.student.count({ where: { isActive: true, ...(schoolId ? { schoolId } : {}) } }),
+    prisma.teacher.count({ where: { isActive: true, ...(schoolId ? { schoolId } : {}) } }),
+    prisma.class.count({ where: schoolId ? { schoolId } : undefined }),
+    getTodayAttendanceSummary(schoolId),
+    getFeeSummary(schoolId),
+    getRecentAdmissions(schoolId),
+    getUpcomingExams(schoolId),
+    getLibraryStats(schoolId),
+  ]).catch((err) => {
+    console.error('[DASHBOARD] Promise.all failed:', err);
+    throw err;
+  });
 
   return {
     totalStudents,
@@ -36,12 +39,12 @@ export const getSchoolAdminDashboard = async () => {
   };
 };
 
-async function getTodayAttendanceSummary() {
+async function getTodayAttendanceSummary(schoolId?: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const records = await prisma.studentAttendance.findMany({
-    where: { date: today },
+    where: { date: today, ...(schoolId ? { student: { schoolId } } : {}) },
     select: { status: true },
   });
 
@@ -53,27 +56,31 @@ async function getTodayAttendanceSummary() {
   return { present, absent, late, total, date: today.toISOString().split("T")[0] };
 }
 
-async function getFeeSummary() {
+async function getFeeSummary(schoolId?: string) {
+  const feeScope = schoolId ? { class: { schoolId } } : undefined;
+  const paymentScope = schoolId ? { student: { schoolId } } : undefined;
+  const admissionScope = schoolId ? { targetClass: { schoolId } } : undefined;
   const [totalPending, totalPaid, totalCollected, paymentMethods, paymentStatuses, admissionPayments] = await Promise.all([
-    prisma.feeStructure.count({ where: { status: "PENDING" } }),
-    prisma.feeStructure.count({ where: { status: "PAID" } }),
+    prisma.feeStructure.count({ where: { status: "PENDING", ...feeScope } }),
+    prisma.feeStructure.count({ where: { status: "PAID", ...feeScope } }),
     prisma.payment.aggregate({
-      where: { status: "PAID" },
+      where: { status: "PAID", ...paymentScope },
       _sum: { amount: true },
     }),
     prisma.payment.groupBy({
       by: ["method"],
-      where: { status: "PAID" },
+      where: { status: "PAID", ...paymentScope },
       _sum: { amount: true },
       _count: { id: true },
     }),
     prisma.payment.groupBy({
       by: ["status"],
+      where: paymentScope,
       _sum: { amount: true },
       _count: { id: true },
     }),
     prisma.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
       _sum: { paymentAmount: true },
       _count: { id: true },
     }),
@@ -81,7 +88,7 @@ async function getFeeSummary() {
 
   const admissionMethodGroups = await prisma.admissionApplication.groupBy({
     by: ["paymentMethod"],
-    where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+    where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
     _sum: { paymentAmount: true },
     _count: { id: true },
   });
@@ -114,9 +121,9 @@ async function getFeeSummary() {
   };
 }
 
-async function getRecentAdmissions() {
+async function getRecentAdmissions(schoolId?: string) {
   const admissions = await prisma.admissionApplication.findMany({
-    where: { status: "PENDING" },
+    where: { status: "PENDING", ...(schoolId ? { targetClass: { schoolId } } : {}) },
     orderBy: { createdAt: "desc" },
     take: 5,
     select: {
@@ -131,7 +138,7 @@ async function getRecentAdmissions() {
   return admissions;
 }
 
-async function getUpcomingExams() {
+async function getUpcomingExams(schoolId?: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -140,12 +147,13 @@ async function getUpcomingExams() {
       schedules: {
         some: {
           examDate: { gte: today },
+          ...(schoolId ? { class: { schoolId } } : {}),
         },
       },
     },
     include: {
       schedules: {
-        where: { examDate: { gte: today } },
+        where: { examDate: { gte: today }, ...(schoolId ? { class: { schoolId } } : {}) },
         select: { examDate: true },
         orderBy: { examDate: "asc" },
         take: 1,
@@ -163,14 +171,16 @@ async function getUpcomingExams() {
   }));
 }
 
-async function getLibraryStats() {
+async function getLibraryStats(schoolId?: string) {
+  const issueScope = schoolId ? { student: { schoolId } } : undefined;
   const [totalBooks, totalIssued, overdueIssues] = await Promise.all([
-    prisma.book.count(),
-    prisma.bookIssue.count({ where: { returnDate: null } }),
+    prisma.book.count({ where: schoolId ? { issues: { some: issueScope } } : undefined }),
+    prisma.bookIssue.count({ where: { returnDate: null, ...issueScope } }),
     prisma.bookIssue.count({
       where: {
         returnDate: null,
         dueDate: { lt: new Date() },
+        ...issueScope,
       },
     }),
   ]);

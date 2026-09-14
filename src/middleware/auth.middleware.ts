@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.util';
 import logger from '../utils/logger';
-export const authenticate = (req:Request, res:Response, next:NextFunction) => {
+import prisma from '../config/db';
+
+export const authenticate = async (req:Request, res:Response, next:NextFunction) => {
     const authHeader = req.headers.authorization;
     let token: string | undefined;
 
@@ -24,6 +26,24 @@ export const authenticate = (req:Request, res:Response, next:NextFunction) => {
         return res.status(401).json({ success: false, message: 'Invalid token or expired token ' });
     }
 
-    req.user = decoded; // Attach user info to request object
-    next();
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, role: true, schoolId: true, isActive: true, school: { select: { isActive: true } } },
+        });
+
+        if (!user || !user.isActive || (user.schoolId && !user.school?.isActive)) {
+            return res.status(401).json({ success: false, message: 'Account or school is inactive' });
+        }
+
+        if ((decoded.schoolId ?? null) !== (user.schoolId ?? null)) {
+            return res.status(401).json({ success: false, message: 'Session is no longer valid' });
+        }
+
+        req.user = { ...decoded, id: user.id, role: user.role, schoolId: user.schoolId };
+        (req as any).schoolId = user.schoolId ?? undefined;
+        next();
+    } catch (error) {
+        next(error);
+    }
 }

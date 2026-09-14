@@ -117,9 +117,10 @@ export class StudentService {
         return student.user;
     }
 
-    async findAllStudents(query: StudentQueryDto) {
+    async findAllStudents(query: StudentQueryDto, schoolId?: string) {
         const { page = '1', limit = '10', search, classId, gender } = query;
         const where: any = {
+            ...(schoolId ? { schoolId } : {}),
             ...(classId && { classId }),
             ...(gender && { gender }),
             ...(search && {
@@ -166,9 +167,9 @@ export class StudentService {
     }
 
     /** Staff-only detail view — full history, not publish-gated. Keep behind staff routes. */
-    async findStudentById(id: string) {
-        const student = await prisma.student.findUnique({
-            where: { id },
+    async findStudentById(id: string, schoolId?: string) {
+        const student = await prisma.student.findFirst({
+            where: { id, ...(schoolId ? { schoolId } : {}) },
             include: {
                 user: { select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true } },
                 class: { select: { id: true, name: true, sections: true } },

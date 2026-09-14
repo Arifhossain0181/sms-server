@@ -11,6 +11,7 @@ const USER_SELECT = {
     email: true,
     role: true,
     isActive: true,
+    schoolId: true,
     createdAt: true,
 } as const;
 
@@ -22,13 +23,24 @@ export class AuthService {
         email: string;
         role: string;
         isActive: boolean;
+        schoolId?: string | null;
         studentProfile?: { id: string } | null;
     }) {
         if (!user.isActive) {
             throw new Error("Your account has been deactivated");
         }
 
-        const tokenPayload: any = { id: user.id, email: user.email, role: user.role };
+        if (user.schoolId) {
+            const school = await prisma.school.findUnique({
+                where: { id: user.schoolId },
+                select: { isActive: true },
+            });
+            if (!school?.isActive) {
+                throw new Error("Your school is inactive");
+            }
+        }
+
+        const tokenPayload: any = { id: user.id, email: user.email, role: user.role, schoolId: user.schoolId ?? null };
         if (user.role === 'STUDENT' && user.studentProfile?.id) {
             tokenPayload.studentId = user.studentProfile.id;
         }

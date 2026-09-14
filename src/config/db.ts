@@ -11,13 +11,17 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.DB_POOL_MAX) || 20,
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 30_000,
   maxUses: 10_000,
   allowExitOnIdle: true,
 });
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg(pool),
+  transactionOptions: {
+    maxWait: 10_000,
+    timeout: 30_000,
+  },
   // `query` logging is very verbose (every query) — only in development.
   log: isProd ? ['error'] : ['query', 'error'],
 });

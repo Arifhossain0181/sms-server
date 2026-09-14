@@ -9,13 +9,19 @@ const MAX_PAGE_LIMIT = 100;
 export class AdmissionService {
     async create(dto: CreateAdmissionDto) {
         if (!isValidGmailAddress(dto.guardianEmail)) {
-            throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+            const err = new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+            (err as any).status = 400;
+            throw err;
         }
 
         const classExists = await prisma.class.findUnique({
             where: { id: dto.targetClassId },
         });
-        if (!classExists) throw new Error("Class not found");
+        if (!classExists) {
+            const err = new Error("Class not found");
+            (err as any).status = 404;
+            throw err;
+        }
 
         // FIX: only studentEmail should block duplicates — guardianEmail is
         // shared across siblings (Parent Req 1.2: multi-child accounts must work)
@@ -23,7 +29,9 @@ export class AdmissionService {
             where: { studentEmail: dto.studentEmail },
         });
         if (existing) {
-            throw new Error("An application with this student email already exists");
+            const err = new Error("An application with this student email already exists");
+            (err as any).status = 409;
+            throw err;
         }
 
         return prisma.admissionApplication.create({
@@ -92,14 +100,20 @@ export class AdmissionService {
             where: { id },
             include: { targetClass: true },
         });
-        if (!admission) throw new Error("Admission not found");
+        if (!admission) {
+            const err = new Error("Admission not found");
+            (err as any).status = 404;
+            throw err;
+        }
         return admission;
     }
 
     async update(id: string, dto: UpdateAdmissionDto) {
         await this._exists(id);
         if (dto.guardianEmail !== undefined && !isValidGmailAddress(dto.guardianEmail)) {
-            throw new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+            const err = new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
+            (err as any).status = 400;
+            throw err;
         }
         return prisma.admissionApplication.update({
             where: { id },
@@ -144,8 +158,8 @@ export class AdmissionService {
         return admission;
     }
 
-    async convertToStudent(dto: ConvertToStudentDto) {
-        const result = await this.createStudentFromAdmission(dto.admissionId);
+    async convertToStudent(dto: ConvertToStudentDto, schoolId?: string | null) {
+        const result = await this.createStudentFromAdmission(dto.admissionId, schoolId);
         return result;
     }
 
@@ -173,6 +187,7 @@ export class AdmissionService {
             select: {
                 id: true,
                 applicantName: true,
+                studentId: true,
                 paymentAmount: true,
                 paymentMethod: true,
                 paymentDate: true,
@@ -200,7 +215,10 @@ export class AdmissionService {
                 applicantName: true,
                 studentEmail: true,
                 status: true,
+                studentId: true,
                 paymentStatus: true,
+                paymentAmount: true,
+                paymentMethod: true,
                 rejectionReason: true,
                 createdAt: true,
                 targetClass: { select: { id: true, name: true } },
@@ -211,7 +229,11 @@ export class AdmissionService {
 
     private async _exists(id: string) {
         const admission = await prisma.admissionApplication.findUnique({ where: { id } });
-        if (!admission) throw new Error("Admission record not found");
+        if (!admission) {
+            const err = new Error("Admission record not found");
+            (err as any).status = 404;
+            throw err;
+        }
         return admission;
     }
 
@@ -227,11 +249,18 @@ export class AdmissionService {
     }
 
    
-    private async createStudentFromAdmission(admissionId: string) {
+    private async createStudentFromAdmission(admissionId: string, schoolId?: string | null) {
         return prisma.$transaction(async (tx) => {
-                await tx.$executeRaw`SET LOCAL statement_timeout = 30000`;
-                const admission = await tx.admissionApplication.findUnique({ where: { id: admissionId } });
-                if (!admission) throw new Error("Admission record not found");
+            await tx.$executeRaw`SET LOCAL statement_timeout = 60000`;
+                const admission = await tx.admissionApplication.findUnique({
+                    where: { id: admissionId },
+                    include: { targetClass: { select: { schoolId: true } } },
+                });
+                if (!admission) {
+                    const err = new Error("Admission record not found");
+                    (err as any).status = 404;
+                    throw err;
+                }
                 // Allow retrying an already-converted admission. This is useful
                 // when SMTP was unavailable during the first conversion: issue
                 // a fresh guardian password and resend the credentials.
@@ -258,11 +287,25 @@ export class AdmissionService {
                     };
                 }
                 if (admission.status !== "APPROVED") {
-                    throw new Error("Admission must be approved before creating a student account");
+                    const err = new Error("Admission must be approved before creating a student account");
+                    (err as any).status = 400;
+                    throw err;
                 }
 
+                if (schoolId && admission.targetClass.schoolId && admission.targetClass.schoolId !== schoolId) {
+                    const err = new Error("Admission belongs to another school");
+                    (err as any).status = 403;
+                    throw err;
+                }
+
+                const effectiveSchoolId = schoolId ?? admission.targetClass.schoolId;
+
                 const studentEmail = admission.studentEmail;
-                if (!studentEmail) throw new Error("Student email is required to create account");
+                if (!studentEmail) {
+                    const err = new Error("Student email is required to create account");
+                    (err as any).status = 400;
+                    throw err;
+                }
 
                 let user = await tx.user.findUnique({ where: { email: studentEmail } });
                 let tempPassword: string | null = null;
@@ -277,6 +320,7 @@ export class AdmissionService {
                             email: studentEmail,
                             passwordHash,
                             role: "STUDENT",
+                            schoolId: effectiveSchoolId ?? undefined,
                         },
                     });
                 }
@@ -287,7 +331,11 @@ export class AdmissionService {
                     orderBy: { name: "asc" },
                 });
                 const section = sections.find((s) => s._count.students < s.maxCapacity);
-                if (!section) throw new Error("No available section with capacity for this class");
+                if (!section) {
+                    const err = new Error("No available section with capacity for this class");
+                    (err as any).status = 409;
+                    throw err;
+                }
 
                 const rollAggregate = await tx.student.aggregate({
                     where: { sectionId: section.id },
@@ -313,11 +361,12 @@ export class AdmissionService {
                             classId: admission.targetClassId,
                             sectionId: section.id,
                             userId: user.id,
+                            schoolId: effectiveSchoolId ?? undefined,
                         },
                     });
                 }
 
-                const parentResult = await this._ensureParentFromAdmission(tx, admission);
+                const parentResult = await this._ensureParentFromAdmission(tx, admission, effectiveSchoolId);
                 if (parentResult && !studentProfile.parentId) {
                     studentProfile = await tx.student.update({
                         where: { id: studentProfile.id },
@@ -330,6 +379,67 @@ export class AdmissionService {
                     data: { studentId: studentProfile.id },
                 });
 
+                if (admission.paymentStatus === "PAID" && (admission.paymentAmount ?? 0) > 0) {
+                    const admissionFeeDate = admission.paymentDate ? new Date(admission.paymentDate) : new Date();
+                    const admissionYear = admissionFeeDate.getFullYear();
+                    const admissionMonth = admissionFeeDate.getMonth() + 1;
+                    const admissionAcademicYear = admissionMonth >= 7 ? `${admissionYear}-${admissionYear + 1}` : `${admissionYear - 1}-${admissionYear}`;
+
+                    const existingAdmissionFee = await tx.feeStructure.findFirst({
+                        where: {
+                            studentId: studentProfile.id,
+                            feeType: "ADMISSION",
+                            year: admissionYear,
+                            month: admissionMonth,
+                            academicYear: admissionAcademicYear,
+                        },
+                    });
+
+                    if (!existingAdmissionFee) {
+                        const admissionFee = await tx.feeStructure.create({
+                            data: {
+                                studentId: studentProfile.id,
+                                classId: admission.targetClassId,
+                                feeType: "ADMISSION",
+                                title: "Admission Fee",
+                                amount: admission.paymentAmount!,
+                                dueDate: admissionFeeDate,
+                                dueDay: admissionFeeDate.getDate(),
+                                year: admissionYear,
+                                month: admissionMonth,
+                                academicYear: admissionAcademicYear,
+                                status: "PAID",
+                                Paidamount: admission.paymentAmount!,
+                            },
+                        });
+
+                        const admissionInvoice = await tx.invoice.create({
+                            data: {
+                                studentId: studentProfile.id,
+                                feeStructureId: admissionFee.id,
+                                amount: admission.paymentAmount!,
+                                dueDate: admissionFeeDate,
+                                year: admissionYear,
+                                month: admissionMonth,
+                                status: "PAID",
+                            },
+                        });
+
+                        await tx.payment.create({
+                            data: {
+                                feeStructureId: admissionFee.id,
+                                invoiceId: admissionInvoice.id,
+                                studentId: studentProfile.id,
+                                amount: admission.paymentAmount!,
+                                method: admission.paymentMethod ?? "CASH",
+                                status: "PAID",
+                                paidAt: admissionFeeDate,
+                                transactionId: admission.transactionId ?? undefined,
+                            },
+                        });
+                    }
+                }
+
                 return {
                     ...studentProfile,
                     __tempPassword: tempPassword,
@@ -338,6 +448,9 @@ export class AdmissionService {
                     __parentTempPassword: parentResult?.tempPassword ?? null,
                     __parentEmail: parentResult?.email ?? null,
                 };
+            }, {
+                maxWait: 30_000,
+                timeout: 60_000,
             }
         ).then(async (result: any) => {
             const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login`;
@@ -372,7 +485,7 @@ export class AdmissionService {
     // Creates (or reuses) the guardian's User + Parent account and returns
     // it. Reuses an existing parent account when the guardianEmail already
     // has one (multi-child families). Returns null when no guardianEmail.
-    private async _ensureParentFromAdmission(tx: any, admission: any) {
+    private async _ensureParentFromAdmission(tx: any, admission: any, schoolId?: string | null) {
         const guardianEmail = admission.guardianEmail;
         if (!guardianEmail) return null;
 
@@ -402,6 +515,7 @@ export class AdmissionService {
                     email: guardianEmail,
                     passwordHash,
                     role: "PARENT",
+                    schoolId: schoolId ?? undefined,
                 },
             });
         }

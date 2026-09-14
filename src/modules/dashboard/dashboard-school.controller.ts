@@ -5,7 +5,7 @@ import { sendSuccess } from '../../utils/response.util';
 export class SchoolAdminDashboardController {
   async getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const data = await getSchoolAdminDashboard();
+      const data = await getSchoolAdminDashboard(req.user?.schoolId);
       sendSuccess(res, data, 'Dashboard data fetched');
     } catch (err) {
       next(err);

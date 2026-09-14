@@ -321,9 +321,12 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
           year,
           month,
           academicYear,
-          status: { in: ["PENDING", "PARTIAL"] },
         },
       });
+
+      if (fee?.status === "PAID") {
+        throw new Error("A paid fee already exists for this student, type, and period. Cannot record duplicate cash payment.");
+      }
 
       const isNewFee = !fee;
       if (!fee) {
@@ -407,7 +410,14 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
 // ─── Reports (all DB-side aggregation — no full-table loads) ─────────
 
 export const getstudentFeeSummary = async (studentId: string) => {
-  const [totals, overDue] = await Promise.all([
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, user: { select: { email: true } } },
+  });
+
+  const studentEmail = student?.user?.email ?? null;
+
+  const [totals, overDue, admissionTotals] = await Promise.all([
     prisma.feeStructure.aggregate({
       where: { studentId },
       _sum: { amount: true, Paidamount: true },
@@ -415,43 +425,78 @@ export const getstudentFeeSummary = async (studentId: string) => {
     prisma.feeStructure.count({
       where: { studentId, status: "PENDING", dueDate: { lt: new Date() } },
     }),
+    prisma.admissionApplication.aggregate({
+      where: {
+        OR: [
+          { studentId },
+          ...(studentEmail ? [{ studentEmail }] : []),
+        ],
+        paymentStatus: "PAID",
+        paymentAmount: { not: null, gt: 0 },
+      },
+      _sum: { paymentAmount: true },
+    }),
   ]);
 
-  const totalFees = totals._sum.amount ?? 0;
-  const totalPaid = totals._sum.Paidamount ?? 0;
+  const totalFees = (totals._sum.amount ?? 0) + (admissionTotals._sum.paymentAmount ?? 0);
+  const totalPaidFromFees = totals._sum.Paidamount ?? 0;
+  const admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
+  const totalPaid = totalPaidFromFees + admissionPaid;
 
-  return { totalFees, totalPaid, outstanding: totalFees - totalPaid, overDue };
+  return { totalFees, totalPaid, outstanding: Math.max(totalFees - totalPaid, 0), overDue };
 };
 
 export const getStudentFeeList = async (studentId: string) => {
-  const fees = await prisma.feeStructure.findMany({
-    where: { studentId },
-    include: {
-      student: {
-        select: {
-          id: true,
-          name: true,
-          rollNumber: true,
-          class: { select: { id: true, name: true } },
+  const [feeStructures, admissionApplications] = await Promise.all([
+    prisma.feeStructure.findMany({
+      where: { studentId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            rollNumber: true,
+            class: { select: { id: true, name: true } },
+          },
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            amount: true,
+            method: true,
+            status: true,
+            paidAt: true,
+            transactionId: true,
+            createdAt: true,
+          },
         },
       },
-      payments: {
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          amount: true,
-          method: true,
-          status: true,
-          paidAt: true,
-          transactionId: true,
-          createdAt: true,
-        },
+      orderBy: { dueDate: "desc" },
+    }),
+    prisma.admissionApplication.findMany({
+      where: {
+        OR: [
+          { studentId },
+          ...(studentId ? [{ studentId }] : []),
+        ],
+        paymentStatus: "PAID",
+        paymentAmount: { not: null, gt: 0 },
       },
-    },
-    orderBy: { dueDate: "desc" },
-  });
+      select: {
+        id: true,
+        paymentAmount: true,
+        paymentMethod: true,
+        paymentDate: true,
+        paymentStatus: true,
+        createdAt: true,
+        targetClass: { select: { id: true, name: true } },
+      },
+      orderBy: { paymentDate: "desc" },
+    }),
+  ]);
 
-  return fees.map((fee) => ({
+  const mappedFees = feeStructures.map((fee) => ({
     id: fee.id,
     studentId: fee.studentId,
     feeType: fee.feeType,
@@ -465,7 +510,44 @@ export const getStudentFeeList = async (studentId: string) => {
     student: fee.student,
     payments: fee.payments,
     createdAt: fee.createdAt,
+    source: "FEE_STRUCTURE" as const,
   }));
+
+  const mappedAdmissions = admissionApplications.map((admission) => ({
+    id: `admission-${admission.id}`,
+    studentId,
+    feeType: "ADMISSION" as const,
+    title: "Admission Fee",
+    amount: admission.paymentAmount!,
+    paidAmount: admission.paymentAmount!,
+    dueAmount: 0,
+    dueDate: admission.paymentDate ? new Date(admission.paymentDate).toISOString() : admission.createdAt,
+    month: admission.paymentDate ? new Date(admission.paymentDate).toISOString().slice(0, 7) : new Date(admission.createdAt).toISOString().slice(0, 7),
+    status: "PAID" as const,
+    student: undefined,
+    payments: [
+      {
+        id: `admission-payment-${admission.id}`,
+        amount: admission.paymentAmount!,
+        method: admission.paymentMethod ?? "CASH",
+        status: "PAID",
+        paidAt: admission.paymentDate ?? admission.createdAt,
+        transactionId: undefined,
+        createdAt: admission.createdAt,
+      },
+    ],
+    createdAt: admission.createdAt,
+    source: "ADMISSION" as const,
+  }));
+
+  const admissionSeen = new Set<string>();
+  const dedupedAdmissions = mappedAdmissions.filter((item) => {
+    if (admissionSeen.has(item.id)) return false;
+    admissionSeen.add(item.id);
+    return true;
+  });
+
+  return [...mappedFees, ...dedupedAdmissions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 /**
@@ -481,16 +563,19 @@ export const getCollectionReport = async (month: string, type?: string) => {
     ...(type ? { feeStructure: { feeType: type as any } } : {}),
   };
 
-  const [totalAgg, byMethodGroups, byTypeGroups] = await Promise.all([
+  const admissionWhere: any = {
+    paymentStatus: "PAID",
+    paymentAmount: { not: null, gt: 0 },
+    paymentDate: { gte: start, lt: end },
+  };
+
+  const [totalAgg, byMethodGroups, byTypeGroups, admissionAgg] = await Promise.all([
     prisma.payment.aggregate({ where: baseWhere, _sum: { amount: true }, _count: true }),
     prisma.payment.groupBy({
       by: ["method"],
       where: baseWhere,
       _sum: { amount: true },
     }),
-    // feeType lives on FeeStructure, not Payment, so it can't be grouped
-    // directly — resolve the small, fixed set of fee types in parallel
-    // aggregate queries instead of pulling every payment row into JS.
     prisma.feeStructure
       .findMany({ where: {}, select: { feeType: true }, distinct: ["feeType"] })
       .then((types) =>
@@ -504,17 +589,33 @@ export const getCollectionReport = async (month: string, type?: string) => {
           })
         )
       ),
+    prisma.admissionApplication.aggregate({
+      where: admissionWhere,
+      _sum: { paymentAmount: true },
+      _count: true,
+    }),
   ]);
+
+  const feeTotal = totalAgg._sum.amount ?? 0;
+  const admissionTotal = admissionAgg._sum.paymentAmount ?? 0;
+  const totalCollected = feeTotal + admissionTotal;
+  const totalTransactions = totalAgg._count + admissionAgg._count;
 
   const byMethod = Object.fromEntries(
     byMethodGroups.map((g) => [g.method === "STRIPE" ? "ONLINE" : "OFFLINE", g._sum.amount ?? 0])
   );
   const byType = Object.fromEntries(byTypeGroups.filter(([, sum]) => sum > 0));
 
+  if ((admissionTotal ?? 0) > 0) {
+    const admissionMethod = "ADMISSION";
+    byMethod[admissionMethod] = (byMethod[admissionMethod] ?? 0) + admissionTotal;
+    byType["ADMISSION"] = admissionTotal;
+  }
+
   return {
     month,
-    totalCollected: totalAgg._sum.amount ?? 0,
-    totalTransactions: totalAgg._count,
+    totalCollected,
+    totalTransactions,
     byType,
     byMethod,
   };
@@ -527,7 +628,7 @@ export const getFeeSummary = async (month?: string) => {
     where.dueDate = { gte: start, lt: end };
   }
 
-  const admissionWhere: any = { paymentStatus: "PAID", paymentAmount: { not: null } };
+  const admissionWhere: any = { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } };
   if (month) {
     const { start, end } = monthRange(month);
     admissionWhere.paymentDate = { gte: start, lt: end };
@@ -546,9 +647,11 @@ export const getFeeSummary = async (month?: string) => {
     }),
   ]);
 
-  const totalAmount = totals._sum.amount ?? 0;
+  const totalFeesAmount = totals._sum.amount ?? 0;
+  const feePaidAmount = totals._sum.Paidamount ?? 0;
   const admissionTotalPaid = admissionTotals._sum.paymentAmount ?? 0;
-  const totalPaid = (totals._sum.Paidamount ?? 0) + admissionTotalPaid;
+  const totalAmount = totalFeesAmount + admissionTotalPaid;
+  const totalPaid = feePaidAmount + admissionTotalPaid;
 
   return {
     totalAmount,
@@ -557,7 +660,7 @@ export const getFeeSummary = async (month?: string) => {
     admissionPaymentCount: admissionTotals._count,
     admissionTotalPaidToday: admissionTodayTotals._sum.paymentAmount ?? 0,
     admissionPaymentCountToday: admissionTodayTotals._count,
-    outstanding: totalAmount - totalPaid,
+    outstanding: Math.max(totalAmount - totalPaid, 0),
     pendingCount,
     overdueCount,
     overDue: overdueCount,
@@ -620,8 +723,6 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
   const limit = Number(dto.limit);
   const safePage = Number.isNaN(page) || page < 1 ? 1 : page;
   const safeLimit = Number.isNaN(limit) || limit < 1 ? 20 : limit;
-  const skip = (safePage - 1) * safeLimit;
-  const take = safeLimit;
 
   const where: any = {};
   if (dto.method && ['STRIPE', 'CASH'].includes(dto.method)) {
@@ -645,11 +746,9 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
     }
   }
 
-  const [payments, total] = await Promise.all([
+  const [feePayments, admissionPayments] = await Promise.all([
     prisma.payment.findMany({
       where,
-      skip,
-      take,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -664,11 +763,67 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
         feeStructure: { select: { id: true, feeType: true, title: true, amount: true } },
       },
     }),
-    prisma.payment.count({ where }),
+    prisma.admissionApplication.findMany({
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } },
+      orderBy: { paymentDate: "desc" },
+      select: {
+        id: true,
+        paymentAmount: true,
+        paymentMethod: true,
+        paymentDate: true,
+        createdAt: true,
+        studentId: true,
+        studentEmail: true,
+        applicantName: true,
+      },
+    }),
   ]);
 
+  const mappedAdmissions = admissionPayments.map((admission) => ({
+    id: `admission-${admission.id}`,
+    amount: Number(admission.paymentAmount ?? 0),
+    method: admission.paymentMethod ?? "CASH",
+    status: "PAID" as const,
+    transactionId: undefined,
+    note: "Admission payment",
+    paidAt: admission.paymentDate ?? admission.createdAt,
+    createdAt: admission.createdAt,
+    student: {
+      id: admission.studentId ?? "",
+      rollNumber: undefined,
+      user: {
+        name: admission.applicantName ?? admission.studentEmail ?? "—",
+        email: admission.studentEmail ?? "",
+      },
+    },
+    feeStructure: {
+      id: undefined,
+      feeType: "ADMISSION",
+      title: "Admission Fee",
+      amount: Number(admission.paymentAmount ?? 0),
+    },
+  }));
+
+  const combined = [...feePayments, ...mappedAdmissions].sort((a, b) => {
+    const dateA = new Date(a.paidAt || a.createdAt).getTime();
+    const dateB = new Date(b.paidAt || b.createdAt).getTime();
+    return dateB - dateA;
+  });
+
+  const seen = new Set<string>();
+  const deduped = combined.filter((item) => {
+    const key = item.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const total = deduped.length;
+  const start = (safePage - 1) * safeLimit;
+  const paginated = deduped.slice(start, start + safeLimit);
+
   return {
-    data: payments,
+    data: paginated,
     meta: {
       page: safePage,
       limit: safeLimit,
@@ -681,7 +836,7 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
 export const getMonthlyAnalytics = async (year: number) => {
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-  const [byMonth, byMethodYear, typeBreakdown] = await Promise.all([
+  const [byMonth, byMethodYear, typeBreakdown, admissionByMonth, admissionMethodYear] = await Promise.all([
     Promise.all(
       months.map(async (m) => {
         const start = new Date(year, m - 1, 1);
@@ -691,7 +846,16 @@ export const getMonthlyAnalytics = async (year: number) => {
           _sum: { amount: true },
           _count: { id: true },
         });
-        return { month: m, total: agg._sum.amount ?? 0, count: agg._count.id ?? 0 };
+        const admissionAgg = await prisma.admissionApplication.aggregate({
+          where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: start, lt: end } },
+          _sum: { paymentAmount: true },
+          _count: true,
+        });
+        return {
+          month: m,
+          total: (agg._sum.amount ?? 0) + (admissionAgg._sum.paymentAmount ?? 0),
+          count: (agg._count.id ?? 0) + (admissionAgg._count ?? 0),
+        };
       })
     ),
     prisma.payment.groupBy({
@@ -703,13 +867,29 @@ export const getMonthlyAnalytics = async (year: number) => {
       by: ["feeType"],
       _sum: { amount: true, Paidamount: true },
     }),
+    prisma.admissionApplication.groupBy({
+      by: ["paymentMethod"],
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      _sum: { paymentAmount: true },
+    }),
   ]);
+
+  const methodMap = new Map<string, number>();
+  byMethodYear.forEach((g) => {
+    methodMap.set(g.method, (methodMap.get(g.method) ?? 0) + (g._sum.amount ?? 0));
+  });
+  admissionMethodYear.forEach((g) => {
+    const key = g.paymentMethod ?? "CASH";
+    methodMap.set(key, (methodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+  });
+
+  const typeEntries = typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }] as const);
 
   return {
     year,
     byMonth,
-    byMethod: Object.fromEntries(byMethodYear.map((g) => [g.method, g._sum.amount ?? 0])),
-    byType: Object.fromEntries(typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }])),
+    byMethod: Object.fromEntries(methodMap),
+    byType: Object.fromEntries(typeEntries),
   };
 };
 
@@ -739,8 +919,21 @@ export const getAccountantDashboardOverview = async () => {
     _sum: { amount: true },
   });
 
+  const admissionMethodToday = await prisma.admissionApplication.groupBy({
+    by: ["paymentMethod"],
+    where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: today.start, lt: today.end } },
+    _sum: { paymentAmount: true },
+  });
+
   const todayCollection = (todayAggregate._sum.amount ?? 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
   const todayCount = (todayAggregate._count.id ?? 0) + admissionTodayAggregate._count;
+
+  const byMethodMap = new Map<string, number>();
+  methodBreakdown.forEach((g) => byMethodMap.set(g.method, (byMethodMap.get(g.method) ?? 0) + (g._sum.amount ?? 0)));
+  admissionMethodToday.forEach((g) => {
+    const key = g.paymentMethod ?? "CASH";
+    byMethodMap.set(key, (byMethodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+  });
 
   return {
     summary,
@@ -748,7 +941,7 @@ export const getAccountantDashboardOverview = async () => {
     todayCount,
     recentPayments: recentPayments.data,
     recentPaymentsMeta: recentPayments.meta,
-    byMethod: Object.fromEntries(methodBreakdown.map((g) => [g.method, g._sum.amount ?? 0])),
+    byMethod: Object.fromEntries(byMethodMap),
   };
 };
 

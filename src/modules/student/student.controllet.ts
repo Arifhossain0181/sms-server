@@ -17,16 +17,18 @@ export class StudentController {
  
   async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const data = await studentService.findAllStudents(req.query as any);
+      const schoolId = (req as any).schoolId ?? req.user?.schoolId;
+      const data = await studentService.findAllStudents(req.query as any, schoolId);
       sendSuccess(res, data, 'Students fetched');
     } catch (err) {
       next(err);
     }
   }
- 
+  
   async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const student = await studentService.findStudentById(String(req.params.id));
+      const schoolId = (req as any).schoolId ?? req.user?.schoolId;
+      const student = await studentService.findStudentById(String(req.params.id), schoolId);
       sendSuccess(res, student, 'Student fetched');
     } catch (err) {
       next(err);

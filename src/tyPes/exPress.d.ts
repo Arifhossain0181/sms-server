@@ -6,7 +6,8 @@ declare global {
 			id: string;
 			role: string;
 			email?: string;
-			studentId?: string; 
+			studentId?: string;
+			schoolId?: string;
 		}
 
 		interface Request {

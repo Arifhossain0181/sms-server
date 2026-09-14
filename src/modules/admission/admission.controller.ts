@@ -74,7 +74,13 @@ export class AdmissionController {
 
   async convertToStudent(req: Request, res: Response, next: NextFunction) {
     try {
-      const student = await admissionService.convertToStudent(req.body);
+      const { admissionId } = req.body;
+      if (!admissionId || typeof admissionId !== 'string' || !admissionId.trim()) {
+        const err = new Error('Missing required field: admissionId');
+        (err as any).status = 400;
+        throw err;
+      }
+      const student = await admissionService.convertToStudent(req.body, req.user?.schoolId);
       sendSuccess(res, student, 'Student account created from admission', 201);
     } catch (err) { next(err); }
   }
@@ -103,7 +109,11 @@ export class AdmissionController {
 
   async uploadDocument(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.file) throw new Error('No file uploaded');
+      if (!req.file) {
+        const err = new Error('No file uploaded');
+        (err as any).status = 400;
+        throw err;
+      }
       const result = await uploadToCloudinary(req.file.buffer, 'admissions/documents');
       sendSuccess(res, { url: result.secure_url }, 'Document uploaded');
     } catch (err) { next(err); }
@@ -120,7 +130,9 @@ export class AdmissionController {
     try {
       const amount = Number(req.body?.amount ?? 0);
       if (!Number.isFinite(amount) || amount <= 0) {
-        throw new Error('Invalid amount');
+        const err = new Error('Invalid amount');
+        (err as any).status = 400;
+        throw err;
       }
 
       const currency = (process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
@@ -157,7 +169,11 @@ export class AdmissionController {
   async verifyStripeSession(req: Request, res: Response, next: NextFunction) {
     try {
       const sessionId = String(req.query.session_id || '');
-      if (!sessionId) throw new Error('Missing session_id');
+      if (!sessionId) {
+        const err = new Error('Missing session_id');
+        (err as any).status = 400;
+        throw err;
+      }
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       const paid = session.payment_status === 'paid';

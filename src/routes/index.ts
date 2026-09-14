@@ -26,6 +26,7 @@ import tcRoutes from '../modules/student/tc.route';
 import roleRoutes from '../modules/role/role.route';
 import reportRoutes from '../modules/report/reports.route';
 import publicRoutes from '../modules/public/public.route';
+import { schoolScope } from '../middleware/school.middleware';
 
 const router = express.Router();
 
@@ -35,6 +36,9 @@ router.get('/health', (req, res) => {
 });
 
 router.use('/public', publicRoutes);
+
+// School scoping for all authenticated routes
+router.use(schoolScope);
 
 router.use('/auth', authRoutes);
 router.use('/students', studentRoutes);
@@ -52,7 +56,6 @@ router.use('/timetable', timetableRoutes);
 router.use('/homework', homeworkRoutes);
 router.use('/parents', parentRoutes);
 router.use('/notifications', notificationRoutes);
-router.use('/super-admin', superAdminRoutes);
 router.use('/hr', hrRoutes);
 router.use('/recruitment', recruitmentRoutes);
 router.use('/grading-rules', gradingRoutes);
