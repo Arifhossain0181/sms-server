@@ -17374,8 +17374,9 @@ var AuthService = class {
     return user;
   }
   async login(dto) {
-    const user = await db_default.user.findUnique({
-      where: { email: dto.email },
+    const email = dto.email.trim().toLowerCase();
+    const user = await db_default.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
       include: { studentProfile: true }
     });
     if (!user) {
@@ -17481,8 +17482,9 @@ var AuthService = class {
     return user;
   }
   async studentLogin(dto) {
-    const user = await db_default.user.findUnique({
-      where: { email: dto.email },
+    const email = dto.email.trim().toLowerCase();
+    const user = await db_default.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
       include: { studentProfile: { include: { admissionRecord: true } } }
     });
     if (!user) {
@@ -19987,9 +19989,16 @@ var getStudentsForExam = async (examId, teacherId) => {
   }
   const teacherAssignments = await db_default.subjectAssignment.findMany({
     where: { teacherId },
-    select: { subjectId: true, classId: true }
+    select: { subjectId: true, subject: { select: { classId: true } } }
   });
-  const assignmentSet = new Set(teacherAssignments.map((a) => `${a.classId}:${a.subjectId}`));
+  const timetableAssignments = await db_default.timetable.findMany({
+    where: { teacherId },
+    select: { classId: true, subjectId: true }
+  });
+  const assignmentSet = new Set([
+    ...teacherAssignments.map((assignment) => `${assignment.subject.classId}:${assignment.subjectId}`),
+    ...timetableAssignments.map((assignment) => `${assignment.classId}:${assignment.subjectId}`)
+  ]);
   const studentsMap = /* @__PURE__ */ new Map();
   for (const schedule of exam.schedules) {
     const key = `${schedule.classId}:${schedule.subjectId}`;
@@ -22666,40 +22675,6 @@ var AdmissionService = class {
             if (!existingPayment) {
               const paymentData = {
                 feeStructureId: admissionFee.id,
-                invoiceId: admissionInvoice.id,
-                studentId: studentProfile.id,
-                amount: admission.paymentAmount,
-                method: admission.paymentMethod ?? "CASH",
-                status: "PAID",
-                paidAt: admissionFeeDate,
-                ...transactionId ? { transactionId } : {}
-              };
-              if (transactionId) {
-                await tx.payment.upsert({
-                  where: { transactionId },
-                  create: paymentData,
-                  update: {}
-                });
-              } else {
-                await tx.payment.create({ data: paymentData });
-              }
-            }
-          } else {
-            const existingPayment = transactionId ? await tx.payment.findUnique({ where: { transactionId } }) : null;
-            if (!existingPayment) {
-              const admissionInvoice = await tx.invoice.create({
-                data: {
-                  studentId: studentProfile.id,
-                  feeStructureId: existingAdmissionFee.id,
-                  amount: admission.paymentAmount,
-                  dueDate: admissionFeeDate,
-                  year: admissionYear,
-                  month: admissionMonth,
-                  status: "PAID"
-                }
-              });
-              const paymentData = {
-                feeStructureId: existingAdmissionFee.id,
                 invoiceId: admissionInvoice.id,
                 studentId: studentProfile.id,
                 amount: admission.paymentAmount,

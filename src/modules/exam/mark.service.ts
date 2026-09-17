@@ -447,9 +447,19 @@ export const getStudentsForExam = async (examId: string, teacherId: string) => {
 
   const teacherAssignments = await prisma.subjectAssignment.findMany({
     where: { teacherId },
-    select: { subjectId: true, classId: true },
+    select: {
+      subjectId: true,
+      subject: { select: { classId: true } },
+    },
   });
-  const assignmentSet = new Set(teacherAssignments.map((a) => `${a.classId}:${a.subjectId}`));
+  const timetableAssignments = await prisma.timetable.findMany({
+    where: { teacherId },
+    select: { classId: true, subjectId: true },
+  });
+  const assignmentSet = new Set([
+    ...teacherAssignments.map((assignment) => `${assignment.subject.classId}:${assignment.subjectId}`),
+    ...timetableAssignments.map((assignment) => `${assignment.classId}:${assignment.subjectId}`),
+  ]);
 
   const studentsMap = new Map<string, {
     id: string;

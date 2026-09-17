@@ -532,45 +532,6 @@ export class AdmissionService {
                                 await tx.payment.create({ data: paymentData });
                             }
                         }
-                    } else {
-                        const existingPayment = transactionId
-                            ? await tx.payment.findUnique({ where: { transactionId } })
-                            : null;
-
-                        if (!existingPayment) {
-                            const admissionInvoice = await tx.invoice.create({
-                                data: {
-                                    studentId: studentProfile.id,
-                                    feeStructureId: existingAdmissionFee.id,
-                                    amount: admission.paymentAmount!,
-                                    dueDate: admissionFeeDate,
-                                    year: admissionYear,
-                                    month: admissionMonth,
-                                    status: "PAID",
-                                },
-                            });
-
-                            const paymentData = {
-                                feeStructureId: existingAdmissionFee.id,
-                                invoiceId: admissionInvoice.id,
-                                studentId: studentProfile.id,
-                                amount: admission.paymentAmount!,
-                                method: admission.paymentMethod ?? "CASH",
-                                status: "PAID" as const,
-                                paidAt: admissionFeeDate,
-                                ...(transactionId ? { transactionId } : {}),
-                            };
-
-                            if (transactionId) {
-                                await tx.payment.upsert({
-                                    where: { transactionId },
-                                    create: paymentData,
-                                    update: {},
-                                });
-                            } else {
-                                await tx.payment.create({ data: paymentData });
-                            }
-                        }
                     }
                 }
 

@@ -98,8 +98,9 @@ export class AuthService {
     }
 
     async login(dto: LoginDto) {
-        const user = await prisma.user.findUnique({
-            where: { email: dto.email },
+        const email = dto.email.trim().toLowerCase();
+        const user = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: "insensitive" } },
             include: { studentProfile: true },
         });
         if (!user) {
@@ -237,8 +238,9 @@ export class AuthService {
     }
 
     async studentLogin(dto: LoginDto) {
-        const user = await prisma.user.findUnique({
-            where: { email: dto.email },
+        const email = dto.email.trim().toLowerCase();
+        const user = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: "insensitive" } },
             include: { studentProfile: { include: { admissionRecord: true } } },
         });
         if (!user) {
