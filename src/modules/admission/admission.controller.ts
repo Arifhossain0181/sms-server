@@ -11,8 +11,10 @@ const admissionService = new AdmissionService();
 // CreateAdmissionDto — missing ones (e.g. dob, targetClassId) previously
 // fell through to Prisma and came back as an ugly 500 instead of a clean 400.
 const REQUIRED_APPLY_FIELDS = [
-  'applicantName', 'studentEmail', 'dob', 'gender', 'address',
-  'guardianName', 'guardianPhone', 'guardianEmail', 'targetClassId',
+  'applicantName', 'studentEmail', 'studentPhone', 'dob', 'gender', 'address',
+  'guardianName', 'guardianPhone', 'guardianEmail', 'guardianRelation', 'targetClassId',
+  'photoUrl', 'birthCertUrl', 'guardianNidUrl', 'fatherNid', 'fatherPhotoUrl',
+  'motherNid', 'motherPhotoUrl', 'paymentMethod', 'paymentAmount',
 ];
 
 export class AdmissionController {

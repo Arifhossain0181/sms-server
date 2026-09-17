@@ -80,7 +80,7 @@ async function getFeeSummary(schoolId?: string) {
       _count: { id: true },
     }),
     prisma.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null, ...admissionScope },
       _sum: { paymentAmount: true },
       _count: { id: true },
     }),
@@ -88,7 +88,7 @@ async function getFeeSummary(schoolId?: string) {
 
   const admissionMethodGroups = await prisma.admissionApplication.groupBy({
     by: ["paymentMethod"],
-    where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
+    where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null, ...admissionScope },
     _sum: { paymentAmount: true },
     _count: { id: true },
   });

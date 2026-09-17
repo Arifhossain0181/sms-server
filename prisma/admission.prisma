@@ -4,14 +4,42 @@ model AdmissionApplication {
   id              String          @id @default(uuid())
   applicantName   String
   studentEmail    String          @unique
+  studentPhone    String?
   dob             DateTime        @db.Date
   gender          Gender
   religion        String?
   bloodGroup      BloodGroup?
   address         String
+  presentHouseRoad String?
+  presentArea      String?
+  presentCity      String?
+  presentDistrict  String?
+  presentPostalCode String?
   guardianName    String
   guardianPhone   String
   guardianEmail   String
+  guardianRelation GuardianRelation
+  fatherFullName  String?
+  fatherPhone     String?
+  fatherEmail     String?
+  fatherNid       String?
+  fatherOccupation String?
+  fatherOrganization String?
+  fatherDesignation String?
+  fatherIncome    String?
+  fatherAddress   String?
+  fatherPhotoUrl  String?
+  motherFullName  String?
+  motherPhone     String?
+  motherEmail     String?
+  motherNid       String?
+  motherOccupation String?
+  motherOrganization String?
+  motherDesignation String?
+  motherIncome    String?
+  motherAddress   String?
+  motherPhotoUrl   String?
+  guardianNidUrl   String?
   targetClassId   String
   targetClass     Class           @relation(fields: [targetClassId], references: [id])
   photoUrl        String?

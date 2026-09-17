@@ -147,19 +147,40 @@ export const getTeacherExams = async (teacherId: string) => {
         },
     });
 
+    const timetableSlots = await prisma.timetable.findMany({
+        where: { teacherId },
+        include: {
+            subject: {
+                include: {
+                    class: {
+                        include: {
+                            sections: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+
     const classSubjectMap = new Map<string, { classId: string; className: string; subjects: any[] }>();
-    for (const assignment of assignments) {
-        const classId = assignment.subject.classId;
+
+    const allSubjects = [
+        ...assignments.map((a) => a.subject),
+        ...timetableSlots.map((t) => t.subject),
+    ].filter(Boolean);
+
+    for (const subject of allSubjects) {
+        const classId = subject.classId;
         if (!classSubjectMap.has(classId)) {
             classSubjectMap.set(classId, {
                 classId,
-                className: assignment.subject.class.name,
+                className: subject.class?.name ?? "Class",
                 subjects: [],
             });
         }
         const entry = classSubjectMap.get(classId)!;
-        if (!entry.subjects.find((s) => s.id === assignment.subject.id)) {
-            entry.subjects.push(assignment.subject);
+        if (!entry.subjects.find((s) => s.id === subject.id)) {
+            entry.subjects.push(subject);
         }
     }
 

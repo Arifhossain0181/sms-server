@@ -34,6 +34,12 @@ enum AdmissionStatus {
   REJECTED
 }
 
+enum GuardianRelation {
+  FATHER
+  MOTHER
+  OTHER
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT

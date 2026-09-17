@@ -162,7 +162,7 @@ export const TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -190,7 +190,7 @@ export const TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
       },
     });
 
@@ -249,7 +249,7 @@ export const TeachersService = {
             },
           },
         },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
       },
     });
 
@@ -258,7 +258,58 @@ export const TeachersService = {
       (err as any).status = 404;
       throw err;
     }
-    return teacher;
+    const timetableEntries = await prisma.timetable.findMany({
+      where: { teacherId: teacher.id },
+      include: {
+        section: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
+        subject: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            fullMarks: true,
+            passMarks: true,
+            isCompulsory: true,
+            class: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const existingSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const mergedSectionTeacher = [...teacher.sectionTeacher];
+
+    for (const tt of timetableEntries) {
+      if (tt.section && !existingSectionIds.has(tt.section.id)) {
+        existingSectionIds.add(tt.section.id);
+        mergedSectionTeacher.push(tt.section);
+      }
+    }
+
+    const existingSubjectIds = new Set(
+      teacher.subjectAssignments.map((sa) => sa.subject?.id).filter(Boolean)
+    );
+    const mergedSubjectAssignments = [...teacher.subjectAssignments];
+
+    for (const tt of timetableEntries) {
+      if (tt.subject && !existingSubjectIds.has(tt.subject.id)) {
+        existingSubjectIds.add(tt.subject.id);
+        mergedSubjectAssignments.push({
+          id: `tt-${tt.id}`,
+          teacherId: teacher.id,
+          subjectId: tt.subject.id,
+          createdAt: tt.createdAt,
+          updatedAt: tt.updatedAt,
+          subject: tt.subject,
+        } as any);
+      }
+    }
+
+    return {
+      ...teacher,
+      sectionTeacher: mergedSectionTeacher,
+      subjectAssignments: mergedSubjectAssignments,
+    };
   },
 
   async update(id: string, dto: UpdateTeacherDto) {
@@ -286,7 +337,7 @@ export const TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
       },
     });
 
@@ -365,7 +416,7 @@ export const TeachersService = {
       where: { id },
       include: {
         user: { select: { id: true, name: true, email: true } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } },
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
       },
     });
   },
@@ -394,7 +445,20 @@ export const TeachersService = {
 
     if (!teacher) throw { status: 404, message: "Teacher not found" };
 
-    const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+    const timetableSlots = await prisma.timetable.findMany({
+      where: { teacherId },
+      select: { classId: true, sectionId: true },
+    });
+
+    const classIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.classId),
+      ...timetableSlots.map((t) => t.classId),
+    ].filter(Boolean)));
+
+    const sectionIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId),
+    ].filter(Boolean)));
 
     const { page = '1', limit = '10', search, gender, classId, sectionId } = query;
 
@@ -475,13 +539,30 @@ export const TeachersService = {
 
     if (!teacher) throw { status: 404, message: 'Teacher not found' };
 
-    const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+    const timetableSlots = await prisma.timetable.findMany({
+      where: { teacherId },
+      select: { classId: true, sectionId: true, subjectId: true },
+    });
+
+    const classIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.classId),
+      ...timetableSlots.map((t) => t.classId),
+    ].filter(Boolean)));
+
+    const sectionIds = Array.from(new Set([
+      ...timetableSlots.map((t) => t.sectionId),
+    ].filter(Boolean)));
+
+    const subjectIds = Array.from(new Set([
+      ...teacher.subjectAssignments.map((s) => s.id),
+      ...timetableSlots.map((t) => t.subjectId),
+    ].filter(Boolean)));
 
     if (classIds.length === 0) {
       return {
         totalStudents: 0,
         totalClasses: 0,
-        totalSubjects: teacher.subjectAssignments.length,
+        totalSubjects: subjectIds.length,
         upcomingExams: 0,
       };
     }
@@ -494,7 +575,7 @@ export const TeachersService = {
         where: { section: { classId: { in: classIds } } },
       }),
       Promise.resolve(classIds.length),
-      Promise.resolve(teacher.subjectAssignments.length),
+      Promise.resolve(subjectIds.length),
       prisma.examSchedule.count({
         where: { classId: { in: classIds }, examDate: { gte: today } },
       }),

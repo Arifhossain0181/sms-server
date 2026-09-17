@@ -98,7 +98,14 @@ export const submitExamMarks = async (
     where: { OR: uniquePairs.map((p) => ({ subjectId: p.subjectId, teacherId: p.teacherId })) },
     select: { subjectId: true, teacherId: true },
   });
-  const assignedSet = new Set(assignments.map((a) => `${a.subjectId}:${a.teacherId}`));
+  const timetableAssignments = await prisma.timetable.findMany({
+    where: { OR: uniquePairs.map((p) => ({ subjectId: p.subjectId, teacherId: p.teacherId })) },
+    select: { subjectId: true, teacherId: true },
+  });
+  const assignedSet = new Set([
+    ...assignments.map((a) => `${a.subjectId}:${a.teacherId}`),
+    ...timetableAssignments.map((a) => `${a.subjectId}:${a.teacherId}`),
+  ]);
 
   for (const pair of uniquePairs) {
     if (!assignedSet.has(`${pair.subjectId}:${pair.teacherId}`)) {

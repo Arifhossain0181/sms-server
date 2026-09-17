@@ -189,14 +189,14 @@ var require_media_typer = __commonJS({
         string += "+" + suffix;
       }
       if (parameters && typeof parameters === "object") {
-        var param;
+        var param2;
         var params = Object.keys(parameters).sort();
         for (var i = 0; i < params.length; i++) {
-          param = params[i];
-          if (!tokenRegExp.test(param)) {
+          param2 = params[i];
+          if (!tokenRegExp.test(param2)) {
             throw new TypeError("invalid parameter name");
           }
-          string += "; " + param + "=" + qstring(parameters[param]);
+          string += "; " + param2 + "=" + qstring(parameters[param2]);
         }
       }
       return string;
@@ -17023,7 +17023,7 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
-var import_express27 = __toESM(require("express"));
+var import_express28 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_helmet = __toESM(require("helmet"));
 var import_dotenv = __toESM(require("dotenv"));
@@ -17043,7 +17043,7 @@ var errorMiddleware = (err, req, res, next) => {
 init_logger();
 
 // src/routes/index.ts
-var import_express26 = __toESM(require("express"));
+var import_express27 = __toESM(require("express"));
 
 // src/modules/auth/auth.route.ts
 var import_express = require("express");
@@ -18085,9 +18085,9 @@ var StudentService = class {
       updatedAt: student.updatedAt
     };
   }
-  async findStudentByUserId(userId) {
-    const student = await db_default.student.findUnique({
-      where: { userId },
+  async findStudentByUserId(userId, email) {
+    const student = await db_default.student.findFirst({
+      where: email ? { OR: [{ userId }, { user: { email } }] } : { userId },
       include: {
         user: { select: { id: true, name: true, email: true, isActive: true } },
         class: { select: { id: true, name: true } },
@@ -18349,7 +18349,7 @@ var StudentController = class {
     try {
       console.log(`
 [STUDENT] getMyProfile called - User ID: ${req.user?.id}`);
-      const student = await studentService.findStudentByUserId(req.user.id);
+      const student = await studentService.findStudentByUserId(req.user.id, req.user.email);
       const admissionStatus = student.admissionRecord?.status;
       if (admissionStatus && admissionStatus !== "APPROVED") {
         console.log(`[STUDENT] \u26A0\uFE0F Admission not approved - Status: ${admissionStatus}`);
@@ -22391,7 +22391,19 @@ var AdmissionService = class {
     return admission;
   }
   async convertToStudent(dto, schoolId) {
-    const result = await this.createStudentFromAdmission(dto.admissionId, schoolId);
+    let result;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        result = await this.createStudentFromAdmission(dto.admissionId, schoolId);
+        break;
+      } catch (error) {
+        const retryableConflict = error?.code === "P2002" || error?.code === "P2034";
+        if (!retryableConflict || attempt === 3) throw error;
+      }
+    }
+    if (!result) {
+      throw new Error("Unable to convert admission after retrying the database transaction");
+    }
     return result;
   }
   async delete(id, actorUserId) {
@@ -22483,26 +22495,50 @@ var AdmissionService = class {
           err.status = 404;
           throw err;
         }
+        const effectiveSchoolId = schoolId ?? admission.targetClass?.schoolId;
         if (admission.studentId) {
           const existingParent = await tx.parent.findFirst({
             where: { user: { email: admission.guardianEmail } },
             include: { user: { select: { id: true } } }
           });
-          if (!existingParent) return admission;
-          const tempPassword2 = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
-          await tx.user.update({
-            where: { id: existingParent.user.id },
-            data: { passwordHash: await import_bcryptjs5.default.hash(tempPassword2, 10) }
-          });
-          return {
-            ...admission,
-            name: admission.applicantName,
-            __tempPassword: null,
-            __email: admission.studentEmail,
-            __guardianName: admission.guardianName,
-            __parentTempPassword: tempPassword2,
-            __parentEmail: admission.guardianEmail
-          };
+          if (!existingParent) {
+            const parentResult2 = await this._ensureParentFromAdmission(tx, admission, effectiveSchoolId);
+            if (parentResult2) {
+              const student = await tx.student.findUnique({ where: { id: admission.studentId } });
+              if (student && !student.parentId) {
+                await tx.student.update({
+                  where: { id: student.id },
+                  data: { parentId: parentResult2.parent.id }
+                });
+              }
+              return {
+                ...admission,
+                name: admission.applicantName,
+                __tempPassword: null,
+                __email: admission.studentEmail,
+                __guardianName: admission.guardianName,
+                __parentTempPassword: parentResult2.tempPassword,
+                __parentEmail: parentResult2.email
+              };
+            }
+          }
+          if (existingParent) {
+            const tempPassword2 = (0, import_node_crypto3.randomBytes)(6).toString("hex").toUpperCase();
+            await tx.user.update({
+              where: { id: existingParent.user.id },
+              data: { passwordHash: await import_bcryptjs5.default.hash(tempPassword2, 10) }
+            });
+            return {
+              ...admission,
+              name: admission.applicantName,
+              __tempPassword: null,
+              __email: admission.studentEmail,
+              __guardianName: admission.guardianName,
+              __parentTempPassword: tempPassword2,
+              __parentEmail: admission.guardianEmail
+            };
+          }
+          return admission;
         }
         if (admission.status !== "APPROVED") {
           const err = new Error("Admission must be approved before creating a student account");
@@ -22514,7 +22550,6 @@ var AdmissionService = class {
           err.status = 403;
           throw err;
         }
-        const effectiveSchoolId = schoolId ?? admission.targetClass.schoolId;
         const studentEmail = admission.studentEmail;
         if (!studentEmail) {
           const err = new Error("Student email is required to create account");
@@ -22589,6 +22624,7 @@ var AdmissionService = class {
           const admissionYear = admissionFeeDate.getFullYear();
           const admissionMonth = admissionFeeDate.getMonth() + 1;
           const admissionAcademicYear = admissionMonth >= 7 ? `${admissionYear}-${admissionYear + 1}` : `${admissionYear - 1}-${admissionYear}`;
+          const transactionId = admission.transactionId?.trim() || void 0;
           const existingAdmissionFee = await tx.feeStructure.findFirst({
             where: {
               studentId: studentProfile.id,
@@ -22626,8 +22662,9 @@ var AdmissionService = class {
                 status: "PAID"
               }
             });
-            await tx.payment.create({
-              data: {
+            const existingPayment = transactionId ? await tx.payment.findUnique({ where: { transactionId } }) : null;
+            if (!existingPayment) {
+              const paymentData = {
                 feeStructureId: admissionFee.id,
                 invoiceId: admissionInvoice.id,
                 studentId: studentProfile.id,
@@ -22635,9 +22672,52 @@ var AdmissionService = class {
                 method: admission.paymentMethod ?? "CASH",
                 status: "PAID",
                 paidAt: admissionFeeDate,
-                transactionId: admission.transactionId ?? void 0
+                ...transactionId ? { transactionId } : {}
+              };
+              if (transactionId) {
+                await tx.payment.upsert({
+                  where: { transactionId },
+                  create: paymentData,
+                  update: {}
+                });
+              } else {
+                await tx.payment.create({ data: paymentData });
               }
-            });
+            }
+          } else {
+            const existingPayment = transactionId ? await tx.payment.findUnique({ where: { transactionId } }) : null;
+            if (!existingPayment) {
+              const admissionInvoice = await tx.invoice.create({
+                data: {
+                  studentId: studentProfile.id,
+                  feeStructureId: existingAdmissionFee.id,
+                  amount: admission.paymentAmount,
+                  dueDate: admissionFeeDate,
+                  year: admissionYear,
+                  month: admissionMonth,
+                  status: "PAID"
+                }
+              });
+              const paymentData = {
+                feeStructureId: existingAdmissionFee.id,
+                invoiceId: admissionInvoice.id,
+                studentId: studentProfile.id,
+                amount: admission.paymentAmount,
+                method: admission.paymentMethod ?? "CASH",
+                status: "PAID",
+                paidAt: admissionFeeDate,
+                ...transactionId ? { transactionId } : {}
+              };
+              if (transactionId) {
+                await tx.payment.upsert({
+                  where: { transactionId },
+                  create: paymentData,
+                  update: {}
+                });
+              } else {
+                await tx.payment.create({ data: paymentData });
+              }
+            }
           }
         }
         return {
@@ -22980,6 +23060,18 @@ function dayRange(date = /* @__PURE__ */ new Date()) {
   end.setDate(end.getDate() + 1);
   return { start, end };
 }
+function getPaymentDedupKey(p) {
+  return p.transactionId?.trim() || p.id;
+}
+function dedupePayments(payments) {
+  const seen = /* @__PURE__ */ new Set();
+  return payments.filter((p) => {
+    const key = getPaymentDedupKey(p);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 var createfee = async (dto) => {
   if (dto.studentId) {
     const student = await db_default.student.findUnique({
@@ -23088,11 +23180,23 @@ var findAll = async (dto) => {
           class: { select: { name: true } }
         }
       },
-      payments: { select: { id: true, amount: true, method: true, createdAt: true } }
+      payments: {
+        select: { id: true, amount: true, method: true, createdAt: true },
+        orderBy: { createdAt: "desc" }
+      }
     },
     orderBy: { dueDate: "asc" }
   });
-  return { data: fees, meta };
+  const dedupedFees = fees.map((fee) => {
+    const dedupedPayments = dedupePayments(fee.payments ?? []);
+    const paidAmount = dedupedPayments.reduce((sum, p) => sum + p.amount, 0);
+    return {
+      ...fee,
+      Paidamount: paidAmount,
+      payments: dedupedPayments
+    };
+  });
+  return { data: dedupedFees, meta };
 };
 var findByid = async (id) => {
   const fee = await db_default.feeStructure.findUnique({
@@ -23108,7 +23212,7 @@ var findByid = async (id) => {
     }
   });
   if (!fee) throw new Error("Fee not found");
-  return { ...fee, payments: fee.payments ?? [] };
+  return { ...fee, payments: dedupePayments(fee.payments ?? []) };
 };
 var updateFee = async (id, dto) => {
   await _exists(id);
@@ -23121,8 +23225,8 @@ var updateFee = async (id, dto) => {
       status: dto.status,
       ...dto.dueDate && { dueDate: new Date(dto.dueDate) }
     },
-    include: { payments: true }
-  });
+    include: { payments: { orderBy: { createdAt: "desc" } } }
+  }).then((fee) => ({ ...fee, payments: dedupePayments(fee.payments ?? []) }));
 };
 var deleteFee = async (id) => {
   await _exists(id);
@@ -23160,6 +23264,10 @@ var recordPayment = async (dto, actorUserId) => {
       }
       const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
       const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      if (transactionId) {
+        const existing = await tx.payment.findFirst({ where: { transactionId } });
+        if (existing) throw new Error("A payment with this transaction ID already exists");
+      }
       const payment = await tx.payment.create({
         data: {
           feeStructureId: dto.feeId,
@@ -23241,6 +23349,10 @@ var recordCashPayment = async (dto, actorUserId) => {
       }
       const newStatus = totalPaid === fee.amount ? "PAID" : "PARTIAL";
       const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      if (transactionId) {
+        const existing = await tx.payment.findFirst({ where: { transactionId } });
+        if (existing) throw new Error("A payment with this transaction ID already exists");
+      }
       let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
       if (!invoice) {
         invoice = await tx.invoice.create({
@@ -23293,10 +23405,10 @@ var getstudentFeeSummary = async (studentId) => {
     select: { id: true, user: { select: { email: true } } }
   });
   const studentEmail = student?.user?.email ?? null;
-  const [totals, overDue, admissionTotals] = await Promise.all([
-    db_default.feeStructure.aggregate({
+  const [feeStructures, overDue, admissionTotals] = await Promise.all([
+    db_default.feeStructure.findMany({
       where: { studentId },
-      _sum: { amount: true, Paidamount: true }
+      select: { id: true, amount: true }
     }),
     db_default.feeStructure.count({
       where: { studentId, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } }
@@ -23313,8 +23425,17 @@ var getstudentFeeSummary = async (studentId) => {
       _sum: { paymentAmount: true }
     })
   ]);
-  const totalFees = (totals._sum.amount ?? 0) + (admissionTotals._sum.paymentAmount ?? 0);
-  const totalPaidFromFees = totals._sum.Paidamount ?? 0;
+  const feeIds = feeStructures.map((f) => f.id);
+  let totalPaidFromFees = 0;
+  if (feeIds.length > 0) {
+    const payments = await db_default.payment.findMany({
+      where: { feeStructureId: { in: feeIds }, status: "PAID" },
+      select: { amount: true, transactionId: true, id: true }
+    });
+    const deduped = dedupePayments(payments);
+    totalPaidFromFees = deduped.reduce((sum, p) => sum + p.amount, 0);
+  }
+  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + (admissionTotals._sum.paymentAmount ?? 0);
   const admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
   const totalPaid = totalPaidFromFees + admissionPaid;
   return { totalFees, totalPaid, outstanding: Math.max(totalFees - totalPaid, 0), overDue };
@@ -23368,22 +23489,26 @@ var getStudentFeeList = async (studentId) => {
       orderBy: { paymentDate: "desc" }
     })
   ]);
-  const mappedFees = feeStructures.map((fee) => ({
-    id: fee.id,
-    studentId: fee.studentId,
-    feeType: fee.feeType,
-    title: fee.title,
-    amount: fee.amount,
-    paidAmount: fee.Paidamount,
-    dueAmount: Math.max(fee.amount - fee.Paidamount, 0),
-    dueDate: fee.dueDate,
-    month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
-    status: fee.status,
-    student: fee.student,
-    payments: fee.payments,
-    createdAt: fee.createdAt,
-    source: "FEE_STRUCTURE"
-  }));
+  const mappedFees = feeStructures.map((fee) => {
+    const dedupedPayments = dedupePayments(fee.payments ?? []);
+    const paidAmount = dedupedPayments.reduce((sum, p) => sum + p.amount, 0);
+    return {
+      id: fee.id,
+      studentId: fee.studentId,
+      feeType: fee.feeType,
+      title: fee.title,
+      amount: fee.amount,
+      paidAmount,
+      dueAmount: Math.max(fee.amount - paidAmount, 0),
+      dueDate: fee.dueDate,
+      month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
+      status: fee.status,
+      student: fee.student,
+      payments: dedupedPayments,
+      createdAt: fee.createdAt,
+      source: "FEE_STRUCTURE"
+    };
+  });
   const mappedAdmissions = admissionApplications.map((admission) => ({
     id: `admission-${admission.id}`,
     studentId,
@@ -23427,40 +23552,42 @@ var getCollectionReport = async (month, type) => {
   const admissionWhere = {
     paymentStatus: "PAID",
     paymentAmount: { not: null, gt: 0 },
+    studentId: null,
     paymentDate: { gte: start, lt: end }
   };
-  const [totalAgg, byMethodGroups, byTypeGroups, admissionAgg] = await Promise.all([
-    db_default.payment.aggregate({ where: baseWhere, _sum: { amount: true }, _count: true }),
-    db_default.payment.groupBy({
-      by: ["method"],
-      where: baseWhere,
-      _sum: { amount: true }
-    }),
-    db_default.feeStructure.findMany({ where: {}, select: { feeType: true }, distinct: ["feeType"] }).then(
-      (types) => Promise.all(
-        types.map(async ({ feeType }) => {
-          const agg = await db_default.payment.aggregate({
-            where: { ...baseWhere, feeStructure: { feeType } },
-            _sum: { amount: true }
-          });
-          return [feeType, agg._sum.amount ?? 0];
-        })
-      )
-    ),
+  const [admissionAgg, rawPayments] = await Promise.all([
     db_default.admissionApplication.aggregate({
       where: admissionWhere,
       _sum: { paymentAmount: true },
       _count: true
+    }),
+    db_default.payment.findMany({
+      where: baseWhere,
+      select: {
+        amount: true,
+        method: true,
+        transactionId: true,
+        id: true,
+        feeStructure: { select: { feeType: true } }
+      }
     })
   ]);
-  const feeTotal = totalAgg._sum.amount ?? 0;
+  const deduped = dedupePayments(rawPayments);
+  const feeTotal = deduped.reduce((sum, p) => sum + p.amount, 0);
+  const totalTransactions = deduped.length;
+  const byMethodMap = /* @__PURE__ */ new Map();
+  const byTypeMap = /* @__PURE__ */ new Map();
+  deduped.forEach((p) => {
+    const methodKey = p.method === "STRIPE" ? "ONLINE" : "OFFLINE";
+    byMethodMap.set(methodKey, (byMethodMap.get(methodKey) ?? 0) + p.amount);
+    const typeKey = p.feeStructure?.feeType ?? "OTHER";
+    byTypeMap.set(typeKey, (byTypeMap.get(typeKey) ?? 0) + p.amount);
+  });
   const admissionTotal = admissionAgg._sum.paymentAmount ?? 0;
   const totalCollected = feeTotal + admissionTotal;
-  const totalTransactions = totalAgg._count + admissionAgg._count;
-  const byMethod = Object.fromEntries(
-    byMethodGroups.map((g) => [g.method === "STRIPE" ? "ONLINE" : "OFFLINE", g._sum.amount ?? 0])
-  );
-  const byType = Object.fromEntries(byTypeGroups.filter(([, sum]) => sum > 0));
+  const totalTransactionsCount = totalTransactions + admissionAgg._count;
+  const byMethod = Object.fromEntries(byMethodMap);
+  const byType = Object.fromEntries(byTypeMap);
   if ((admissionTotal ?? 0) > 0) {
     const admissionMethod = "ADMISSION";
     byMethod[admissionMethod] = (byMethod[admissionMethod] ?? 0) + admissionTotal;
@@ -23469,7 +23596,7 @@ var getCollectionReport = async (month, type) => {
   return {
     month,
     totalCollected,
-    totalTransactions,
+    totalTransactions: totalTransactionsCount,
     byType,
     byMethod
   };
@@ -23480,25 +23607,37 @@ var getFeeSummary = async (month) => {
     const { start, end } = monthRange(month);
     where.dueDate = { gte: start, lt: end };
   }
-  const admissionWhere = { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } };
+  const admissionWhere = { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null };
   if (month) {
     const { start, end } = monthRange(month);
     admissionWhere.paymentDate = { gte: start, lt: end };
   }
   const today2 = dayRange();
-  const [totals, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
-    db_default.feeStructure.aggregate({ where, _sum: { amount: true, Paidamount: true } }),
+  const [feeStructures, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
+    db_default.feeStructure.findMany({
+      where,
+      select: { id: true, amount: true }
+    }),
     db_default.feeStructure.count({ where: { ...where, status: "PENDING" } }),
     db_default.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } } }),
     db_default.admissionApplication.aggregate({ where: admissionWhere, _sum: { paymentAmount: true }, _count: true }),
     db_default.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentDate: { gte: today2.start, lt: today2.end } },
+      where: { paymentStatus: "PAID", studentId: null, paymentDate: { gte: today2.start, lt: today2.end } },
       _sum: { paymentAmount: true },
       _count: true
     })
   ]);
-  const totalFeesAmount = totals._sum.amount ?? 0;
-  const feePaidAmount = totals._sum.Paidamount ?? 0;
+  const feeIds = feeStructures.map((f) => f.id);
+  let feePaidAmount = 0;
+  if (feeIds.length > 0) {
+    const payments = await db_default.payment.findMany({
+      where: { feeStructureId: { in: feeIds }, status: "PAID" },
+      select: { amount: true, transactionId: true, id: true }
+    });
+    const deduped = dedupePayments(payments);
+    feePaidAmount = deduped.reduce((sum, p) => sum + p.amount, 0);
+  }
+  const totalFeesAmount = feeStructures.reduce((sum, f) => sum + f.amount, 0);
   const admissionTotalPaid = admissionTotals._sum.paymentAmount ?? 0;
   const totalAmount = totalFeesAmount + admissionTotalPaid;
   const totalPaid = feePaidAmount + admissionTotalPaid;
@@ -23595,7 +23734,7 @@ var getAllPayments = async (dto) => {
       }
     }),
     db_default.admissionApplication.findMany({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null },
       orderBy: { paymentDate: "desc" },
       select: {
         id: true,
@@ -23603,6 +23742,7 @@ var getAllPayments = async (dto) => {
         paymentMethod: true,
         paymentDate: true,
         createdAt: true,
+        transactionId: true,
         studentId: true,
         studentEmail: true,
         applicantName: true
@@ -23614,7 +23754,7 @@ var getAllPayments = async (dto) => {
     amount: Number(admission.paymentAmount ?? 0),
     method: admission.paymentMethod ?? "CASH",
     status: "PAID",
-    transactionId: void 0,
+    transactionId: admission.transactionId?.trim() || void 0,
     note: "Admission payment",
     paidAt: admission.paymentDate ?? admission.createdAt,
     createdAt: admission.createdAt,
@@ -23633,17 +23773,10 @@ var getAllPayments = async (dto) => {
       amount: Number(admission.paymentAmount ?? 0)
     }
   }));
-  const combined = [...feePayments, ...mappedAdmissions].sort((a, b) => {
+  const deduped = dedupePayments([...feePayments, ...mappedAdmissions]).sort((a, b) => {
     const dateA = new Date(a.paidAt || a.createdAt).getTime();
     const dateB = new Date(b.paidAt || b.createdAt).getTime();
     return dateB - dateA;
-  });
-  const seen = /* @__PURE__ */ new Set();
-  const deduped = combined.filter((item) => {
-    const key = item.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
   });
   const total = deduped.length;
   const start = (safePage - 1) * safeLimit;
@@ -23660,7 +23793,7 @@ var getAllPayments = async (dto) => {
 };
 var getMonthlyAnalytics = async (year) => {
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
-  const [byMonth, byMethodYear, typeBreakdown, admissionByMonth, admissionMethodYear] = await Promise.all([
+  const [byMonth, byMethodYear, typeBreakdown, admissionMethodYear, allFeePayments] = await Promise.all([
     Promise.all(
       months.map(async (m) => {
         const start = new Date(year, m - 1, 1);
@@ -23671,7 +23804,7 @@ var getMonthlyAnalytics = async (year) => {
           _count: { id: true }
         });
         const admissionAgg = await db_default.admissionApplication.aggregate({
-          where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: start, lt: end } },
+          where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: start, lt: end } },
           _sum: { paymentAmount: true },
           _count: true
         });
@@ -23693,10 +23826,15 @@ var getMonthlyAnalytics = async (year) => {
     }),
     db_default.admissionApplication.groupBy({
       by: ["paymentMethod"],
-      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
       _sum: { paymentAmount: true }
+    }),
+    db_default.payment.findMany({
+      where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) }, status: "PAID" },
+      select: { amount: true, method: true, transactionId: true, id: true, feeStructure: { select: { feeType: true } } }
     })
   ]);
+  const dedupedPayments = dedupePayments(allFeePayments);
   const methodMap = /* @__PURE__ */ new Map();
   byMethodYear.forEach((g) => {
     methodMap.set(g.method, (methodMap.get(g.method) ?? 0) + (g._sum.amount ?? 0));
@@ -23705,50 +23843,57 @@ var getMonthlyAnalytics = async (year) => {
     const key = g.paymentMethod ?? "CASH";
     methodMap.set(key, (methodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
   });
+  const correctedMethodMap = /* @__PURE__ */ new Map();
+  dedupedPayments.forEach((p) => {
+    correctedMethodMap.set(p.method, (correctedMethodMap.get(p.method) ?? 0) + p.amount);
+  });
+  admissionMethodYear.forEach((g) => {
+    const key = g.paymentMethod ?? "CASH";
+    correctedMethodMap.set(key, (correctedMethodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+  });
   const typeEntries = typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }]);
+  const correctedTypeMap = /* @__PURE__ */ new Map();
+  dedupedPayments.forEach((p) => {
+    const key = p.feeStructure?.feeType ?? "OTHER";
+    correctedTypeMap.set(key, (correctedTypeMap.get(key) ?? 0) + p.amount);
+  });
   return {
     year,
     byMonth,
-    byMethod: Object.fromEntries(methodMap),
-    byType: Object.fromEntries(typeEntries)
+    byMethod: Object.fromEntries(correctedMethodMap),
+    byType: Object.fromEntries(correctedTypeMap)
   };
 };
 var getAccountantDashboardOverview = async () => {
   const today2 = dayRange();
-  const [summary, recentPayments, todayAggregate, admissionTodayAggregate] = await Promise.all([
+  const [summary, recentPayments, admissionTodayAggregate] = await Promise.all([
     getFeeSummary(),
     getAllPayments({ page: "1", limit: "5" }),
-    db_default.payment.aggregate({
-      where: { createdAt: { gte: today2.start, lt: today2.end }, status: "PAID" },
-      _sum: { amount: true },
-      _count: { id: true }
-    }),
     db_default.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentDate: { gte: today2.start, lt: today2.end } },
+      where: { paymentStatus: "PAID", studentId: null, paymentDate: { gte: today2.start, lt: today2.end } },
       _sum: { paymentAmount: true },
       _count: true
     })
   ]);
-  const methodBreakdown = await db_default.payment.groupBy({
-    by: ["method"],
-    where: {
-      createdAt: { gte: today2.start, lt: today2.end },
-      status: "PAID"
-    },
-    _sum: { amount: true }
+  const todayPayments = await db_default.payment.findMany({
+    where: { createdAt: { gte: today2.start, lt: today2.end }, status: "PAID" },
+    select: { amount: true, method: true, transactionId: true, id: true }
+  });
+  const dedupedToday = dedupePayments(todayPayments);
+  const todayCollection = dedupedToday.reduce((sum, p) => sum + p.amount, 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
+  const todayCount = dedupedToday.length + admissionTodayAggregate._count;
+  const methodBreakdownMap = /* @__PURE__ */ new Map();
+  dedupedToday.forEach((p) => {
+    methodBreakdownMap.set(p.method, (methodBreakdownMap.get(p.method) ?? 0) + p.amount);
   });
   const admissionMethodToday = await db_default.admissionApplication.groupBy({
     by: ["paymentMethod"],
-    where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: today2.start, lt: today2.end } },
+    where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: today2.start, lt: today2.end } },
     _sum: { paymentAmount: true }
   });
-  const todayCollection = (todayAggregate._sum.amount ?? 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
-  const todayCount = (todayAggregate._count.id ?? 0) + admissionTodayAggregate._count;
-  const byMethodMap = /* @__PURE__ */ new Map();
-  methodBreakdown.forEach((g) => byMethodMap.set(g.method, (byMethodMap.get(g.method) ?? 0) + (g._sum.amount ?? 0)));
   admissionMethodToday.forEach((g) => {
     const key = g.paymentMethod ?? "CASH";
-    byMethodMap.set(key, (byMethodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+    methodBreakdownMap.set(key, (methodBreakdownMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
   });
   return {
     summary,
@@ -23756,7 +23901,7 @@ var getAccountantDashboardOverview = async () => {
     todayCount,
     recentPayments: recentPayments.data,
     recentPaymentsMeta: recentPayments.meta,
-    byMethod: Object.fromEntries(byMethodMap)
+    byMethod: Object.fromEntries(methodBreakdownMap)
   };
 };
 var createPaymentIntent = async (feeId, studentId) => {
@@ -26628,8 +26773,755 @@ router17.post("/:id/submit-mark", authorizeRoles("TEACHER"), c9.submitMark.bind(
 router17.get("/:id/submissions", authorizeRoles("TEACHER"), c9.getSubmissions.bind(c9));
 var howework_routes_default = router17;
 
-// src/modules/hr/hr.routes.ts
+// src/modules/superAdmin/superAdmin.route.ts
 var import_express18 = require("express");
+
+// src/modules/superAdmin/superAdmin.service.ts
+init_db();
+var import_bcryptjs7 = __toESM(require("bcryptjs"));
+var getAllSchools = async () => {
+  const schools = await db_default.school.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: {
+        select: {
+          students: true,
+          teachers: true,
+          staff: true,
+          classes: true,
+          adminUsers: true
+        }
+      }
+    }
+  });
+  const enriched = await Promise.all(
+    schools.map(async (school) => {
+      const subscription = await db_default.subscription.findFirst({
+        where: { schoolId: school.id },
+        orderBy: { createdAt: "desc" }
+      });
+      return {
+        id: school.id,
+        name: school.name,
+        code: school.code,
+        address: school.address,
+        phone: school.phone,
+        email: school.email,
+        principalName: school.principalName,
+        principalEmail: school.principalEmail,
+        isActive: school.isActive,
+        academicYear: school.academicYear,
+        gradingScale: school.gradingScale,
+        createdAt: school.createdAt,
+        stats: {
+          students: school._count.students,
+          teachers: school._count.teachers,
+          staff: school._count.staff,
+          classes: school._count.classes,
+          admins: school._count.adminUsers
+        },
+        subscription: subscription ? {
+          plan: subscription.plan,
+          status: subscription.status,
+          startDate: subscription.startDate,
+          endDate: subscription.endDate,
+          amount: subscription.amount
+        } : null
+      };
+    })
+  );
+  return enriched;
+};
+var getSchoolById = async (schoolId) => {
+  const school = await db_default.school.findUnique({
+    where: { id: schoolId },
+    include: {
+      adminUsers: {
+        select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true }
+      },
+      _count: {
+        select: { students: true, teachers: true, staff: true, classes: true }
+      }
+    }
+  });
+  if (!school) return null;
+  const subscription = await db_default.subscription.findFirst({
+    where: { schoolId },
+    orderBy: { createdAt: "desc" }
+  });
+  return {
+    ...school,
+    subscription
+  };
+};
+var createSchool = async (dto) => {
+  const existing = await db_default.school.findUnique({ where: { code: dto.code } });
+  if (existing) {
+    const err = new Error("School with this code already exists");
+    err.status = 409;
+    throw err;
+  }
+  const school = await db_default.school.create({
+    data: {
+      name: dto.name,
+      code: dto.code,
+      address: dto.address,
+      phone: dto.phone,
+      email: dto.email,
+      principalName: dto.principalName,
+      principalEmail: dto.principalEmail,
+      academicYear: dto.academicYear,
+      gradingScale: dto.gradingScale
+    }
+  });
+  return school;
+};
+var updateSchool = async (schoolId, dto) => {
+  if (dto.code) {
+    const existing = await db_default.school.findFirst({
+      where: { code: dto.code, id: { not: schoolId } }
+    });
+    if (existing) {
+      const err = new Error("School with this code already exists");
+      err.status = 409;
+      throw err;
+    }
+  }
+  const school = await db_default.school.update({
+    where: { id: schoolId },
+    data: dto
+  });
+  return school;
+};
+var suspendSchool = async (schoolId) => {
+  const school = await db_default.school.update({
+    where: { id: schoolId },
+    data: { isActive: false }
+  });
+  await db_default.user.updateMany({
+    where: { schoolId },
+    data: { isActive: false }
+  });
+  return school;
+};
+var reactivateSchool = async (schoolId) => {
+  const school = await db_default.school.update({
+    where: { id: schoolId },
+    data: { isActive: true }
+  });
+  await db_default.user.updateMany({
+    where: { schoolId },
+    data: { isActive: true }
+  });
+  return school;
+};
+var deleteSchool = async (schoolId) => {
+  await db_default.school.delete({ where: { id: schoolId } });
+};
+var createSchoolAdmin = async (dto) => {
+  const existing = await db_default.user.findUnique({ where: { email: dto.email } });
+  if (existing) {
+    const err = new Error("User with this email already exists");
+    err.status = 409;
+    throw err;
+  }
+  const school = await db_default.school.findUnique({ where: { id: dto.schoolId } });
+  if (!school) {
+    const err = new Error("School not found");
+    err.status = 404;
+    throw err;
+  }
+  const hashedPassword = await import_bcryptjs7.default.hash(dto.password, 10);
+  const user = await db_default.user.create({
+    data: {
+      name: dto.name,
+      email: dto.email,
+      passwordHash: hashedPassword,
+      role: "SCHOOL_ADMIN",
+      schoolId: dto.schoolId,
+      adminProfile: {
+        create: {
+          name: dto.name,
+          phone: dto.phone
+        }
+      }
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      schoolId: true
+    }
+  });
+  return user;
+};
+var updateSchoolAdmin = async (userId, data) => {
+  const user = await db_default.user.findUnique({ where: { id: userId } });
+  if (!user || user.role !== "SCHOOL_ADMIN") {
+    const err = new Error("School Admin not found");
+    err.status = 404;
+    throw err;
+  }
+  const updated = await db_default.user.update({
+    where: { id: userId },
+    data: {
+      name: data.name,
+      email: data.email,
+      isActive: data.isActive,
+      adminProfile: data.phone ? { update: { phone: data.phone } } : void 0
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      schoolId: true,
+      adminProfile: { select: { phone: true } }
+    }
+  });
+  return updated;
+};
+var deactivateSchoolAdmin = async (userId) => {
+  const user = await db_default.user.findUnique({ where: { id: userId } });
+  if (!user || user.role !== "SCHOOL_ADMIN") {
+    const err = new Error("School Admin not found");
+    err.status = 404;
+    throw err;
+  }
+  const updated = await db_default.user.update({
+    where: { id: userId },
+    data: { isActive: false },
+    select: { id: true, name: true, email: true, role: true, isActive: true }
+  });
+  return updated;
+};
+var getAllUsers = async (filters) => {
+  const where = {};
+  if (filters?.role) where.role = filters.role;
+  if (filters?.schoolId) where.schoolId = filters.schoolId;
+  if (typeof filters?.isActive === "boolean") where.isActive = filters.isActive;
+  const users = await db_default.user.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      schoolId: true,
+      school: { select: { id: true, name: true, code: true } },
+      adminProfile: { select: { phone: true } },
+      teacherProfile: { select: { employeeId: true, designation: true } },
+      studentProfile: { select: { studentId: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  return users;
+};
+var updateUserSchool = async (userId, schoolId) => {
+  const user = await db_default.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) {
+    const err = new Error("User not found");
+    err.status = 404;
+    throw err;
+  }
+  if (schoolId) {
+    const school = await db_default.school.findUnique({ where: { id: schoolId }, select: { id: true } });
+    if (!school) {
+      const err = new Error("School not found");
+      err.status = 404;
+      throw err;
+    }
+  }
+  return db_default.user.update({
+    where: { id: userId },
+    data: { schoolId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      schoolId: true,
+      school: { select: { id: true, name: true, code: true } }
+    }
+  });
+};
+var assignableRoles = [
+  "SUPER_ADMIN",
+  "SCHOOL_ADMIN",
+  "ACCOUNTANT",
+  "TEACHER",
+  "STUDENT",
+  "PARENT",
+  "EXAM_CONTROLLER",
+  "HR"
+];
+var updateUserAssignment = async (userId, input) => {
+  const user = await db_default.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, schoolId: true }
+  });
+  if (!user) {
+    const err = new Error("User not found");
+    err.status = 404;
+    throw err;
+  }
+  const role = input.role;
+  if (typeof role !== "string" || !assignableRoles.includes(role)) {
+    const err = new Error("A valid role is required");
+    err.status = 400;
+    throw err;
+  }
+  const schoolId = typeof input.schoolId === "string" && input.schoolId.trim() ? input.schoolId : null;
+  if (role === "SUPER_ADMIN" && schoolId) {
+    const err = new Error("Super Admin must use the Platform school assignment");
+    err.status = 400;
+    throw err;
+  }
+  if (role !== "SUPER_ADMIN" && !schoolId) {
+    const err = new Error("Select a school before assigning this role");
+    err.status = 400;
+    throw err;
+  }
+  if (schoolId) {
+    const school = await db_default.school.findUnique({ where: { id: schoolId }, select: { id: true, isActive: true } });
+    if (!school) {
+      const err = new Error("School not found");
+      err.status = 404;
+      throw err;
+    }
+    if (!school.isActive) {
+      const err = new Error("Cannot assign a user to a suspended school");
+      err.status = 400;
+      throw err;
+    }
+  }
+  return db_default.user.update({
+    where: { id: userId },
+    data: { role, schoolId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      schoolId: true,
+      school: { select: { id: true, name: true, code: true } }
+    }
+  });
+};
+var getAuditLogs = async (filters) => {
+  const where = {};
+  if (filters?.userId) where.userId = filters.userId;
+  if (filters?.action) where.action = { contains: filters.action };
+  const page = Math.max(1, filters?.page ?? 1);
+  const take = filters?.limit ?? 20;
+  const skip = (page - 1) * take;
+  const [logs, total] = await Promise.all([
+    db_default.auditLog.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take
+    }),
+    db_default.auditLog.count({ where })
+  ]);
+  return { logs, total, page, totalPages: Math.max(1, Math.ceil(total / take)) };
+};
+var updateRolePermissions = async (role, permissions) => {
+  return { role, permissions };
+};
+var triggerBackup = async (requestedBy) => {
+  const log = await db_default.auditLog.create({
+    data: {
+      userId: requestedBy,
+      action: "TRIGGER_BACKUP",
+      metadata: { timestamp: (/* @__PURE__ */ new Date()).toISOString() }
+    }
+  });
+  return {
+    success: true,
+    message: "Backup triggered successfully",
+    backupId: log.id,
+    timestamp: log.createdAt
+  };
+};
+var getSystemSettings = async () => {
+  const settings = await db_default.systemSettings.findMany();
+  const map = {};
+  for (const s of settings) map[s.key] = s.value;
+  return map;
+};
+var updateSystemSetting = async (key, value, updatedBy, description) => {
+  const setting = await db_default.systemSettings.upsert({
+    where: { key },
+    update: { value, description, updatedBy },
+    create: { key, value, description, updatedBy }
+  });
+  return setting;
+};
+var createSubscription = async (dto) => {
+  const school = await db_default.school.findUnique({ where: { id: dto.schoolId } });
+  if (!school) {
+    const err = new Error("School not found");
+    err.status = 404;
+    throw err;
+  }
+  const subscription = await db_default.subscription.create({
+    data: {
+      schoolId: dto.schoolId,
+      plan: dto.plan,
+      startDate: new Date(dto.startDate),
+      endDate: new Date(dto.endDate),
+      amount: dto.amount,
+      stripeCustomerId: dto.stripeCustomerId,
+      stripeSubId: dto.stripeSubId
+    }
+  });
+  return subscription;
+};
+var updateSubscription = async (subscriptionId, data) => {
+  const subscription = await db_default.subscription.update({
+    where: { id: subscriptionId },
+    data: {
+      ...data,
+      endDate: data.endDate ? new Date(data.endDate) : void 0
+    }
+  });
+  return subscription;
+};
+var getPlatformAnalytics = async () => {
+  const [
+    totalSchools,
+    activeSchools,
+    totalStudents,
+    totalTeachers,
+    totalStaff,
+    totalClasses,
+    totalUsers,
+    recentAuditLogs
+  ] = await Promise.all([
+    db_default.school.count(),
+    db_default.school.count({ where: { isActive: true } }),
+    db_default.student.count(),
+    db_default.teacher.count(),
+    db_default.staff.count(),
+    db_default.class.count(),
+    db_default.user.count(),
+    db_default.auditLog.count({
+      where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3) } }
+    })
+  ]);
+  const schoolBreakdown = await db_default.school.findMany({
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      _count: { select: { students: true, teachers: true, classes: true } }
+    }
+  });
+  return {
+    totalSchools,
+    activeSchools,
+    inactiveSchools: totalSchools - activeSchools,
+    totalStudents,
+    totalTeachers,
+    totalStaff,
+    totalClasses,
+    totalUsers,
+    recentAuditLogs,
+    schoolBreakdown
+  };
+};
+var getRevenueReport = async () => {
+  const allPayments = await db_default.payment.findMany({
+    select: {
+      id: true,
+      amount: true,
+      status: true,
+      method: true,
+      paidAt: true,
+      student: {
+        select: {
+          schoolId: true,
+          school: { select: { id: true, name: true, code: true } }
+        }
+      }
+    },
+    orderBy: { paidAt: "desc" }
+  });
+  const totalRevenue = allPayments.filter((p) => p.status === "PAID").reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  const bySchool = {};
+  for (const p of allPayments) {
+    if (p.status !== "PAID") continue;
+    const sid = p.student?.schoolId ?? "unknown";
+    const s = p.student?.school;
+    const key = s?.id ?? sid;
+    if (!bySchool[key]) {
+      bySchool[key] = { name: s?.name ?? "Unknown", code: s?.code ?? "N/A", revenue: 0, count: 0 };
+    }
+    bySchool[key].revenue += p.amount ?? 0;
+    bySchool[key].count += 1;
+  }
+  return {
+    totalRevenue,
+    totalTransactions: allPayments.filter((p) => p.status === "PAID").length,
+    bySchool: Object.values(bySchool)
+  };
+};
+
+// src/modules/superAdmin/superAdmin.controller.ts
+var param = (value) => {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+};
+var SuperAdminController = class {
+  // ─── Schools ──────────────────────────────────────────────────
+  async getSchools(req, res, next) {
+    try {
+      const data = await getAllSchools();
+      res.status(200).json({ success: true, data, message: "Schools fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async getSchool(req, res, next) {
+    try {
+      const data = await getSchoolById(param(req.params.schoolId));
+      if (!data) {
+        res.status(404).json({ success: false, message: "School not found" });
+        return;
+      }
+      res.status(200).json({ success: true, data, message: "School fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async createSchool(req, res, next) {
+    try {
+      const data = await createSchool(req.body);
+      res.status(201).json({ success: true, data, message: "School created" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateSchool(req, res, next) {
+    try {
+      const data = await updateSchool(param(req.params.schoolId), req.body);
+      res.status(200).json({ success: true, data, message: "School updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async suspendSchool(req, res, next) {
+    try {
+      const data = await suspendSchool(param(req.params.schoolId));
+      res.status(200).json({ success: true, data, message: "School suspended" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async reactivateSchool(req, res, next) {
+    try {
+      const data = await reactivateSchool(param(req.params.schoolId));
+      res.status(200).json({ success: true, data, message: "School reactivated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async deleteSchool(req, res, next) {
+    try {
+      await deleteSchool(param(req.params.schoolId));
+      res.status(200).json({ success: true, message: "School deleted" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── School Admins ────────────────────────────────────────────
+  async createSchoolAdmin(req, res, next) {
+    try {
+      const data = await createSchoolAdmin(req.body);
+      res.status(201).json({ success: true, data, message: "School Admin created" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateSchoolAdmin(req, res, next) {
+    try {
+      const data = await updateSchoolAdmin(param(req.params.userId), req.body);
+      res.status(200).json({ success: true, data, message: "School Admin updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async deactivateSchoolAdmin(req, res, next) {
+    try {
+      const data = await deactivateSchoolAdmin(param(req.params.userId));
+      res.status(200).json({ success: true, data, message: "School Admin deactivated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── All Users ────────────────────────────────────────────────
+  async getAllUsers(req, res, next) {
+    try {
+      const { role, schoolId, isActive } = req.query;
+      const data = await getAllUsers({
+        role: typeof role === "string" ? role : void 0,
+        schoolId: typeof schoolId === "string" ? schoolId : void 0,
+        isActive: isActive === "true" ? true : isActive === "false" ? false : void 0
+      });
+      res.status(200).json({ success: true, data, message: "Users fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateUserSchool(req, res, next) {
+    try {
+      const schoolId = typeof req.body.schoolId === "string" && req.body.schoolId.trim() ? req.body.schoolId : null;
+      const data = await updateUserSchool(param(req.params.userId), schoolId);
+      res.status(200).json({ success: true, data, message: "User school assignment updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateUserAssignment(req, res, next) {
+    try {
+      const data = await updateUserAssignment(param(req.params.userId), req.body);
+      res.status(200).json({ success: true, data, message: "User role and school assignment updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Audit Logs ───────────────────────────────────────────────
+  async getAuditLogs(req, res, next) {
+    try {
+      const { userId, action, limit, page } = req.query;
+      const data = await getAuditLogs({
+        userId: typeof userId === "string" ? userId : void 0,
+        action: typeof action === "string" ? action : void 0,
+        limit: typeof limit === "string" ? parseInt(limit) : void 0,
+        page: typeof page === "string" ? parseInt(page) : void 0
+      });
+      res.status(200).json({ success: true, data, message: "Audit logs fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── RBAC ─────────────────────────────────────────────────────
+  async updateRolePermissions(req, res, next) {
+    try {
+      const { role, permissions } = req.body;
+      const data = await updateRolePermissions(role, permissions);
+      res.status(200).json({ success: true, data, message: "Permissions updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Backup ───────────────────────────────────────────────────
+  async triggerBackup(req, res, next) {
+    try {
+      const data = await triggerBackup(req.user.id);
+      res.status(200).json({ success: true, data, message: "Backup triggered" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── System Settings ──────────────────────────────────────────
+  async getSystemSettings(req, res, next) {
+    try {
+      const data = await getSystemSettings();
+      res.status(200).json({ success: true, data, message: "Settings fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateSystemSetting(req, res, next) {
+    try {
+      const key = param(req.params.key);
+      const { value, description } = req.body;
+      const data = await updateSystemSetting(key, value, req.user.id, description);
+      res.status(200).json({ success: true, data, message: "Setting updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Analytics ────────────────────────────────────────────────
+  async getPlatformAnalytics(req, res, next) {
+    try {
+      const data = await getPlatformAnalytics();
+      res.status(200).json({ success: true, data, message: "Analytics fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Revenue ──────────────────────────────────────────────────
+  async getRevenueReport(req, res, next) {
+    try {
+      const data = await getRevenueReport();
+      res.status(200).json({ success: true, data, message: "Revenue report fetched" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  // ─── Subscriptions ────────────────────────────────────────────
+  async createSubscription(req, res, next) {
+    try {
+      const data = await createSubscription(req.body);
+      res.status(201).json({ success: true, data, message: "Subscription created" });
+    } catch (err) {
+      next(err);
+    }
+  }
+  async updateSubscription(req, res, next) {
+    try {
+      const data = await updateSubscription(param(req.params.subscriptionId), req.body);
+      res.status(200).json({ success: true, data, message: "Subscription updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+};
+
+// src/modules/superAdmin/superAdmin.route.ts
+var router18 = (0, import_express18.Router)();
+var controller = new SuperAdminController();
+router18.use(authenticate);
+router18.use(authorizeRoles("SUPER_ADMIN"));
+router18.get("/schools", controller.getSchools.bind(controller));
+router18.post("/schools", controller.createSchool.bind(controller));
+router18.post("/schools/:schoolId/suspend", controller.suspendSchool.bind(controller));
+router18.post("/schools/:schoolId/reactivate", controller.reactivateSchool.bind(controller));
+router18.get("/schools/:schoolId", controller.getSchool.bind(controller));
+router18.put("/schools/:schoolId", controller.updateSchool.bind(controller));
+router18.delete("/schools/:schoolId", controller.deleteSchool.bind(controller));
+router18.post("/schools/:schoolId/admins", controller.createSchoolAdmin.bind(controller));
+router18.put("/admins/:userId", controller.updateSchoolAdmin.bind(controller));
+router18.post("/admins/:userId/deactivate", controller.deactivateSchoolAdmin.bind(controller));
+router18.get("/users", controller.getAllUsers.bind(controller));
+router18.put("/users/:userId/school", controller.updateUserSchool.bind(controller));
+router18.put("/users/:userId/assignment", controller.updateUserAssignment.bind(controller));
+router18.get("/audit-logs", controller.getAuditLogs.bind(controller));
+router18.put("/rbac/:role", controller.updateRolePermissions.bind(controller));
+router18.post("/backup", controller.triggerBackup.bind(controller));
+router18.get("/settings", controller.getSystemSettings.bind(controller));
+router18.put("/settings/:key", controller.updateSystemSetting.bind(controller));
+router18.get("/analytics", controller.getPlatformAnalytics.bind(controller));
+router18.get("/revenue", controller.getRevenueReport.bind(controller));
+router18.post("/subscriptions", controller.createSubscription.bind(controller));
+router18.put("/subscriptions/:subscriptionId", controller.updateSubscription.bind(controller));
+var superAdmin_route_default = router18;
+
+// src/modules/hr/hr.routes.ts
+var import_express19 = require("express");
 
 // src/modules/hr/hr.service.ts
 init_db();
@@ -27831,51 +28723,51 @@ var HRController = class {
 };
 
 // src/modules/hr/hr.routes.ts
-var router18 = (0, import_express18.Router)();
+var router19 = (0, import_express19.Router)();
 var c10 = new HRController();
-router18.use(authenticate);
-router18.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.getDashboardStats.bind(c10));
-router18.post("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createDepartment.bind(c10));
-router18.get("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllDepartments.bind(c10));
-router18.patch("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateDepartment.bind(c10));
-router18.delete("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.deleteDepartment.bind(c10));
-router18.post("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createStaff.bind(c10));
-router18.get("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllStaff.bind(c10));
-router18.get("/staff/directory", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.getStaffDirectory.bind(c10));
-router18.get("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findStaffById.bind(c10));
-router18.patch("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateStaff.bind(c10));
-router18.delete("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.archiveStaff.bind(c10));
-router18.patch("/staff/:id/restore", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.restoreStaff.bind(c10));
-router18.post("/attendance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordAttendance.bind(c10));
-router18.post("/attendance/bulk", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordBulkAttendance.bind(c10));
-router18.get("/attendance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getStaffAttendance.bind(c10));
-router18.get("/attendance/daily", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getDailyAttendance.bind(c10));
-router18.get("/attendance/monthly-summary", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getAttendanceMonthlySummary.bind(c10));
-router18.post("/leave", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.createLeaveRequest.bind(c10));
-router18.get("/leave", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllLeaveRequests.bind(c10));
-router18.get("/leave/me", authorizeRoles("TEACHER"), c10.getMyLeaveRequests.bind(c10));
-router18.patch("/leave/:id/approve", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.approveLeaveRequest.bind(c10));
-router18.get("/leave/staff/:id/balance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getLeaveBalance.bind(c10));
-router18.post("/leave/staff/:id/balance/init", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.initializeLeaveBalances.bind(c10));
-router18.post("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.generatePayroll.bind(c10));
-router18.get("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.findAllPayrolls.bind(c10));
-router18.get("/payroll/pending", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPendingPayrolls.bind(c10));
-router18.get("/payroll/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPayrollHistory.bind(c10));
-router18.get("/payroll/:id/download", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.downloadPayslip.bind(c10));
-router18.patch("/payroll/:id/mark-paid", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.markPayrollPaid.bind(c10));
-router18.post("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.createPerformanceReview.bind(c10));
-router18.get("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllPerformanceReviews.bind(c10));
-router18.get("/performance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findPerformanceReviews.bind(c10));
-router18.get("/performance/me", authorizeRoles("TEACHER"), c10.getMyPerformanceReviews.bind(c10));
-router18.post("/critical-actions", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.requestCriticalAction.bind(c10));
-router18.get("/critical-actions", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findPendingCriticalActions.bind(c10));
-router18.get("/critical-actions/:id", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findCriticalActionById.bind(c10));
-router18.patch("/critical-actions/:id/approve", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.approveCriticalAction.bind(c10));
-router18.patch("/critical-actions/:id/reject", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.rejectCriticalAction.bind(c10));
-var hr_routes_default = router18;
+router19.use(authenticate);
+router19.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.getDashboardStats.bind(c10));
+router19.post("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createDepartment.bind(c10));
+router19.get("/departments", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllDepartments.bind(c10));
+router19.patch("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateDepartment.bind(c10));
+router19.delete("/departments/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.deleteDepartment.bind(c10));
+router19.post("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.createStaff.bind(c10));
+router19.get("/staff", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findAllStaff.bind(c10));
+router19.get("/staff/directory", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.getStaffDirectory.bind(c10));
+router19.get("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c10.findStaffById.bind(c10));
+router19.patch("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.updateStaff.bind(c10));
+router19.delete("/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.archiveStaff.bind(c10));
+router19.patch("/staff/:id/restore", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c10.restoreStaff.bind(c10));
+router19.post("/attendance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordAttendance.bind(c10));
+router19.post("/attendance/bulk", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.recordBulkAttendance.bind(c10));
+router19.get("/attendance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getStaffAttendance.bind(c10));
+router19.get("/attendance/daily", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getDailyAttendance.bind(c10));
+router19.get("/attendance/monthly-summary", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.getAttendanceMonthlySummary.bind(c10));
+router19.post("/leave", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.createLeaveRequest.bind(c10));
+router19.get("/leave", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllLeaveRequests.bind(c10));
+router19.get("/leave/me", authorizeRoles("TEACHER"), c10.getMyLeaveRequests.bind(c10));
+router19.patch("/leave/:id/approve", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.approveLeaveRequest.bind(c10));
+router19.get("/leave/staff/:id/balance", authorizeRoles("HR", "SCHOOL_ADMIN", "TEACHER"), c10.getLeaveBalance.bind(c10));
+router19.post("/leave/staff/:id/balance/init", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.initializeLeaveBalances.bind(c10));
+router19.post("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.generatePayroll.bind(c10));
+router19.get("/payroll", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.findAllPayrolls.bind(c10));
+router19.get("/payroll/pending", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPendingPayrolls.bind(c10));
+router19.get("/payroll/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.getPayrollHistory.bind(c10));
+router19.get("/payroll/:id/download", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.downloadPayslip.bind(c10));
+router19.patch("/payroll/:id/mark-paid", authorizeRoles("HR", "SCHOOL_ADMIN", "ACCOUNTANT"), c10.markPayrollPaid.bind(c10));
+router19.post("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.createPerformanceReview.bind(c10));
+router19.get("/performance", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findAllPerformanceReviews.bind(c10));
+router19.get("/performance/staff/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.findPerformanceReviews.bind(c10));
+router19.get("/performance/me", authorizeRoles("TEACHER"), c10.getMyPerformanceReviews.bind(c10));
+router19.post("/critical-actions", authorizeRoles("HR", "SCHOOL_ADMIN"), c10.requestCriticalAction.bind(c10));
+router19.get("/critical-actions", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findPendingCriticalActions.bind(c10));
+router19.get("/critical-actions/:id", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.findCriticalActionById.bind(c10));
+router19.patch("/critical-actions/:id/approve", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.approveCriticalAction.bind(c10));
+router19.patch("/critical-actions/:id/reject", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c10.rejectCriticalAction.bind(c10));
+var hr_routes_default = router19;
 
 // src/modules/dashboard/dashboard.route.ts
-var import_express19 = require("express");
+var import_express20 = require("express");
 
 // src/modules/dashboard/dashboard.service.ts
 init_db();
@@ -27989,15 +28881,15 @@ var DashboardController = class {
 };
 
 // src/modules/dashboard/dashboard.route.ts
-var router19 = (0, import_express19.Router)();
-var controller = new DashboardController();
-router19.use(authenticate);
-router19.get("/student/dashboard/exams", authorizeRoles("STUDENT"), controller.getStudentExams.bind(controller));
-router19.get("/parent/dashboard/exams", authorizeRoles("PARENT"), controller.getParentExams.bind(controller));
-var dashboard_route_default = router19;
+var router20 = (0, import_express20.Router)();
+var controller2 = new DashboardController();
+router20.use(authenticate);
+router20.get("/student/dashboard/exams", authorizeRoles("STUDENT"), controller2.getStudentExams.bind(controller2));
+router20.get("/parent/dashboard/exams", authorizeRoles("PARENT"), controller2.getParentExams.bind(controller2));
+var dashboard_route_default = router20;
 
 // src/modules/dashboard/dashboard-school.route.ts
-var import_express20 = require("express");
+var import_express21 = require("express");
 
 // src/modules/dashboard/dashboard-school.service.ts
 init_db();
@@ -28074,14 +28966,14 @@ async function getFeeSummary2(schoolId) {
       _count: { id: true }
     }),
     db_default.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null, ...admissionScope },
       _sum: { paymentAmount: true },
       _count: { id: true }
     })
   ]);
   const admissionMethodGroups = await db_default.admissionApplication.groupBy({
     by: ["paymentMethod"],
-    where: { paymentStatus: "PAID", paymentAmount: { not: null }, ...admissionScope },
+    where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null, ...admissionScope },
     _sum: { paymentAmount: true },
     _count: { id: true }
   });
@@ -28212,15 +29104,15 @@ var schoolScope = async (req, res, next) => {
 };
 
 // src/modules/dashboard/dashboard-school.route.ts
-var router20 = (0, import_express20.Router)();
-var controller2 = new SchoolAdminDashboardController();
-router20.use(authenticate);
-router20.use(schoolScope);
-router20.get("/school-admin", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), controller2.getDashboard.bind(controller2));
-var dashboardSchoolRoutes = router20;
+var router21 = (0, import_express21.Router)();
+var controller3 = new SchoolAdminDashboardController();
+router21.use(authenticate);
+router21.use(schoolScope);
+router21.get("/school-admin", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), controller3.getDashboard.bind(controller3));
+var dashboardSchoolRoutes = router21;
 
 // src/modules/recruitment/recruitment.routes.ts
-var import_express21 = require("express");
+var import_express22 = require("express");
 
 // src/modules/recruitment/recruitment.service.ts
 init_db();
@@ -28699,34 +29591,34 @@ var RecruitmentController = class {
 };
 
 // src/modules/recruitment/recruitment.routes.ts
-var router21 = (0, import_express21.Router)();
+var router22 = (0, import_express22.Router)();
 var c11 = new RecruitmentController();
-router21.get("/jobs/public", c11.findPublicJobPostings.bind(c11));
-router21.get("/jobs/:id", c11.findJobPostingById.bind(c11));
-router21.post("/applicants/public", c11.createApplicant.bind(c11));
-router21.use(authenticate);
-router21.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.getDashboardStats.bind(c11));
-router21.post("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createJobPosting.bind(c11));
-router21.get("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllJobPostings.bind(c11));
-router21.patch("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateJobPosting.bind(c11));
-router21.patch("/jobs/:id/close", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.closeJobPosting.bind(c11));
-router21.post("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createApplicant.bind(c11));
-router21.get("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllApplicants.bind(c11));
-router21.get("/applicants/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findApplicantById.bind(c11));
-router21.patch("/applicants/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateApplicantStatus.bind(c11));
-router21.post("/interviews", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createInterview.bind(c11));
-router21.patch("/interviews/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateInterview.bind(c11));
-router21.post("/offers", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createOffer.bind(c11));
-router21.get("/offers/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findOfferById.bind(c11));
-router21.patch("/offers/:id/accept", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.acceptOffer.bind(c11));
-router21.patch("/offers/:id/reject", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.rejectOffer.bind(c11));
-router21.post("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createDesignationSalary.bind(c11));
-router21.get("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllDesignationSalaries.bind(c11));
-router21.get("/designation-salaries/:designation", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.getDesignationSalary.bind(c11));
-var recruitment_routes_default = router21;
+router22.get("/jobs/public", c11.findPublicJobPostings.bind(c11));
+router22.get("/jobs/:id", c11.findJobPostingById.bind(c11));
+router22.post("/applicants/public", c11.createApplicant.bind(c11));
+router22.use(authenticate);
+router22.get("/dashboard", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.getDashboardStats.bind(c11));
+router22.post("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createJobPosting.bind(c11));
+router22.get("/jobs", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllJobPostings.bind(c11));
+router22.patch("/jobs/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateJobPosting.bind(c11));
+router22.patch("/jobs/:id/close", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.closeJobPosting.bind(c11));
+router22.post("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createApplicant.bind(c11));
+router22.get("/applicants", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllApplicants.bind(c11));
+router22.get("/applicants/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findApplicantById.bind(c11));
+router22.patch("/applicants/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateApplicantStatus.bind(c11));
+router22.post("/interviews", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createInterview.bind(c11));
+router22.patch("/interviews/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.updateInterview.bind(c11));
+router22.post("/offers", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createOffer.bind(c11));
+router22.get("/offers/:id", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findOfferById.bind(c11));
+router22.patch("/offers/:id/accept", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.acceptOffer.bind(c11));
+router22.patch("/offers/:id/reject", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.rejectOffer.bind(c11));
+router22.post("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN"), c11.createDesignationSalary.bind(c11));
+router22.get("/designation-salaries", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.findAllDesignationSalaries.bind(c11));
+router22.get("/designation-salaries/:designation", authorizeRoles("HR", "SCHOOL_ADMIN", "SUPER_ADMIN", "TEACHER"), c11.getDesignationSalary.bind(c11));
+var recruitment_routes_default = router22;
 
 // src/modules/student/tc.route.ts
-var import_express22 = require("express");
+var import_express23 = require("express");
 
 // src/modules/student/tc.controller.ts
 var import_pdfkit4 = __toESM(require("pdfkit"));
@@ -28853,16 +29745,16 @@ var TCController = class {
 };
 
 // src/modules/student/tc.route.ts
-var router22 = (0, import_express22.Router)();
+var router23 = (0, import_express23.Router)();
 var tcController = new TCController();
-router22.use(authenticate);
-router22.get("/all", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.getAll.bind(tcController));
-router22.get("/:studentId/download", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.downloadTC.bind(tcController));
-router22.post("/generate", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.generateTC.bind(tcController));
-var tc_route_default = router22;
+router23.use(authenticate);
+router23.get("/all", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.getAll.bind(tcController));
+router23.get("/:studentId/download", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.downloadTC.bind(tcController));
+router23.post("/generate", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), tcController.generateTC.bind(tcController));
+var tc_route_default = router23;
 
 // src/modules/role/role.route.ts
-var import_express23 = require("express");
+var import_express24 = require("express");
 
 // src/modules/role/role.controller.ts
 init_db();
@@ -28920,14 +29812,14 @@ var RoleController = class {
 };
 
 // src/modules/role/role.route.ts
-var router23 = (0, import_express23.Router)();
+var router24 = (0, import_express24.Router)();
 var roleController = new RoleController();
-router23.post("/assign", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.assignRole.bind(roleController));
-router23.post("/revoke", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.revokeRole.bind(roleController));
-var role_route_default = router23;
+router24.post("/assign", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.assignRole.bind(roleController));
+router24.post("/revoke", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), roleController.revokeRole.bind(roleController));
+var role_route_default = router24;
 
 // src/modules/report/reports.route.ts
-var import_express24 = require("express");
+var import_express25 = require("express");
 
 // src/modules/report/reports.service.ts
 init_db();
@@ -29270,21 +30162,21 @@ var ReportsController = class {
 };
 
 // src/modules/report/reports.route.ts
-var router24 = (0, import_express24.Router)();
+var router25 = (0, import_express25.Router)();
 var c12 = new ReportsController();
-router24.use(authenticate);
-router24.get("/students/pdf", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsPdf.bind(c12));
-router24.get("/students/csv", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsCsv.bind(c12));
-router24.get("/attendance/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendancePdf.bind(c12));
-router24.get("/attendance/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendanceCsv.bind(c12));
-router24.get("/fees/pdf", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesPdf.bind(c12));
-router24.get("/fees/csv", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesCsv.bind(c12));
-router24.get("/results/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsPdf.bind(c12));
-router24.get("/results/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsCsv.bind(c12));
-var reports_route_default = router24;
+router25.use(authenticate);
+router25.get("/students/pdf", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsPdf.bind(c12));
+router25.get("/students/csv", authorizeRoles("SCHOOL_ADMIN", "SUPER_ADMIN"), c12.exportStudentsCsv.bind(c12));
+router25.get("/attendance/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendancePdf.bind(c12));
+router25.get("/attendance/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportAttendanceCsv.bind(c12));
+router25.get("/fees/pdf", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesPdf.bind(c12));
+router25.get("/fees/csv", authorizeRoles("SCHOOL_ADMIN", "ACCOUNTANT"), c12.exportFeesCsv.bind(c12));
+router25.get("/results/pdf", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsPdf.bind(c12));
+router25.get("/results/csv", authorizeRoles("SCHOOL_ADMIN", "TEACHER", "EXAM_CONTROLLER"), c12.exportResultsCsv.bind(c12));
+var reports_route_default = router25;
 
 // src/modules/public/public.route.ts
-var import_express25 = require("express");
+var import_express26 = require("express");
 
 // src/modules/public/public.controller.ts
 init_db();
@@ -29339,46 +30231,47 @@ async function getSchoolOverview(_req, res, next) {
 }
 
 // src/modules/public/public.route.ts
-var router25 = (0, import_express25.Router)();
-router25.get("/school-overview", getSchoolOverview);
-var public_route_default = router25;
+var router26 = (0, import_express26.Router)();
+router26.get("/school-overview", getSchoolOverview);
+var public_route_default = router26;
 
 // src/routes/index.ts
-var router26 = import_express26.default.Router();
-router26.get("/health", (req, res) => {
+var router27 = import_express27.default.Router();
+router27.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "API is healthy" });
 });
-router26.use("/public", public_route_default);
-router26.use(schoolScope);
-router26.use("/auth", auth_route_default);
-router26.use("/students", students_route_default);
-router26.use("/subjects", subject_router_default);
-router26.use("/classes", class_route_default);
-router26.use("/exams", exam_route_default);
-router26.use("/attendance", attendacne_router_default);
-router26.use("/teachers", teacher_routes_default);
-router26.use("/results", result_router_default);
-router26.use("/admission", admission_routes_default);
-router26.use("/fees", router_default);
-router26.use("/teaching", teachingApplication_routes_default);
-router26.use("/notices", notice_route_default);
-router26.use("/timetable", timetable_routes_default);
-router26.use("/homework", howework_routes_default);
-router26.use("/parents", parents_routes_default);
-router26.use("/notifications", notifictaion_routes_default);
-router26.use("/hr", hr_routes_default);
-router26.use("/recruitment", recruitment_routes_default);
-router26.use("/grading-rules", gradingRoutes);
-router26.use("/dashboard", dashboard_route_default);
-router26.use("/dashboard", dashboardSchoolRoutes);
-router26.use("/tc", tc_route_default);
-router26.use("/roles", role_route_default);
-router26.use("/reports", reports_route_default);
-var routes_default = router26;
+router27.use("/public", public_route_default);
+router27.use(schoolScope);
+router27.use("/auth", auth_route_default);
+router27.use("/students", students_route_default);
+router27.use("/subjects", subject_router_default);
+router27.use("/classes", class_route_default);
+router27.use("/exams", exam_route_default);
+router27.use("/attendance", attendacne_router_default);
+router27.use("/teachers", teacher_routes_default);
+router27.use("/results", result_router_default);
+router27.use("/admission", admission_routes_default);
+router27.use("/fees", router_default);
+router27.use("/teaching", teachingApplication_routes_default);
+router27.use("/notices", notice_route_default);
+router27.use("/timetable", timetable_routes_default);
+router27.use("/homework", howework_routes_default);
+router27.use("/parents", parents_routes_default);
+router27.use("/notifications", notifictaion_routes_default);
+router27.use("/hr", hr_routes_default);
+router27.use("/recruitment", recruitment_routes_default);
+router27.use("/super-admin", superAdmin_route_default);
+router27.use("/grading-rules", gradingRoutes);
+router27.use("/dashboard", dashboard_route_default);
+router27.use("/dashboard", dashboardSchoolRoutes);
+router27.use("/tc", tc_route_default);
+router27.use("/roles", role_route_default);
+router27.use("/reports", reports_route_default);
+var routes_default = router27;
 
 // src/index.ts
 import_dotenv.default.config();
-var app = (0, import_express27.default)();
+var app = (0, import_express28.default)();
 var server = import_http.default.createServer(app);
 initSocket(server);
 app.use((0, import_helmet.default)());
@@ -29413,8 +30306,8 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 var feesController = new FeesController();
-app.post("/api/v1/fees/webhook", import_express27.default.raw({ type: "application/json" }), feesController.handleWebhook.bind(feesController));
-app.use(import_express27.default.json({ limit: "1mb" }));
+app.post("/api/v1/fees/webhook", import_express28.default.raw({ type: "application/json" }), feesController.handleWebhook.bind(feesController));
+app.use(import_express28.default.json({ limit: "1mb" }));
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,

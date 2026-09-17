@@ -25,6 +25,8 @@ router.post("/admins/:userId/deactivate", controller.deactivateSchoolAdmin.bind(
 
 // Users
 router.get("/users", controller.getAllUsers.bind(controller));
+router.put("/users/:userId/school", controller.updateUserSchool.bind(controller));
+router.put("/users/:userId/assignment", controller.updateUserAssignment.bind(controller));
 
 // Audit Logs
 router.get("/audit-logs", controller.getAuditLogs.bind(controller));

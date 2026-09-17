@@ -118,6 +118,27 @@ export class SuperAdminController {
     }
   }
 
+  async updateUserSchool(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const schoolId = typeof req.body.schoolId === "string" && req.body.schoolId.trim()
+        ? req.body.schoolId
+        : null;
+      const data = await service.updateUserSchool(param(req.params.userId), schoolId);
+      res.status(200).json({ success: true, data, message: "User school assignment updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateUserAssignment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const data = await service.updateUserAssignment(param(req.params.userId), req.body);
+      res.status(200).json({ success: true, data, message: "User role and school assignment updated" });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // ─── Audit Logs ───────────────────────────────────────────────
   async getAuditLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

@@ -28,6 +28,20 @@ function dayRange(date = new Date()) {
   return { start, end };
 }
 
+function getPaymentDedupKey(p: { id: string; transactionId?: string | null | undefined }): string {
+  return (p.transactionId?.trim() || p.id) as string;
+}
+
+function dedupePayments<T extends { id: string; transactionId?: string | null | undefined }>(payments: T[]): T[] {
+  const seen = new Set<string>();
+  return payments.filter((p) => {
+    const key = getPaymentDedupKey(p);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // student/classId existence should be validated, and dueDate must
 // actually parse — CreateFeeDto's title/description map to real
 // FeeStructure columns.
@@ -155,12 +169,25 @@ export const findAll = async (dto: FeeQueryDto) => {
           class: { select: { name: true } },
         },
       },
-      payments: { select: { id: true, amount: true, method: true, createdAt: true } },
+      payments: {
+        select: { id: true, amount: true, method: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
     orderBy: { dueDate: "asc" },
   });
 
-  return { data: fees, meta };
+  const dedupedFees = fees.map((fee) => {
+    const dedupedPayments = dedupePayments(fee.payments ?? []);
+    const paidAmount = dedupedPayments.reduce((sum, p) => sum + p.amount, 0);
+    return {
+      ...fee,
+      Paidamount: paidAmount,
+      payments: dedupedPayments,
+    };
+  });
+
+  return { data: dedupedFees, meta };
 };
 
 export const findByid = async (id: string) => {
@@ -178,7 +205,7 @@ export const findByid = async (id: string) => {
   });
 
   if (!fee) throw new Error("Fee not found");
-  return { ...fee, payments: fee.payments ?? [] };
+  return { ...fee, payments: dedupePayments(fee.payments ?? []) };
 };
 
 export const updateFee = async (id: string, dto: UpdateFeeDto) => {
@@ -193,8 +220,8 @@ export const updateFee = async (id: string, dto: UpdateFeeDto) => {
       status: dto.status,
       ...(dto.dueDate && { dueDate: new Date(dto.dueDate) }),
     },
-    include: { payments: true },
-  });
+    include: { payments: { orderBy: { createdAt: "desc" } } },
+  }).then((fee) => ({ ...fee, payments: dedupePayments(fee.payments ?? []) }));
 };
 
 export const deleteFee = async (id: string) => {
@@ -254,6 +281,11 @@ export const recordPayment = async (dto: RecordPaymentDto, actorUserId: string) 
 
       const newStatus = totalPaid === fee.amount ? "PAID" : totalPaid > 0 ? "PARTIAL" : fee.status;
       const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+      if (transactionId) {
+        const existing = await tx.payment.findFirst({ where: { transactionId } });
+        if (existing) throw new Error("A payment with this transaction ID already exists");
+      }
 
       const payment = await tx.payment.create({
         data: {
@@ -354,6 +386,11 @@ export const recordCashPayment = async (dto: RecordCashPaymentDto, actorUserId: 
       const newStatus = totalPaid === fee.amount ? "PAID" : "PARTIAL";
       const transactionId = dto.transactionId || `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+      if (transactionId) {
+        const existing = await tx.payment.findFirst({ where: { transactionId } });
+        if (existing) throw new Error("A payment with this transaction ID already exists");
+      }
+
       let invoice = await tx.invoice.findFirst({ where: { feeStructureId: fee.id } });
       if (!invoice) {
         invoice = await tx.invoice.create({
@@ -417,10 +454,10 @@ export const getstudentFeeSummary = async (studentId: string) => {
 
   const studentEmail = student?.user?.email ?? null;
 
-  const [totals, overDue, admissionTotals] = await Promise.all([
-    prisma.feeStructure.aggregate({
+  const [feeStructures, overDue, admissionTotals] = await Promise.all([
+    prisma.feeStructure.findMany({
       where: { studentId },
-      _sum: { amount: true, Paidamount: true },
+      select: { id: true, amount: true },
     }),
     prisma.feeStructure.count({
       where: { studentId, status: "PENDING", dueDate: { lt: new Date() } },
@@ -438,8 +475,19 @@ export const getstudentFeeSummary = async (studentId: string) => {
     }),
   ]);
 
-  const totalFees = (totals._sum.amount ?? 0) + (admissionTotals._sum.paymentAmount ?? 0);
-  const totalPaidFromFees = totals._sum.Paidamount ?? 0;
+  const feeIds = feeStructures.map((f) => f.id);
+
+  let totalPaidFromFees = 0;
+  if (feeIds.length > 0) {
+    const payments = await prisma.payment.findMany({
+      where: { feeStructureId: { in: feeIds }, status: "PAID" },
+      select: { amount: true, transactionId: true, id: true },
+    });
+    const deduped = dedupePayments(payments);
+    totalPaidFromFees = deduped.reduce((sum, p) => sum + p.amount, 0);
+  }
+
+  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + (admissionTotals._sum.paymentAmount ?? 0);
   const admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
   const totalPaid = totalPaidFromFees + admissionPaid;
 
@@ -496,22 +544,26 @@ export const getStudentFeeList = async (studentId: string) => {
     }),
   ]);
 
-  const mappedFees = feeStructures.map((fee) => ({
-    id: fee.id,
-    studentId: fee.studentId,
-    feeType: fee.feeType,
-    title: fee.title,
-    amount: fee.amount,
-    paidAmount: fee.Paidamount,
-    dueAmount: Math.max(fee.amount - fee.Paidamount, 0),
-    dueDate: fee.dueDate,
-    month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
-    status: fee.status,
-    student: fee.student,
-    payments: fee.payments,
-    createdAt: fee.createdAt,
-    source: "FEE_STRUCTURE" as const,
-  }));
+  const mappedFees = feeStructures.map((fee) => {
+    const dedupedPayments = dedupePayments(fee.payments ?? []);
+    const paidAmount = dedupedPayments.reduce((sum, p) => sum + p.amount, 0);
+    return {
+      id: fee.id,
+      studentId: fee.studentId,
+      feeType: fee.feeType,
+      title: fee.title,
+      amount: fee.amount,
+      paidAmount,
+      dueAmount: Math.max(fee.amount - paidAmount, 0),
+      dueDate: fee.dueDate,
+      month: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 7) : "",
+      status: fee.status,
+      student: fee.student,
+      payments: dedupedPayments,
+      createdAt: fee.createdAt,
+      source: "FEE_STRUCTURE" as const,
+    };
+  });
 
   const mappedAdmissions = admissionApplications.map((admission) => ({
     id: `admission-${admission.id}`,
@@ -566,45 +618,48 @@ export const getCollectionReport = async (month: string, type?: string) => {
   const admissionWhere: any = {
     paymentStatus: "PAID",
     paymentAmount: { not: null, gt: 0 },
+    studentId: null,
     paymentDate: { gte: start, lt: end },
   };
 
-  const [totalAgg, byMethodGroups, byTypeGroups, admissionAgg] = await Promise.all([
-    prisma.payment.aggregate({ where: baseWhere, _sum: { amount: true }, _count: true }),
-    prisma.payment.groupBy({
-      by: ["method"],
-      where: baseWhere,
-      _sum: { amount: true },
-    }),
-    prisma.feeStructure
-      .findMany({ where: {}, select: { feeType: true }, distinct: ["feeType"] })
-      .then((types) =>
-        Promise.all(
-          types.map(async ({ feeType }) => {
-            const agg = await prisma.payment.aggregate({
-              where: { ...baseWhere, feeStructure: { feeType } },
-              _sum: { amount: true },
-            });
-            return [feeType, agg._sum.amount ?? 0] as const;
-          })
-        )
-      ),
+  const [admissionAgg, rawPayments] = await Promise.all([
     prisma.admissionApplication.aggregate({
       where: admissionWhere,
       _sum: { paymentAmount: true },
       _count: true,
     }),
+    prisma.payment.findMany({
+      where: baseWhere,
+      select: {
+        amount: true,
+        method: true,
+        transactionId: true,
+        id: true,
+        feeStructure: { select: { feeType: true } },
+      },
+    }),
   ]);
 
-  const feeTotal = totalAgg._sum.amount ?? 0;
+  const deduped = dedupePayments(rawPayments);
+
+  const feeTotal = deduped.reduce((sum, p) => sum + p.amount, 0);
+  const totalTransactions = deduped.length;
+
+  const byMethodMap = new Map<string, number>();
+  const byTypeMap = new Map<string, number>();
+  deduped.forEach((p) => {
+    const methodKey = p.method === "STRIPE" ? "ONLINE" : "OFFLINE";
+    byMethodMap.set(methodKey, (byMethodMap.get(methodKey) ?? 0) + p.amount);
+    const typeKey = p.feeStructure?.feeType ?? "OTHER";
+    byTypeMap.set(typeKey, (byTypeMap.get(typeKey) ?? 0) + p.amount);
+  });
+
   const admissionTotal = admissionAgg._sum.paymentAmount ?? 0;
   const totalCollected = feeTotal + admissionTotal;
-  const totalTransactions = totalAgg._count + admissionAgg._count;
+  const totalTransactionsCount = totalTransactions + admissionAgg._count;
 
-  const byMethod = Object.fromEntries(
-    byMethodGroups.map((g) => [g.method === "STRIPE" ? "ONLINE" : "OFFLINE", g._sum.amount ?? 0])
-  );
-  const byType = Object.fromEntries(byTypeGroups.filter(([, sum]) => sum > 0));
+  const byMethod = Object.fromEntries(byMethodMap);
+  const byType = Object.fromEntries(byTypeMap);
 
   if ((admissionTotal ?? 0) > 0) {
     const admissionMethod = "ADMISSION";
@@ -615,7 +670,7 @@ export const getCollectionReport = async (month: string, type?: string) => {
   return {
     month,
     totalCollected,
-    totalTransactions,
+    totalTransactions: totalTransactionsCount,
     byType,
     byMethod,
   };
@@ -628,27 +683,41 @@ export const getFeeSummary = async (month?: string) => {
     where.dueDate = { gte: start, lt: end };
   }
 
-  const admissionWhere: any = { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } };
+  const admissionWhere: any = { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null };
   if (month) {
     const { start, end } = monthRange(month);
     admissionWhere.paymentDate = { gte: start, lt: end };
   }
   const today = dayRange();
 
-  const [totals, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
-    prisma.feeStructure.aggregate({ where, _sum: { amount: true, Paidamount: true } }),
+  const [feeStructures, pendingCount, overdueCount, admissionTotals, admissionTodayTotals] = await Promise.all([
+    prisma.feeStructure.findMany({
+      where,
+      select: { id: true, amount: true }
+    }),
     prisma.feeStructure.count({ where: { ...where, status: "PENDING" } }),
     prisma.feeStructure.count({ where: { ...where, status: "PENDING", dueDate: { lt: new Date() } } }),
     prisma.admissionApplication.aggregate({ where: admissionWhere, _sum: { paymentAmount: true }, _count: true }),
     prisma.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentDate: { gte: today.start, lt: today.end } },
+      where: { paymentStatus: "PAID", studentId: null, paymentDate: { gte: today.start, lt: today.end } },
       _sum: { paymentAmount: true },
       _count: true,
     }),
   ]);
 
-  const totalFeesAmount = totals._sum.amount ?? 0;
-  const feePaidAmount = totals._sum.Paidamount ?? 0;
+  const feeIds = feeStructures.map((f) => f.id);
+
+  let feePaidAmount = 0;
+  if (feeIds.length > 0) {
+    const payments = await prisma.payment.findMany({
+      where: { feeStructureId: { in: feeIds }, status: "PAID" },
+      select: { amount: true, transactionId: true, id: true },
+    });
+    const deduped = dedupePayments(payments);
+    feePaidAmount = deduped.reduce((sum, p) => sum + p.amount, 0);
+  }
+
+  const totalFeesAmount = feeStructures.reduce((sum, f) => sum + f.amount, 0);
   const admissionTotalPaid = admissionTotals._sum.paymentAmount ?? 0;
   const totalAmount = totalFeesAmount + admissionTotalPaid;
   const totalPaid = feePaidAmount + admissionTotalPaid;
@@ -764,7 +833,7 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
       },
     }),
     prisma.admissionApplication.findMany({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null },
       orderBy: { paymentDate: "desc" },
       select: {
         id: true,
@@ -772,6 +841,7 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
         paymentMethod: true,
         paymentDate: true,
         createdAt: true,
+        transactionId: true,
         studentId: true,
         studentEmail: true,
         applicantName: true,
@@ -784,7 +854,7 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
     amount: Number(admission.paymentAmount ?? 0),
     method: admission.paymentMethod ?? "CASH",
     status: "PAID" as const,
-    transactionId: undefined,
+    transactionId: admission.transactionId?.trim() || undefined,
     note: "Admission payment",
     paidAt: admission.paymentDate ?? admission.createdAt,
     createdAt: admission.createdAt,
@@ -804,18 +874,10 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
     },
   }));
 
-  const combined = [...feePayments, ...mappedAdmissions].sort((a, b) => {
+  const deduped = dedupePayments([...feePayments, ...mappedAdmissions]).sort((a, b) => {
     const dateA = new Date(a.paidAt || a.createdAt).getTime();
     const dateB = new Date(b.paidAt || b.createdAt).getTime();
     return dateB - dateA;
-  });
-
-  const seen = new Set<string>();
-  const deduped = combined.filter((item) => {
-    const key = item.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
   });
 
   const total = deduped.length;
@@ -836,7 +898,7 @@ export const getAllPayments = async (dto: { page?: string; limit?: string; metho
 export const getMonthlyAnalytics = async (year: number) => {
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
-  const [byMonth, byMethodYear, typeBreakdown, admissionByMonth, admissionMethodYear] = await Promise.all([
+  const [byMonth, byMethodYear, typeBreakdown, admissionMethodYear, allFeePayments] = await Promise.all([
     Promise.all(
       months.map(async (m) => {
         const start = new Date(year, m - 1, 1);
@@ -847,7 +909,7 @@ export const getMonthlyAnalytics = async (year: number) => {
           _count: { id: true },
         });
         const admissionAgg = await prisma.admissionApplication.aggregate({
-          where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: start, lt: end } },
+          where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: start, lt: end } },
           _sum: { paymentAmount: true },
           _count: true,
         });
@@ -869,10 +931,16 @@ export const getMonthlyAnalytics = async (year: number) => {
     }),
     prisma.admissionApplication.groupBy({
       by: ["paymentMethod"],
-      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } },
       _sum: { paymentAmount: true },
     }),
+    prisma.payment.findMany({
+      where: { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) }, status: "PAID" },
+      select: { amount: true, method: true, transactionId: true, id: true, feeStructure: { select: { feeType: true } } },
+    }),
   ]);
+
+  const dedupedPayments = dedupePayments(allFeePayments);
 
   const methodMap = new Map<string, number>();
   byMethodYear.forEach((g) => {
@@ -883,56 +951,67 @@ export const getMonthlyAnalytics = async (year: number) => {
     methodMap.set(key, (methodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
   });
 
+  const correctedMethodMap = new Map<string, number>();
+  dedupedPayments.forEach((p) => {
+    correctedMethodMap.set(p.method, (correctedMethodMap.get(p.method) ?? 0) + p.amount);
+  });
+  admissionMethodYear.forEach((g) => {
+    const key = g.paymentMethod ?? "CASH";
+    correctedMethodMap.set(key, (correctedMethodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+  });
+
   const typeEntries = typeBreakdown.map((t) => [t.feeType, { amount: t._sum.amount ?? 0, paid: t._sum.Paidamount ?? 0 }] as const);
+
+  const correctedTypeMap = new Map<string, number>();
+  dedupedPayments.forEach((p) => {
+    const key = p.feeStructure?.feeType ?? "OTHER";
+    correctedTypeMap.set(key, (correctedTypeMap.get(key) ?? 0) + p.amount);
+  });
 
   return {
     year,
     byMonth,
-    byMethod: Object.fromEntries(methodMap),
-    byType: Object.fromEntries(typeEntries),
+    byMethod: Object.fromEntries(correctedMethodMap),
+    byType: Object.fromEntries(correctedTypeMap),
   };
 };
 
 export const getAccountantDashboardOverview = async () => {
   const today = dayRange();
-  const [summary, recentPayments, todayAggregate, admissionTodayAggregate] = await Promise.all([
+  const [summary, recentPayments, admissionTodayAggregate] = await Promise.all([
     getFeeSummary(),
     getAllPayments({ page: "1", limit: "5" }),
-    prisma.payment.aggregate({
-      where: { createdAt: { gte: today.start, lt: today.end }, status: "PAID" },
-      _sum: { amount: true },
-      _count: { id: true },
-    }),
     prisma.admissionApplication.aggregate({
-      where: { paymentStatus: "PAID", paymentDate: { gte: today.start, lt: today.end } },
+      where: { paymentStatus: "PAID", studentId: null, paymentDate: { gte: today.start, lt: today.end } },
       _sum: { paymentAmount: true },
       _count: true,
     }),
   ]);
 
-  const methodBreakdown = await prisma.payment.groupBy({
-    by: ["method"],
-    where: {
-      createdAt: { gte: today.start, lt: today.end },
-      status: "PAID",
-    },
-    _sum: { amount: true },
+  const todayPayments = await prisma.payment.findMany({
+    where: { createdAt: { gte: today.start, lt: today.end }, status: "PAID" },
+    select: { amount: true, method: true, transactionId: true, id: true },
+  });
+
+  const dedupedToday = dedupePayments(todayPayments);
+
+  const todayCollection = dedupedToday.reduce((sum, p) => sum + p.amount, 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
+  const todayCount = dedupedToday.length + admissionTodayAggregate._count;
+
+  const methodBreakdownMap = new Map<string, number>();
+  dedupedToday.forEach((p) => {
+    methodBreakdownMap.set(p.method, (methodBreakdownMap.get(p.method) ?? 0) + p.amount);
   });
 
   const admissionMethodToday = await prisma.admissionApplication.groupBy({
     by: ["paymentMethod"],
-    where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, paymentDate: { gte: today.start, lt: today.end } },
+    where: { paymentStatus: "PAID", paymentAmount: { not: null, gt: 0 }, studentId: null, paymentDate: { gte: today.start, lt: today.end } },
     _sum: { paymentAmount: true },
   });
 
-  const todayCollection = (todayAggregate._sum.amount ?? 0) + (admissionTodayAggregate._sum.paymentAmount ?? 0);
-  const todayCount = (todayAggregate._count.id ?? 0) + admissionTodayAggregate._count;
-
-  const byMethodMap = new Map<string, number>();
-  methodBreakdown.forEach((g) => byMethodMap.set(g.method, (byMethodMap.get(g.method) ?? 0) + (g._sum.amount ?? 0)));
   admissionMethodToday.forEach((g) => {
     const key = g.paymentMethod ?? "CASH";
-    byMethodMap.set(key, (byMethodMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
+    methodBreakdownMap.set(key, (methodBreakdownMap.get(key) ?? 0) + (g._sum.paymentAmount ?? 0));
   });
 
   return {
@@ -941,7 +1020,7 @@ export const getAccountantDashboardOverview = async () => {
     todayCount,
     recentPayments: recentPayments.data,
     recentPaymentsMeta: recentPayments.meta,
-    byMethod: Object.fromEntries(byMethodMap),
+    byMethod: Object.fromEntries(methodBreakdownMap),
   };
 };
 

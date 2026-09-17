@@ -47,7 +47,7 @@ export class StudentController {
   async getMyProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       console.log(`\n[STUDENT] getMyProfile called - User ID: ${req.user?.id}`);
-      const student = await studentService.findStudentByUserId(req.user!.id);
+      const student = await studentService.findStudentByUserId(req.user!.id, req.user!.email);
       
       // Check if admission is approved
       const admissionStatus = student.admissionRecord?.status;

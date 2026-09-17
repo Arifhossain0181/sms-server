@@ -341,6 +341,116 @@ export const getAllUsers = async (filters?: { role?: string; schoolId?: string; 
   return users;
 };
 
+export const updateUserSchool = async (userId: string, schoolId: string | null) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) {
+    const err = new Error("User not found");
+    (err as any).status = 404;
+    throw err;
+  }
+
+  if (schoolId) {
+    const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true } });
+    if (!school) {
+      const err = new Error("School not found");
+      (err as any).status = 404;
+      throw err;
+    }
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { schoolId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      schoolId: true,
+      school: { select: { id: true, name: true, code: true } },
+    },
+  });
+};
+
+const assignableRoles = [
+  "SUPER_ADMIN",
+  "SCHOOL_ADMIN",
+  "ACCOUNTANT",
+  "TEACHER",
+  "STUDENT",
+  "PARENT",
+  "EXAM_CONTROLLER",
+  "HR",
+] as const;
+
+type AssignableRole = (typeof assignableRoles)[number];
+
+export const updateUserAssignment = async (
+  userId: string,
+  input: { role?: unknown; schoolId?: unknown }
+) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, schoolId: true },
+  });
+  if (!user) {
+    const err = new Error("User not found");
+    (err as any).status = 404;
+    throw err;
+  }
+
+  const role = input.role;
+  if (typeof role !== "string" || !assignableRoles.includes(role as AssignableRole)) {
+    const err = new Error("A valid role is required");
+    (err as any).status = 400;
+    throw err;
+  }
+
+  const schoolId = typeof input.schoolId === "string" && input.schoolId.trim()
+    ? input.schoolId
+    : null;
+
+  // A platform Super Admin must remain unscoped. Every other role operates
+  // within a school, so the role cannot be granted without a valid school.
+  if (role === "SUPER_ADMIN" && schoolId) {
+    const err = new Error("Super Admin must use the Platform school assignment");
+    (err as any).status = 400;
+    throw err;
+  }
+  if (role !== "SUPER_ADMIN" && !schoolId) {
+    const err = new Error("Select a school before assigning this role");
+    (err as any).status = 400;
+    throw err;
+  }
+
+  if (schoolId) {
+    const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, isActive: true } });
+    if (!school) {
+      const err = new Error("School not found");
+      (err as any).status = 404;
+      throw err;
+    }
+    if (!school.isActive) {
+      const err = new Error("Cannot assign a user to a suspended school");
+      (err as any).status = 400;
+      throw err;
+    }
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { role: role as AssignableRole, schoolId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      schoolId: true,
+      school: { select: { id: true, name: true, code: true } },
+    },
+  });
+};
+
 // ─── AUDIT LOGS ────────────────────────────────────────────────────
 
 export const getAuditLogs = async (filters?: { userId?: string; action?: string; page?: number; limit?: number }) => {

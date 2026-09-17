@@ -124,9 +124,14 @@ export class AttendanceController {
                     },
                 });
 
+                const timetableAssignment = await prisma.timetable.findFirst({
+                    where: { teacherId, sectionId, classId },
+                    select: { id: true },
+                });
+
                 const canView = assignment?.sectionTeacher?.some(
                     (entry) => entry.id === sectionId && entry.classId === classId
-                );
+                ) || !!timetableAssignment;
 
                 if (!canView) {
                     throw { status: 403, message: 'You can only view attendance reports for your assigned class and section' };
@@ -164,9 +169,14 @@ export class AttendanceController {
                     },
                 });
 
+                const timetableAssignment = await prisma.timetable.findFirst({
+                    where: { teacherId, sectionId, classId },
+                    select: { id: true },
+                });
+
                 const canView = assignment?.sectionTeacher?.some(
                     (entry) => entry.id === sectionId && entry.classId === classId
-                );
+                ) || !!timetableAssignment;
 
                 if (!canView) {
                     throw { status: 403, message: 'You can only view attendance reports for your assigned class and section' };

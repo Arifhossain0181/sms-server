@@ -147,7 +147,14 @@ export class HomeworkService {
     });
     if (!teacher) throw new Error('Teacher not found');
 
-    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const timetableSlots = await prisma.timetable.findMany({
+      where: { teacherId },
+      select: { sectionId: true },
+    });
+    const assignedSectionIds = new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId),
+    ].filter(Boolean));
     if (assignedSectionIds.size === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 1 };
     }
@@ -266,7 +273,14 @@ export class HomeworkService {
     });
     if (!teacher) throw new Error('Teacher not found');
 
-    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const timetableSlots = await prisma.timetable.findMany({
+      where: { teacherId },
+      select: { sectionId: true },
+    });
+    const assignedSectionIds = new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId),
+    ].filter(Boolean));
     if (assignedSectionIds.size === 0) {
       return [];
     }

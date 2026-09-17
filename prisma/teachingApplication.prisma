@@ -1,26 +1,55 @@
 // ─── TEACHING APPLICATION ──────────────────────────────────
 
 model TeachingApplication {
-  id                   String                     @id @default(uuid())
-  name                 String
-  email                String
-  phone                String
-  gender               Gender
-  dob                  DateTime                   @db.Date
-  address              String
-  designation          String
-  department           String?
-  qualification        String
-  experience           Int
+  id                    String                    @id @default(uuid())
+  name                  String
+  email                 String
+  phone                 String
+  gender                Gender
+  dob                   DateTime                  @db.Date
+  address               String
+  designation           String
+  department            String?
+  qualification         String
+  experience            Int
   subjectSpecialization String?
-  expectedSalary       Float?
-  resumeUrl            String?
-  coverLetter          String?
-  status               TeachingApplicationStatus  @default(PENDING)
-  reviewedAt           DateTime?
-  rejectionReason      String?
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  expectedSalary        Float?
+  resumeUrl             String?
+  coverLetter           String?
+
+  // Additional personal & academic details
+  nationalId            String?
+  birthCertificateNo    String?
+  religion              String?
+  maritalStatus         String?
+  nationality           String?
+  fatherName            String?
+  motherName            String?
+  employmentType        String?
+  presentAddress        String?
+  permanentAddress      String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  photoUrl              String?
+  cvUrl                 String?
+  nidUrl                String?
+  birthCertUrl          String?
+  sscCertUrl            String?
+  hscCertUrl            String?
+  bscCertUrl            String?
+  mscCertUrl            String?
+  institution           String?
+  passingYear           String?
+  result                String?
+  previousOrganization  String?
+  previousDesignation   String?
+  convertedToTeacherId  String?
+
+  status                TeachingApplicationStatus @default(PENDING)
+  reviewedAt            DateTime?
+  rejectionReason       String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 
   @@index([email])
 }

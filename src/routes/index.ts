@@ -58,6 +58,7 @@ router.use('/parents', parentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/hr', hrRoutes);
 router.use('/recruitment', recruitmentRoutes);
+router.use('/super-admin', superAdminRoutes);
 router.use('/grading-rules', gradingRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/dashboard', dashboardSchoolRoutes);

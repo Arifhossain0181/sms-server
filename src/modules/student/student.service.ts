@@ -230,9 +230,11 @@ export class StudentService {
         };
     }
 
-    async findStudentByUserId(userId: string) {
-        const student = await prisma.student.findUnique({
-            where: { userId },
+    async findStudentByUserId(userId: string, email?: string) {
+        const student = await prisma.student.findFirst({
+            where: email
+                ? { OR: [{ userId }, { user: { email } }] }
+                : { userId },
             include: {
                 user: { select: { id: true, name: true, email: true, isActive: true } },
                 class: { select: { id: true, name: true } },

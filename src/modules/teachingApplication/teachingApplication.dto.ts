@@ -15,6 +15,33 @@ export interface CreateTeachingApplicationDto {
   expectedSalary?: number;
   resumeUrl?: string;
   coverLetter?: string;
+
+  // New fields
+  nationalId?: string;
+  birthCertificateNo?: string;
+  religion?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  fatherName?: string;
+  motherName?: string;
+  employmentType?: string;
+  presentAddress?: string;
+  permanentAddress?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  photoUrl?: string;
+  cvUrl?: string;
+  nidUrl?: string;
+  birthCertUrl?: string;
+  sscCertUrl?: string;
+  hscCertUrl?: string;
+  bscCertUrl?: string;
+  mscCertUrl?: string;
+  institution?: string;
+  passingYear?: string;
+  result?: string;
+  previousOrganization?: string;
+  previousDesignation?: string;
 }
 
 export interface UpdateTeachingApplicationStatusDto {
