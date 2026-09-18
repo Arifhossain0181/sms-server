@@ -34,6 +34,28 @@ model Teacher {
   dateOfBirth           DateTime?
   bloodGroup            String?
   salary                Float?
+  presentAddress        String?
+  permanentAddress      String?
+  nationalId            String?
+  birthCertificateNo    String?
+  religion              String?
+  maritalStatus         String?
+  nationality           String?
+  fatherName            String?
+  motherName            String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  employmentType        String?
+  institution           String?
+  passingYear           String?
+  result                String?
+  previousOrganization  String?
+  previousDesignation   String?
+  expectedSalary        Float?
+  resumeUrl             String?
+  nidUrl                String?
+  birthCertUrl          String?
+  coverLetter           String?
 
   @@index([employeeId])
 }

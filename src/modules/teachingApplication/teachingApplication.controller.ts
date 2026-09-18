@@ -43,4 +43,18 @@ export class TeachingApplicationController {
       sendSuccess(res, result, 'Application status updated');
     } catch (err) { next(err); }
   }
+
+  async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await teachingApplicationService.updateTeachingApplication(req.params.id as string, req.body);
+      sendSuccess(res, result, 'Application updated');
+    } catch (err) { next(err); }
+  }
+
+  async remove(req: Request, res: Response, next: NextFunction) {
+    try {
+      await teachingApplicationService.deleteTeachingApplication(req.params.id as string);
+      sendSuccess(res, null, 'Application deleted');
+    } catch (err) { next(err); }
+  }
 }

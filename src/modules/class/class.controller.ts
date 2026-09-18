@@ -11,7 +11,7 @@ const asParamString = (value: string | string[] | undefined): string => {
 
 export const createClass = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await classService.createClass(req.body);
+    const data = await classService.createClass(req.body, req.user?.schoolId);
     sendSuccess(res, data, 'Class created', 201);
   } catch (err) { next(err); }
 };

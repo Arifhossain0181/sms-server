@@ -24,7 +24,7 @@ export const TeachersService = {
     return teacher?.id ?? null;
   },
 
-  async create(dto: CreateTeacherDto) {
+  async create(dto: CreateTeacherDto, schoolId?: string) {
     // 1. Email check
     const emailExists = await prisma.user.findUnique({ where: { email: dto.email } });
     if (emailExists) {
@@ -55,10 +55,12 @@ export const TeachersService = {
     const buildData = (id: string) => ({
       name: dto.name,
       email: dto.email,
+      schoolId,
       passwordHash: hashedPassword,
       role: "TEACHER" as const,
       teacherProfile: {
         create: {
+          schoolId,
           employeeId: id,
           name: dto.name,
           email: dto.email,
@@ -139,6 +141,8 @@ export const TeachersService = {
     const { page = '1', limit = '10', search, department, designation } = query;
 
     const where: any = {
+      isActive: true,
+      user: { isActive: true },
       //  department/designation were accepted in TeacherQueryDto but
       // never actually applied to the query — filtering by either did
       // nothing before.
@@ -196,6 +200,16 @@ export const TeachersService = {
 
     if (!teacher) throw { status: 404, message: "Teacher not found" };
 
+    const teachingApplication = await prisma.teachingApplication.findFirst({
+      where: {
+        OR: [
+          { convertedToTeacherId: id },
+          { email: teacher.email },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
     return {
       id: teacher.id,
       name: teacher.name,
@@ -226,6 +240,7 @@ export const TeachersService = {
       createdAt: teacher.createdAt,
       updatedAt: teacher.updatedAt,
       role: teacher.user?.role,
+      teachingApplication,
     };
   },
 
@@ -357,9 +372,19 @@ export const TeachersService = {
     const teacher = await prisma.teacher.findUnique({ where: { id } });
     if (!teacher) throw { status: 404, message: 'Teacher not found' };
 
-    return prisma.teacher.update({
-      where: { id },
-      data: { isActive: false },
+    return prisma.$transaction(async (tx) => {
+      const deactivatedTeacher = await tx.teacher.update({
+        where: { id },
+        data: { isActive: false },
+        select: { id: true, userId: true },
+      });
+
+      await tx.user.update({
+        where: { id: deactivatedTeacher.userId },
+        data: { isActive: false },
+      });
+
+      return deactivatedTeacher;
     });
   },
 

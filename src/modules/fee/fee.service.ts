@@ -454,15 +454,21 @@ export const getstudentFeeSummary = async (studentId: string) => {
 
   const studentEmail = student?.user?.email ?? null;
 
-  const [feeStructures, overDue, admissionTotals] = await Promise.all([
+  const [feeStructures, overDue] = await Promise.all([
     prisma.feeStructure.findMany({
       where: { studentId },
-      select: { id: true, amount: true },
+      select: { id: true, amount: true, feeType: true },
     }),
     prisma.feeStructure.count({
       where: { studentId, status: "PENDING", dueDate: { lt: new Date() } },
     }),
-    prisma.admissionApplication.aggregate({
+  ]);
+
+  const hasAdmissionFeeInStructures = feeStructures.some((f) => f.feeType === "ADMISSION");
+
+  let admissionPaid = 0;
+  if (!hasAdmissionFeeInStructures) {
+    const admissionTotals = await prisma.admissionApplication.aggregate({
       where: {
         OR: [
           { studentId },
@@ -472,8 +478,9 @@ export const getstudentFeeSummary = async (studentId: string) => {
         paymentAmount: { not: null, gt: 0 },
       },
       _sum: { paymentAmount: true },
-    }),
-  ]);
+    });
+    admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
+  }
 
   const feeIds = feeStructures.map((f) => f.id);
 
@@ -487,8 +494,7 @@ export const getstudentFeeSummary = async (studentId: string) => {
     totalPaidFromFees = deduped.reduce((sum, p) => sum + p.amount, 0);
   }
 
-  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + (admissionTotals._sum.paymentAmount ?? 0);
-  const admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
+  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + admissionPaid;
   const totalPaid = totalPaidFromFees + admissionPaid;
 
   return { totalFees, totalPaid, outstanding: Math.max(totalFees - totalPaid, 0), overDue };
@@ -524,10 +530,7 @@ export const getStudentFeeList = async (studentId: string) => {
     }),
     prisma.admissionApplication.findMany({
       where: {
-        OR: [
-          { studentId },
-          ...(studentId ? [{ studentId }] : []),
-        ],
+        studentId,
         paymentStatus: "PAID",
         paymentAmount: { not: null, gt: 0 },
       },
@@ -543,6 +546,8 @@ export const getStudentFeeList = async (studentId: string) => {
       orderBy: { paymentDate: "desc" },
     }),
   ]);
+
+  const hasAdmissionFeeInStructures = feeStructures.some((f) => f.feeType === "ADMISSION");
 
   const mappedFees = feeStructures.map((fee) => {
     const dedupedPayments = dedupePayments(fee.payments ?? []);
@@ -565,7 +570,9 @@ export const getStudentFeeList = async (studentId: string) => {
     };
   });
 
-  const mappedAdmissions = admissionApplications.map((admission) => ({
+  const filteredAdmissions = hasAdmissionFeeInStructures ? [] : admissionApplications;
+
+  const mappedAdmissions = filteredAdmissions.map((admission) => ({
     id: `admission-${admission.id}`,
     studentId,
     feeType: "ADMISSION" as const,

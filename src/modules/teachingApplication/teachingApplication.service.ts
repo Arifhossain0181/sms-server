@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import {
   CreateTeachingApplicationDto,
+  UpdateTeachingApplicationDto,
   UpdateTeachingApplicationStatusDto,
   ListTeachingApplicationsQueryDto,
 } from "./teachingApplication.dto";
@@ -147,6 +148,26 @@ export const getTeachingApplicationById = async (id: string) => {
   const application = await prisma.teachingApplication.findUnique({ where: { id }, select: APPLICATION_SELECT });
   if (!application) throw { status: 404, message: "Application not found" };
   return application;
+};
+
+export const updateTeachingApplication = async (id: string, dto: UpdateTeachingApplicationDto) => {
+  const application = await prisma.teachingApplication.findUnique({ where: { id }, select: { id: true } });
+  if (!application) throw { status: 404, message: "Application not found" };
+
+  const data = {
+    ...dto,
+    ...(dto.dob !== undefined ? { dob: new Date(dto.dob) } : {}),
+  };
+  return prisma.teachingApplication.update({ where: { id }, data, select: APPLICATION_SELECT });
+};
+
+export const deleteTeachingApplication = async (id: string) => {
+  const application = await prisma.teachingApplication.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!application) throw { status: 404, message: "Application not found" };
+  if (application.status === "APPROVED") {
+    throw { status: 409, message: "Approved applications cannot be deleted" };
+  }
+  await prisma.teachingApplication.delete({ where: { id } });
 };
 
 // ─── HR: approve or reject an application 

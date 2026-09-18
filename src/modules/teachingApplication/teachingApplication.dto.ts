@@ -56,3 +56,5 @@ export interface ListTeachingApplicationsQueryDto {
   page?: number;
   pageSize?: number;
 }
+
+export type UpdateTeachingApplicationDto = Partial<CreateTeachingApplicationDto>;

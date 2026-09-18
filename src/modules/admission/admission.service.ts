@@ -239,8 +239,12 @@ export class AdmissionService {
     }
 
     async getPaidPayments() {
+        // Only return admissions that have NOT been converted to a student yet.
+        // Once an admission is approved and converted, a formal Payment record is
+        // created in the Payment table — those are already included in /fees/transactions.
+        // Including them here too would cause double-counting in the accountant dashboard.
         return prisma.admissionApplication.findMany({
-            where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+            where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null },
             select: {
                 id: true,
                 applicantName: true,

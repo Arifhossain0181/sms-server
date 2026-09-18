@@ -3,6 +3,9 @@ import prisma from "../../config/db";
 export const getSchoolAdminDashboard = async (schoolId?: string) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const schoolRecordScope = schoolId
+    ? { OR: [{ schoolId }, { schoolId: null }] }
+    : {};
 
   const [
     totalStudents,
@@ -15,8 +18,8 @@ export const getSchoolAdminDashboard = async (schoolId?: string) => {
     libraryStats,
   ] = await Promise.all([
     prisma.student.count({ where: { isActive: true, ...(schoolId ? { schoolId } : {}) } }),
-    prisma.teacher.count({ where: { isActive: true, ...(schoolId ? { schoolId } : {}) } }),
-    prisma.class.count({ where: schoolId ? { schoolId } : undefined }),
+    prisma.teacher.count({ where: { isActive: true, user: { isActive: true }, ...schoolRecordScope } }),
+    prisma.class.count({ where: schoolId ? schoolRecordScope : undefined }),
     getTodayAttendanceSummary(schoolId),
     getFeeSummary(schoolId),
     getRecentAdmissions(schoolId),

@@ -19,7 +19,7 @@ function redactForRole<T extends Record<string, any>>(teacher: T, role?: string)
 export class TeacherController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const teacher = await teacherService.create(req.body);
+      const teacher = await teacherService.create(req.body, req.user?.schoolId);
       sendSuccess(res, teacher, 'Teacher created successfully', 201);
     } catch (err) {
       next(err);

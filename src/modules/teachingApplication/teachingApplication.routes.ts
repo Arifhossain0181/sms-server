@@ -13,6 +13,8 @@ router.post('/apply', c.apply.bind(c));
 router.use(authenticate);
 router.get('/',             authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findAll.bind(c));
 router.get('/:id',          authorizeRoles('HR', 'SCHOOL_ADMIN'), c.findById.bind(c));
+router.patch('/:id',        authorizeRoles('HR', 'SCHOOL_ADMIN'), c.update.bind(c));
 router.patch('/:id/status', authorizeRoles('HR', 'SCHOOL_ADMIN'), c.updateStatus.bind(c));
+router.delete('/:id',       authorizeRoles('HR', 'SCHOOL_ADMIN'), c.remove.bind(c));
 
 export default router;

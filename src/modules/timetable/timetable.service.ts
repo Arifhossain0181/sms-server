@@ -69,6 +69,8 @@ function cacheClearAll() {
 export const createSlot = async (dto: CreateTimetableSlotDto) => {
   const { classId, subjectId, teacherId, dayOfWeek, startTime, endTime, roomNumber } = dto;
 
+  _validateTimeRange(startTime, endTime);
+
   
   const [cls, subject, teacher, section] = await Promise.all([
     prisma.class.findUnique({ where: { id: classId }, select: { id: true } }),
@@ -108,6 +110,8 @@ export const createSlot = async (dto: CreateTimetableSlotDto) => {
 
 // ─── BULK REPLACE A CLASS'S WEEKLY TIMETABLE ─────────────────────────
 export const bulkCreate = async (dto: BulkCreateTimetableDto) => {
+  dto.slots.forEach((slot) => _validateTimeRange(slot.startTime, slot.endTime));
+
   const classExists = await prisma.class.findUnique({ where: { id: dto.classId }, select: { id: true } });
   if (!classExists) throw new Error('Class not found');
 
@@ -251,6 +255,7 @@ export const update = async (id: string, dto: UpdateTimetableSlotDto) => {
     startTime: dto.startTime || existing.startTime,
     endTime: dto.endTime || existing.endTime,
   };
+  _validateTimeRange(merged.startTime, merged.endTime);
   await _checkConflicts(merged, id);
 
   try {
@@ -377,6 +382,16 @@ function _groupByDay<T extends { dayOfWeek: string }>(slots: T[]) {
 
 function _overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string) {
   return aStart < bEnd && aEnd > bStart;
+}
+
+function _validateTimeRange(startTime: string, endTime: string) {
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
+    throw new Error('Time must use the HH:mm format');
+  }
+  if (startTime >= endTime) {
+    throw new Error('End time must be later than start time');
+  }
 }
 
 // WHAT: single DB query that checks if the class OR the teacher already

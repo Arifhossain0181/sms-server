@@ -19239,19 +19239,37 @@ var getTeacherExams = async (teacherId) => {
       }
     }
   });
+  const timetableSlots = await db_default.timetable.findMany({
+    where: { teacherId },
+    include: {
+      subject: {
+        include: {
+          class: {
+            include: {
+              sections: true
+            }
+          }
+        }
+      }
+    }
+  });
   const classSubjectMap = /* @__PURE__ */ new Map();
-  for (const assignment of assignments) {
-    const classId = assignment.subject.classId;
+  const allSubjects = [
+    ...assignments.map((a) => a.subject),
+    ...timetableSlots.map((t) => t.subject)
+  ].filter(Boolean);
+  for (const subject of allSubjects) {
+    const classId = subject.classId;
     if (!classSubjectMap.has(classId)) {
       classSubjectMap.set(classId, {
         classId,
-        className: assignment.subject.class.name,
+        className: subject.class?.name ?? "Class",
         subjects: []
       });
     }
     const entry = classSubjectMap.get(classId);
-    if (!entry.subjects.find((s) => s.id === assignment.subject.id)) {
-      entry.subjects.push(assignment.subject);
+    if (!entry.subjects.find((s) => s.id === subject.id)) {
+      entry.subjects.push(subject);
     }
   }
   const exams = await db_default.exam.findMany({
@@ -19707,7 +19725,14 @@ var submitExamMarks = async (examId, dto, authUser) => {
     where: { OR: uniquePairs.map((p) => ({ subjectId: p.subjectId, teacherId: p.teacherId })) },
     select: { subjectId: true, teacherId: true }
   });
-  const assignedSet = new Set(assignments.map((a) => `${a.subjectId}:${a.teacherId}`));
+  const timetableAssignments = await db_default.timetable.findMany({
+    where: { OR: uniquePairs.map((p) => ({ subjectId: p.subjectId, teacherId: p.teacherId })) },
+    select: { subjectId: true, teacherId: true }
+  });
+  const assignedSet = /* @__PURE__ */ new Set([
+    ...assignments.map((a) => `${a.subjectId}:${a.teacherId}`),
+    ...timetableAssignments.map((a) => `${a.subjectId}:${a.teacherId}`)
+  ]);
   for (const pair of uniquePairs) {
     if (!assignedSet.has(`${pair.subjectId}:${pair.teacherId}`)) {
       throw {
@@ -19989,13 +20014,16 @@ var getStudentsForExam = async (examId, teacherId) => {
   }
   const teacherAssignments = await db_default.subjectAssignment.findMany({
     where: { teacherId },
-    select: { subjectId: true, subject: { select: { classId: true } } }
+    select: {
+      subjectId: true,
+      subject: { select: { classId: true } }
+    }
   });
   const timetableAssignments = await db_default.timetable.findMany({
     where: { teacherId },
     select: { classId: true, subjectId: true }
   });
-  const assignmentSet = new Set([
+  const assignmentSet = /* @__PURE__ */ new Set([
     ...teacherAssignments.map((assignment) => `${assignment.subject.classId}:${assignment.subjectId}`),
     ...timetableAssignments.map((assignment) => `${assignment.classId}:${assignment.subjectId}`)
   ]);
@@ -20804,6 +20832,8 @@ var TeachersService = {
   async findAll(query) {
     const { page = "1", limit = "10", search, department, designation } = query;
     const where = {
+      isActive: true,
+      user: { isActive: true },
       //  department/designation were accepted in TeacherQueryDto but
       // never actually applied to the query — filtering by either did
       // nothing before.
@@ -20825,7 +20855,7 @@ var TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } }
       },
       orderBy: { createdAt: "desc" }
     });
@@ -20850,10 +20880,19 @@ var TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } }
       }
     });
     if (!teacher) throw { status: 404, message: "Teacher not found" };
+    const teachingApplication = await db_default.teachingApplication.findFirst({
+      where: {
+        OR: [
+          { convertedToTeacherId: id },
+          { email: teacher.email }
+        ]
+      },
+      orderBy: { createdAt: "desc" }
+    });
     return {
       id: teacher.id,
       name: teacher.name,
@@ -20881,7 +20920,8 @@ var TeachersService = {
       isActive: teacher.isActive,
       createdAt: teacher.createdAt,
       updatedAt: teacher.updatedAt,
-      role: teacher.user?.role
+      role: teacher.user?.role,
+      teachingApplication
     };
   },
   async findByUserId(userId) {
@@ -20904,7 +20944,7 @@ var TeachersService = {
             }
           }
         },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } }
       }
     });
     if (!teacher) {
@@ -20912,7 +20952,53 @@ var TeachersService = {
       err.status = 404;
       throw err;
     }
-    return teacher;
+    const timetableEntries = await db_default.timetable.findMany({
+      where: { teacherId: teacher.id },
+      include: {
+        section: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } },
+        subject: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            fullMarks: true,
+            passMarks: true,
+            isCompulsory: true,
+            class: { select: { id: true, name: true } }
+          }
+        }
+      }
+    });
+    const existingSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const mergedSectionTeacher = [...teacher.sectionTeacher];
+    for (const tt of timetableEntries) {
+      if (tt.section && !existingSectionIds.has(tt.section.id)) {
+        existingSectionIds.add(tt.section.id);
+        mergedSectionTeacher.push(tt.section);
+      }
+    }
+    const existingSubjectIds = new Set(
+      teacher.subjectAssignments.map((sa) => sa.subject?.id).filter(Boolean)
+    );
+    const mergedSubjectAssignments = [...teacher.subjectAssignments];
+    for (const tt of timetableEntries) {
+      if (tt.subject && !existingSubjectIds.has(tt.subject.id)) {
+        existingSubjectIds.add(tt.subject.id);
+        mergedSubjectAssignments.push({
+          id: `tt-${tt.id}`,
+          teacherId: teacher.id,
+          subjectId: tt.subject.id,
+          createdAt: tt.createdAt,
+          updatedAt: tt.updatedAt,
+          subject: tt.subject
+        });
+      }
+    }
+    return {
+      ...teacher,
+      sectionTeacher: mergedSectionTeacher,
+      subjectAssignments: mergedSubjectAssignments
+    };
   },
   async update(id, dto) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
@@ -20932,7 +21018,7 @@ var TeachersService = {
       include: {
         user: { select: { id: true, name: true, email: true } },
         subjectAssignments: { include: { subject: { select: { id: true, name: true } } } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } }
       }
     });
     return updatedTeacher;
@@ -20949,9 +21035,17 @@ var TeachersService = {
   async delete(id) {
     const teacher = await db_default.teacher.findUnique({ where: { id } });
     if (!teacher) throw { status: 404, message: "Teacher not found" };
-    return db_default.teacher.update({
-      where: { id },
-      data: { isActive: false }
+    return db_default.$transaction(async (tx) => {
+      const deactivatedTeacher = await tx.teacher.update({
+        where: { id },
+        data: { isActive: false },
+        select: { id: true, userId: true }
+      });
+      await tx.user.update({
+        where: { id: deactivatedTeacher.userId },
+        data: { isActive: false }
+      });
+      return deactivatedTeacher;
     });
   },
   async uploadAvatar(id, avatarUrl) {
@@ -20996,7 +21090,7 @@ var TeachersService = {
       where: { id },
       include: {
         user: { select: { id: true, name: true, email: true } },
-        sectionTeacher: { include: { class: { select: { id: true, name: true } } } }
+        sectionTeacher: { select: { id: true, name: true, classId: true, class: { select: { id: true, name: true } } } }
       }
     });
   },
@@ -21020,7 +21114,18 @@ var TeachersService = {
       select: { sectionTeacher: { select: { classId: true, id: true } } }
     });
     if (!teacher) throw { status: 404, message: "Teacher not found" };
-    const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+    const timetableSlots = await db_default.timetable.findMany({
+      where: { teacherId },
+      select: { classId: true, sectionId: true }
+    });
+    const classIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.classId),
+      ...timetableSlots.map((t) => t.classId)
+    ].filter(Boolean)));
+    const sectionIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId)
+    ].filter(Boolean)));
     const { page = "1", limit = "10", search, gender, classId, sectionId } = query;
     const allowedClassId = classId && classIds.includes(classId) ? classId : void 0;
     const sectionFilter = {};
@@ -21085,12 +21190,26 @@ var TeachersService = {
       }
     });
     if (!teacher) throw { status: 404, message: "Teacher not found" };
-    const classIds = Array.from(new Set(teacher.sectionTeacher.map((s) => s.classId)));
+    const timetableSlots = await db_default.timetable.findMany({
+      where: { teacherId },
+      select: { classId: true, sectionId: true, subjectId: true }
+    });
+    const classIds = Array.from(new Set([
+      ...teacher.sectionTeacher.map((s) => s.classId),
+      ...timetableSlots.map((t) => t.classId)
+    ].filter(Boolean)));
+    const sectionIds = Array.from(new Set([
+      ...timetableSlots.map((t) => t.sectionId)
+    ].filter(Boolean)));
+    const subjectIds = Array.from(new Set([
+      ...teacher.subjectAssignments.map((s) => s.id),
+      ...timetableSlots.map((t) => t.subjectId)
+    ].filter(Boolean)));
     if (classIds.length === 0) {
       return {
         totalStudents: 0,
         totalClasses: 0,
-        totalSubjects: teacher.subjectAssignments.length,
+        totalSubjects: subjectIds.length,
         upcomingExams: 0
       };
     }
@@ -21101,7 +21220,7 @@ var TeachersService = {
         where: { section: { classId: { in: classIds } } }
       }),
       Promise.resolve(classIds.length),
-      Promise.resolve(teacher.subjectAssignments.length),
+      Promise.resolve(subjectIds.length),
       db_default.examSchedule.count({
         where: { classId: { in: classIds }, examDate: { gte: today2 } }
       })
@@ -21473,9 +21592,13 @@ var AttendanceController = class {
             }
           }
         });
+        const timetableAssignment = await db_default.timetable.findFirst({
+          where: { teacherId, sectionId, classId },
+          select: { id: true }
+        });
         const canView = assignment?.sectionTeacher?.some(
           (entry) => entry.id === sectionId && entry.classId === classId
-        );
+        ) || !!timetableAssignment;
         if (!canView) {
           throw { status: 403, message: "You can only view attendance reports for your assigned class and section" };
         }
@@ -21509,9 +21632,13 @@ var AttendanceController = class {
             }
           }
         });
+        const timetableAssignment = await db_default.timetable.findFirst({
+          where: { teacherId, sectionId, classId },
+          select: { id: true }
+        });
         const canView = assignment?.sectionTeacher?.some(
           (entry) => entry.id === sectionId && entry.classId === classId
-        );
+        ) || !!timetableAssignment;
         if (!canView) {
           throw { status: 403, message: "You can only view attendance reports for your assigned class and section" };
         }
@@ -22268,6 +22395,19 @@ var import_node_crypto3 = require("crypto");
 var MAX_PAGE_LIMIT = 100;
 var AdmissionService = class {
   async create(dto) {
+    const dob = new Date(dto.dob);
+    const minimumDob = /* @__PURE__ */ new Date();
+    minimumDob.setFullYear(minimumDob.getFullYear() - 3);
+    if (Number.isNaN(dob.getTime()) || dob > minimumDob) {
+      const err = new Error("Student must be at least 3 years old");
+      err.status = 400;
+      throw err;
+    }
+    if (!dto.birthCertUrl) {
+      const err = new Error("Birth certificate is required");
+      err.status = 400;
+      throw err;
+    }
     if (!isValidGmailAddress(dto.guardianEmail)) {
       const err = new Error("Guardian email must be a valid Gmail address (example@gmail.com)");
       err.status = 400;
@@ -22293,17 +22433,45 @@ var AdmissionService = class {
       data: {
         applicantName: dto.applicantName,
         studentEmail: dto.studentEmail.trim().toLowerCase(),
-        dob: new Date(dto.dob),
+        studentPhone: dto.studentPhone.trim(),
+        dob,
         gender: dto.gender,
         religion: dto.religion,
         bloodGroup: dto.bloodGroup,
         address: dto.address,
+        presentHouseRoad: dto.presentHouseRoad,
+        presentArea: dto.presentArea,
+        presentCity: dto.presentCity,
+        presentDistrict: dto.presentDistrict,
+        presentPostalCode: dto.presentPostalCode,
         guardianName: dto.guardianName,
         guardianPhone: dto.guardianPhone,
         guardianEmail: dto.guardianEmail.trim().toLowerCase(),
+        guardianRelation: dto.guardianRelation,
+        fatherFullName: dto.fatherFullName,
+        fatherPhone: dto.fatherPhone,
+        fatherEmail: dto.fatherEmail?.trim().toLowerCase(),
+        fatherNid: dto.fatherNid,
+        fatherOccupation: dto.fatherOccupation,
+        fatherOrganization: dto.fatherOrganization,
+        fatherDesignation: dto.fatherDesignation,
+        fatherIncome: dto.fatherIncome,
+        fatherAddress: dto.fatherAddress,
+        fatherPhotoUrl: dto.fatherPhotoUrl,
+        motherFullName: dto.motherFullName,
+        motherPhone: dto.motherPhone,
+        motherEmail: dto.motherEmail?.trim().toLowerCase(),
+        motherNid: dto.motherNid,
+        motherOccupation: dto.motherOccupation,
+        motherOrganization: dto.motherOrganization,
+        motherDesignation: dto.motherDesignation,
+        motherIncome: dto.motherIncome,
+        motherAddress: dto.motherAddress,
+        motherPhotoUrl: dto.motherPhotoUrl,
         targetClassId: dto.targetClassId,
         photoUrl: dto.photoUrl,
         birthCertUrl: dto.birthCertUrl,
+        guardianNidUrl: dto.guardianNidUrl,
         status: "PENDING",
         paymentMethod: dto.paymentMethod,
         paymentAmount: dto.paymentAmount,
@@ -22376,9 +22544,11 @@ var AdmissionService = class {
         guardianName: dto.guardianName,
         guardianPhone: dto.guardianPhone,
         guardianEmail: dto.guardianEmail?.trim().toLowerCase(),
+        guardianRelation: dto.guardianRelation,
         targetClassId: dto.targetClassId,
         photoUrl: dto.photoUrl,
-        birthCertUrl: dto.birthCertUrl
+        birthCertUrl: dto.birthCertUrl,
+        guardianNidUrl: dto.guardianNidUrl
       }
     });
   }
@@ -22432,7 +22602,7 @@ var AdmissionService = class {
   }
   async getPaidPayments() {
     return db_default.admissionApplication.findMany({
-      where: { paymentStatus: "PAID", paymentAmount: { not: null } },
+      where: { paymentStatus: "PAID", paymentAmount: { not: null }, studentId: null },
       select: {
         id: true,
         applicantName: true,
@@ -22788,13 +22958,24 @@ var admissionService = new AdmissionService();
 var REQUIRED_APPLY_FIELDS = [
   "applicantName",
   "studentEmail",
+  "studentPhone",
   "dob",
   "gender",
   "address",
   "guardianName",
   "guardianPhone",
   "guardianEmail",
-  "targetClassId"
+  "guardianRelation",
+  "targetClassId",
+  "photoUrl",
+  "birthCertUrl",
+  "guardianNidUrl",
+  "fatherNid",
+  "fatherPhotoUrl",
+  "motherNid",
+  "motherPhotoUrl",
+  "paymentMethod",
+  "paymentAmount"
 ];
 var AdmissionController = class {
   /** Public — no auth required */
@@ -23380,15 +23561,19 @@ var getstudentFeeSummary = async (studentId) => {
     select: { id: true, user: { select: { email: true } } }
   });
   const studentEmail = student?.user?.email ?? null;
-  const [feeStructures, overDue, admissionTotals] = await Promise.all([
+  const [feeStructures, overDue] = await Promise.all([
     db_default.feeStructure.findMany({
       where: { studentId },
-      select: { id: true, amount: true }
+      select: { id: true, amount: true, feeType: true }
     }),
     db_default.feeStructure.count({
       where: { studentId, status: "PENDING", dueDate: { lt: /* @__PURE__ */ new Date() } }
-    }),
-    db_default.admissionApplication.aggregate({
+    })
+  ]);
+  const hasAdmissionFeeInStructures = feeStructures.some((f) => f.feeType === "ADMISSION");
+  let admissionPaid = 0;
+  if (!hasAdmissionFeeInStructures) {
+    const admissionTotals = await db_default.admissionApplication.aggregate({
       where: {
         OR: [
           { studentId },
@@ -23398,8 +23583,9 @@ var getstudentFeeSummary = async (studentId) => {
         paymentAmount: { not: null, gt: 0 }
       },
       _sum: { paymentAmount: true }
-    })
-  ]);
+    });
+    admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
+  }
   const feeIds = feeStructures.map((f) => f.id);
   let totalPaidFromFees = 0;
   if (feeIds.length > 0) {
@@ -23410,8 +23596,7 @@ var getstudentFeeSummary = async (studentId) => {
     const deduped = dedupePayments(payments);
     totalPaidFromFees = deduped.reduce((sum, p) => sum + p.amount, 0);
   }
-  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + (admissionTotals._sum.paymentAmount ?? 0);
-  const admissionPaid = admissionTotals._sum.paymentAmount ?? 0;
+  const totalFees = feeStructures.reduce((sum, f) => sum + f.amount, 0) + admissionPaid;
   const totalPaid = totalPaidFromFees + admissionPaid;
   return { totalFees, totalPaid, outstanding: Math.max(totalFees - totalPaid, 0), overDue };
 };
@@ -23445,10 +23630,7 @@ var getStudentFeeList = async (studentId) => {
     }),
     db_default.admissionApplication.findMany({
       where: {
-        OR: [
-          { studentId },
-          ...studentId ? [{ studentId }] : []
-        ],
+        studentId,
         paymentStatus: "PAID",
         paymentAmount: { not: null, gt: 0 }
       },
@@ -23464,6 +23646,7 @@ var getStudentFeeList = async (studentId) => {
       orderBy: { paymentDate: "desc" }
     })
   ]);
+  const hasAdmissionFeeInStructures = feeStructures.some((f) => f.feeType === "ADMISSION");
   const mappedFees = feeStructures.map((fee) => {
     const dedupedPayments = dedupePayments(fee.payments ?? []);
     const paidAmount = dedupedPayments.reduce((sum, p) => sum + p.amount, 0);
@@ -23484,7 +23667,8 @@ var getStudentFeeList = async (studentId) => {
       source: "FEE_STRUCTURE"
     };
   });
-  const mappedAdmissions = admissionApplications.map((admission) => ({
+  const filteredAdmissions = hasAdmissionFeeInStructures ? [] : admissionApplications;
+  const mappedAdmissions = filteredAdmissions.map((admission) => ({
     id: `admission-${admission.id}`,
     studentId,
     feeType: "ADMISSION",
@@ -24729,6 +24913,32 @@ var APPLICATION_SELECT = {
   expectedSalary: true,
   resumeUrl: true,
   coverLetter: true,
+  nationalId: true,
+  birthCertificateNo: true,
+  religion: true,
+  maritalStatus: true,
+  nationality: true,
+  fatherName: true,
+  motherName: true,
+  employmentType: true,
+  presentAddress: true,
+  permanentAddress: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+  photoUrl: true,
+  cvUrl: true,
+  nidUrl: true,
+  birthCertUrl: true,
+  sscCertUrl: true,
+  hscCertUrl: true,
+  bscCertUrl: true,
+  mscCertUrl: true,
+  institution: true,
+  passingYear: true,
+  result: true,
+  previousOrganization: true,
+  previousDesignation: true,
+  convertedToTeacherId: true,
   status: true,
   reviewedAt: true,
   rejectionReason: true,
@@ -24756,7 +24966,32 @@ var applyForTeaching = async (dto) => {
       subjectSpecialization: dto.subjectSpecialization,
       expectedSalary: dto.expectedSalary,
       resumeUrl: dto.resumeUrl,
-      coverLetter: dto.coverLetter
+      coverLetter: dto.coverLetter,
+      nationalId: dto.nationalId,
+      birthCertificateNo: dto.birthCertificateNo,
+      religion: dto.religion,
+      maritalStatus: dto.maritalStatus,
+      nationality: dto.nationality,
+      fatherName: dto.fatherName,
+      motherName: dto.motherName,
+      employmentType: dto.employmentType,
+      presentAddress: dto.presentAddress,
+      permanentAddress: dto.permanentAddress,
+      emergencyContactName: dto.emergencyContactName,
+      emergencyContactPhone: dto.emergencyContactPhone,
+      photoUrl: dto.photoUrl,
+      cvUrl: dto.cvUrl,
+      nidUrl: dto.nidUrl,
+      birthCertUrl: dto.birthCertUrl,
+      sscCertUrl: dto.sscCertUrl,
+      hscCertUrl: dto.hscCertUrl,
+      bscCertUrl: dto.bscCertUrl,
+      mscCertUrl: dto.mscCertUrl,
+      institution: dto.institution,
+      passingYear: dto.passingYear,
+      result: dto.result,
+      previousOrganization: dto.previousOrganization,
+      previousDesignation: dto.previousDesignation
     },
     select: APPLICATION_SELECT
   });
@@ -24843,7 +25078,7 @@ var updateTeachingApplicationStatus = async (id, dto) => {
     }
     const updatedApplication = await tx.teachingApplication.update({
       where: { id },
-      data: { status: "APPROVED", reviewedAt: /* @__PURE__ */ new Date(), rejectionReason: null },
+      data: { status: "APPROVED", reviewedAt: /* @__PURE__ */ new Date(), rejectionReason: null, convertedToTeacherId: teacher.id },
       select: APPLICATION_SELECT
     });
     return { application: updatedApplication, teacherId: teacher.id, isNewAccount: !!tempPassword };
@@ -26306,7 +26541,14 @@ var HomeworkService = class {
       select: { sectionTeacher: { select: { id: true } } }
     });
     if (!teacher) throw new Error("Teacher not found");
-    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const timetableSlots = await db_default.timetable.findMany({
+      where: { teacherId },
+      select: { sectionId: true }
+    });
+    const assignedSectionIds = new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId)
+    ].filter(Boolean));
     if (assignedSectionIds.size === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 1 };
     }
@@ -26408,7 +26650,14 @@ var HomeworkService = class {
       select: { sectionTeacher: { select: { id: true } } }
     });
     if (!teacher) throw new Error("Teacher not found");
-    const assignedSectionIds = new Set(teacher.sectionTeacher.map((s) => s.id));
+    const timetableSlots = await db_default.timetable.findMany({
+      where: { teacherId },
+      select: { sectionId: true }
+    });
+    const assignedSectionIds = new Set([
+      ...teacher.sectionTeacher.map((s) => s.id),
+      ...timetableSlots.map((t) => t.sectionId)
+    ].filter(Boolean));
     if (assignedSectionIds.size === 0) {
       return [];
     }

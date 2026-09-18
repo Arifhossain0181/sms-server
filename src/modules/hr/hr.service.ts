@@ -423,25 +423,8 @@ export async function getDailyAttendance(date: string) {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
-  const [staffRecords, teacherRecords] = await Promise.all([
-    prisma.staffAttendance.findMany({
-      where: { date: targetDate },
-      include: {
-        staff: {
-          select: {
-            id: true,
-            name: true,
-            employeeId: true,
-            designation: true,
-            staffType: true,
-            department: { select: { name: true } },
-          },
-        },
-      },
-      orderBy: { staff: { name: 'asc' } },
-    }),
-    prisma.teacherAttendance.findMany({
-      where: { date: targetDate },
+  const teacherRecords = await prisma.teacherAttendance.findMany({
+      where: { date: targetDate, teacher: { isActive: true, user: { isActive: true } } },
       include: {
         teacher: {
           select: {
@@ -455,21 +438,7 @@ export async function getDailyAttendance(date: string) {
         },
       },
       orderBy: { teacher: { name: 'asc' } },
-    }),
-  ]);
-
-  const staffAttendance = staffRecords.map((r) => ({
-    id: r.id,
-    staffId: r.staffId,
-    staffName: r.staff.name,
-    employeeId: r.staff.employeeId,
-    designation: r.staff.designation,
-    staffType: r.staff.staffType,
-    department: r.staff.department?.name,
-    personType: 'STAFF' as const,
-    status: r.status,
-    note: r.note,
-  }));
+    });
 
   const teacherAttendance = teacherRecords.map((r) => ({
     id: r.id,
@@ -484,7 +453,7 @@ export async function getDailyAttendance(date: string) {
     note: r.note,
   }));
 
-  const records = [...staffAttendance, ...teacherAttendance].sort((a, b) =>
+  const records = teacherAttendance.sort((a, b) =>
     a.staffName.localeCompare(b.staffName)
   );
 
@@ -629,14 +598,17 @@ export async function approveLeaveRequest(id: string, dto: ApproveLeaveDto, acto
       });
     }
 
-    const isTeacher = (await prisma.staff.findUnique({ where: { id: leave.staffId } }))?.staffType === 'TEACHING';
-    if (isTeacher) {
+    const teacherStaff = await prisma.staff.findUnique({
+      where: { id: leave.staffId },
+      select: { name: true, designation: true, staffType: true },
+    });
+    if (teacherStaff?.staffType === 'TEACHING') {
       try {
         const { broadcast } = await import('../../modules/notifiction/notification.service');
         await broadcast({
           role: 'EXAM_CONTROLLER',
           title: 'Teacher Leave Approved - Reschedule Needed',
-          body: `${isTeacher.name} (${isTeacher.designation ?? 'Teacher'}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
+          body: `${teacherStaff.name} (${teacherStaff.designation ?? 'Teacher'}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
           type: 'LEAVE',
           referenceId: leave.id,
         });

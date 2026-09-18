@@ -10,7 +10,7 @@ function assertValidLevel(level: number) {
     }
 }
 
-export const createClass = async (dto: CreateClassDto) => {
+export const createClass = async (dto: CreateClassDto, schoolId?: string) => {
     // FIX: doc requires classes 1-10 — nothing previously enforced that range.
     assertValidLevel(dto.numericLevel);
 
@@ -22,6 +22,7 @@ export const createClass = async (dto: CreateClassDto) => {
         data: {
             name: dto.name,
             numericLevel: dto.numericLevel,
+            schoolId,
         },
     });
 };
