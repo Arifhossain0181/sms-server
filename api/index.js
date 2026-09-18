@@ -18863,7 +18863,7 @@ function assertValidLevel(level) {
     throw new Error(`Class level must be between ${MIN_CLASS_LEVEL} and ${MAX_CLASS_LEVEL}`);
   }
 }
-var createClass = async (dto) => {
+var createClass = async (dto, schoolId) => {
   assertValidLevel(dto.numericLevel);
   const existing = await db_default.class.findUnique({ where: { name: dto.name } });
   if (existing) {
@@ -18872,7 +18872,8 @@ var createClass = async (dto) => {
   return db_default.class.create({
     data: {
       name: dto.name,
-      numericLevel: dto.numericLevel
+      numericLevel: dto.numericLevel,
+      schoolId
     }
   });
 };
@@ -19012,7 +19013,7 @@ var asParamString = (value) => {
 };
 var createClass2 = async (req, res, next) => {
   try {
-    const data = await createClass(req.body);
+    const data = await createClass(req.body, req.user?.schoolId);
     sendSuccess(res, data, "Class created", 201);
   } catch (err) {
     next(err);
@@ -20741,7 +20742,7 @@ var TeachersService = {
     });
     return teacher?.id ?? null;
   },
-  async create(dto) {
+  async create(dto, schoolId) {
     const emailExists = await db_default.user.findUnique({ where: { email: dto.email } });
     if (emailExists) {
       throw { status: 409, message: "Email already exists" };
@@ -20762,10 +20763,12 @@ var TeachersService = {
     const buildData = (id) => ({
       name: dto.name,
       email: dto.email,
+      schoolId,
       passwordHash: hashedPassword,
       role: "TEACHER",
       teacherProfile: {
         create: {
+          schoolId,
           employeeId: id,
           name: dto.name,
           email: dto.email,
@@ -21680,7 +21683,7 @@ function redactForRole(teacher, role) {
 var TeacherController = class {
   async create(req, res, next) {
     try {
-      const teacher = await teacherService.create(req.body);
+      const teacher = await teacherService.create(req.body, req.user?.schoolId);
       sendSuccess(res, teacher, "Teacher created successfully", 201);
     } catch (err) {
       next(err);
@@ -25025,6 +25028,23 @@ var getTeachingApplicationById = async (id) => {
   if (!application) throw { status: 404, message: "Application not found" };
   return application;
 };
+var updateTeachingApplication = async (id, dto) => {
+  const application = await db_default.teachingApplication.findUnique({ where: { id }, select: { id: true } });
+  if (!application) throw { status: 404, message: "Application not found" };
+  const data = {
+    ...dto,
+    ...dto.dob !== void 0 ? { dob: new Date(dto.dob) } : {}
+  };
+  return db_default.teachingApplication.update({ where: { id }, data, select: APPLICATION_SELECT });
+};
+var deleteTeachingApplication = async (id) => {
+  const application = await db_default.teachingApplication.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!application) throw { status: 404, message: "Application not found" };
+  if (application.status === "APPROVED") {
+    throw { status: 409, message: "Approved applications cannot be deleted" };
+  }
+  await db_default.teachingApplication.delete({ where: { id } });
+};
 var updateTeachingApplicationStatus = async (id, dto) => {
   const application = await db_default.teachingApplication.findUnique({ where: { id } });
   if (!application) throw { status: 404, message: "Application not found" };
@@ -25141,6 +25161,22 @@ var TeachingApplicationController = class {
       next(err);
     }
   }
+  async update(req, res, next) {
+    try {
+      const result = await updateTeachingApplication(req.params.id, req.body);
+      sendSuccess(res, result, "Application updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+  async remove(req, res, next) {
+    try {
+      await deleteTeachingApplication(req.params.id);
+      sendSuccess(res, null, "Application deleted");
+    } catch (err) {
+      next(err);
+    }
+  }
 };
 
 // src/modules/teachingApplication/teachingApplication.routes.ts
@@ -25150,7 +25186,9 @@ router12.post("/apply", c4.apply.bind(c4));
 router12.use(authenticate);
 router12.get("/", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findAll.bind(c4));
 router12.get("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.findById.bind(c4));
+router12.patch("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.update.bind(c4));
 router12.patch("/:id/status", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.updateStatus.bind(c4));
+router12.delete("/:id", authorizeRoles("HR", "SCHOOL_ADMIN"), c4.remove.bind(c4));
 var teachingApplication_routes_default = router12;
 
 // src/modules/notice/notice.route.ts
@@ -25551,6 +25589,7 @@ function cacheClearAll() {
 }
 var createSlot = async (dto) => {
   const { classId, subjectId, teacherId, dayOfWeek, startTime, endTime, roomNumber } = dto;
+  _validateTimeRange(startTime, endTime);
   const [cls, subject, teacher, section] = await Promise.all([
     db_default.class.findUnique({ where: { id: classId }, select: { id: true } }),
     db_default.subject.findUnique({ where: { id: subjectId }, select: { id: true } }),
@@ -25578,6 +25617,7 @@ var createSlot = async (dto) => {
   }
 };
 var bulkCreate = async (dto) => {
+  dto.slots.forEach((slot) => _validateTimeRange(slot.startTime, slot.endTime));
   const classExists = await db_default.class.findUnique({ where: { id: dto.classId }, select: { id: true } });
   if (!classExists) throw new Error("Class not found");
   const section = await db_default.section.findFirst({
@@ -25679,6 +25719,7 @@ var update2 = async (id, dto) => {
     startTime: dto.startTime || existing.startTime,
     endTime: dto.endTime || existing.endTime
   };
+  _validateTimeRange(merged.startTime, merged.endTime);
   await _checkConflicts(merged, id);
   try {
     const updated = await db_default.timetable.update({ where: { id }, data: dto, select: SLOT_SELECT });
@@ -25776,6 +25817,15 @@ function _groupByDay(slots) {
 }
 function _overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
+}
+function _validateTimeRange(startTime, endTime) {
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
+    throw new Error("Time must use the HH:mm format");
+  }
+  if (startTime >= endTime) {
+    throw new Error("End time must be later than start time");
+  }
 }
 async function _checkConflicts(dto, excludeId) {
   const overlap = await db_default.timetable.findFirst({
@@ -28092,52 +28142,22 @@ async function getStaffAttendance(staffId, from, to) {
 async function getDailyAttendance(date) {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
-  const [staffRecords, teacherRecords] = await Promise.all([
-    db_default.staffAttendance.findMany({
-      where: { date: targetDate },
-      include: {
-        staff: {
-          select: {
-            id: true,
-            name: true,
-            employeeId: true,
-            designation: true,
-            staffType: true,
-            department: { select: { name: true } }
-          }
+  const teacherRecords = await db_default.teacherAttendance.findMany({
+    where: { date: targetDate, teacher: { isActive: true, user: { isActive: true } } },
+    include: {
+      teacher: {
+        select: {
+          id: true,
+          name: true,
+          employeeId: true,
+          designation: true,
+          department: true,
+          subjectSpecialization: true
         }
-      },
-      orderBy: { staff: { name: "asc" } }
-    }),
-    db_default.teacherAttendance.findMany({
-      where: { date: targetDate },
-      include: {
-        teacher: {
-          select: {
-            id: true,
-            name: true,
-            employeeId: true,
-            designation: true,
-            department: true,
-            subjectSpecialization: true
-          }
-        }
-      },
-      orderBy: { teacher: { name: "asc" } }
-    })
-  ]);
-  const staffAttendance = staffRecords.map((r) => ({
-    id: r.id,
-    staffId: r.staffId,
-    staffName: r.staff.name,
-    employeeId: r.staff.employeeId,
-    designation: r.staff.designation,
-    staffType: r.staff.staffType,
-    department: r.staff.department?.name,
-    personType: "STAFF",
-    status: r.status,
-    note: r.note
-  }));
+      }
+    },
+    orderBy: { teacher: { name: "asc" } }
+  });
   const teacherAttendance = teacherRecords.map((r) => ({
     id: r.id,
     staffId: r.teacherId,
@@ -28150,7 +28170,7 @@ async function getDailyAttendance(date) {
     status: r.status,
     note: r.note
   }));
-  const records = [...staffAttendance, ...teacherAttendance].sort(
+  const records = teacherAttendance.sort(
     (a, b) => a.staffName.localeCompare(b.staffName)
   );
   return {
@@ -28269,14 +28289,17 @@ async function approveLeaveRequest(id, dto, actorId) {
         data: { usedDays: balance.usedDays + leaveDays }
       });
     }
-    const isTeacher = (await db_default.staff.findUnique({ where: { id: leave.staffId } }))?.staffType === "TEACHING";
-    if (isTeacher) {
+    const teacherStaff = await db_default.staff.findUnique({
+      where: { id: leave.staffId },
+      select: { name: true, designation: true, staffType: true }
+    });
+    if (teacherStaff?.staffType === "TEACHING") {
       try {
         const { broadcast: broadcast2 } = await Promise.resolve().then(() => (init_notification_service(), notification_service_exports));
         await broadcast2({
           role: "EXAM_CONTROLLER",
           title: "Teacher Leave Approved - Reschedule Needed",
-          body: `${isTeacher.name} (${isTeacher.designation ?? "Teacher"}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
+          body: `${teacherStaff.name} (${teacherStaff.designation ?? "Teacher"}) has been approved for leave from ${new Date(updatedLeave.startDate).toLocaleDateString()} to ${new Date(updatedLeave.endDate).toLocaleDateString()}. Please check affected timetable slots.`,
           type: "LEAVE",
           referenceId: leave.id
         });
@@ -29120,6 +29143,7 @@ init_db();
 var getSchoolAdminDashboard = async (schoolId) => {
   const today2 = /* @__PURE__ */ new Date();
   today2.setHours(0, 0, 0, 0);
+  const schoolRecordScope = schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {};
   const [
     totalStudents,
     totalTeachers,
@@ -29131,8 +29155,8 @@ var getSchoolAdminDashboard = async (schoolId) => {
     libraryStats
   ] = await Promise.all([
     db_default.student.count({ where: { isActive: true, ...schoolId ? { schoolId } : {} } }),
-    db_default.teacher.count({ where: { isActive: true, ...schoolId ? { schoolId } : {} } }),
-    db_default.class.count({ where: schoolId ? { schoolId } : void 0 }),
+    db_default.teacher.count({ where: { isActive: true, user: { isActive: true }, ...schoolRecordScope } }),
+    db_default.class.count({ where: schoolId ? schoolRecordScope : void 0 }),
     getTodayAttendanceSummary(schoolId),
     getFeeSummary2(schoolId),
     getRecentAdmissions(schoolId),
