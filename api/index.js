@@ -27053,6 +27053,7 @@ var import_express18 = require("express");
 // src/modules/superAdmin/superAdmin.service.ts
 init_db();
 var import_bcryptjs7 = __toESM(require("bcryptjs"));
+init_notification_service();
 var getAllSchools = async () => {
   const schools = await db_default.school.findMany({
     orderBy: { createdAt: "desc" },
@@ -27336,6 +27337,12 @@ var assignableRoles = [
   "EXAM_CONTROLLER",
   "HR"
 ];
+var roleChangeEligibleRoles = [
+  "SCHOOL_ADMIN",
+  "ACCOUNTANT",
+  "EXAM_CONTROLLER",
+  "HR"
+];
 var updateUserAssignment = async (userId, input) => {
   const user = await db_default.user.findUnique({
     where: { id: userId },
@@ -27344,6 +27351,11 @@ var updateUserAssignment = async (userId, input) => {
   if (!user) {
     const err = new Error("User not found");
     err.status = 404;
+    throw err;
+  }
+  if (!roleChangeEligibleRoles.includes(user.role)) {
+    const err = new Error("Only School Admin, Accountant, Exam Controller, and HR roles can be changed");
+    err.status = 403;
     throw err;
   }
   const role = input.role;
@@ -27376,7 +27388,7 @@ var updateUserAssignment = async (userId, input) => {
       throw err;
     }
   }
-  return db_default.user.update({
+  const updatedUser = await db_default.user.update({
     where: { id: userId },
     data: { role, schoolId },
     select: {
@@ -27388,6 +27400,16 @@ var updateUserAssignment = async (userId, input) => {
       school: { select: { id: true, name: true, code: true } }
     }
   });
+  if (user.role !== updatedUser.role) {
+    await send({
+      userId: updatedUser.id,
+      title: "Your role has been updated",
+      body: `Your account role was changed from ${user.role.replace(/_/g, " ")} to ${updatedUser.role.replace(/_/g, " ")} by a Super Admin.`,
+      type: "GENERAL",
+      referenceId: updatedUser.id
+    });
+  }
+  return updatedUser;
 };
 var getAuditLogs = async (filters) => {
   const where = {};

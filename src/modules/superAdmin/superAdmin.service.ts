@@ -1,8 +1,9 @@
 import prisma from "../../config/db";
 import { sendSuccess, sendError } from "../../utils/response.util";
 import bcrypt from "bcryptjs";
+import { send as sendNotification } from "../notifiction/notification.service";
 
-// ─── DTOs ──────────────────────────────────────────────────────────
+// ─── DTOs 
 
 export interface CreateSchoolAdminDto {
   name: string;
@@ -385,6 +386,13 @@ const assignableRoles = [
 
 type AssignableRole = (typeof assignableRoles)[number];
 
+const roleChangeEligibleRoles = [
+  "SCHOOL_ADMIN",
+  "ACCOUNTANT",
+  "EXAM_CONTROLLER",
+  "HR",
+] as const;
+
 export const updateUserAssignment = async (
   userId: string,
   input: { role?: unknown; schoolId?: unknown }
@@ -396,6 +404,12 @@ export const updateUserAssignment = async (
   if (!user) {
     const err = new Error("User not found");
     (err as any).status = 404;
+    throw err;
+  }
+
+  if (!roleChangeEligibleRoles.includes(user.role as (typeof roleChangeEligibleRoles)[number])) {
+    const err = new Error("Only School Admin, Accountant, Exam Controller, and HR roles can be changed");
+    (err as any).status = 403;
     throw err;
   }
 
@@ -437,7 +451,7 @@ export const updateUserAssignment = async (
     }
   }
 
-  return prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { role: role as AssignableRole, schoolId },
     select: {
@@ -449,6 +463,18 @@ export const updateUserAssignment = async (
       school: { select: { id: true, name: true, code: true } },
     },
   });
+
+  if (user.role !== updatedUser.role) {
+    await sendNotification({
+      userId: updatedUser.id,
+      title: "Your role has been updated",
+      body: `Your account role was changed from ${user.role.replace(/_/g, " ")} to ${updatedUser.role.replace(/_/g, " ")} by a Super Admin.`,
+      type: "GENERAL",
+      referenceId: updatedUser.id,
+    });
+  }
+
+  return updatedUser;
 };
 
 // ─── AUDIT LOGS ────────────────────────────────────────────────────
