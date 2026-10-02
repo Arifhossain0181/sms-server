@@ -5,6 +5,8 @@ import { TeachersService } from '../teachers/teachers.service';
 import { StudentService } from '../student/student.service';
 import { ParentsService } from '../parents/parents.service';
 import prisma from '../../config/db';
+import { uploadFileToCloudinary } from '../../config/cloudinary';
+import { gradeHomeworkSubmission } from './homework-ai-grader.service';
 
 export class HomeworkController {
   // ── TEACHER: create 
@@ -14,7 +16,10 @@ export class HomeworkController {
       const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
       if (teacherByUserId) teacherId = teacherByUserId;
 
-      const homework = await HomeworkService.create(teacherId, req.body);
+      const attachmentUrl = req.file
+        ? (await uploadFileToCloudinary(req.file.buffer, 'homework/resources')).secure_url
+        : undefined;
+      const homework = await HomeworkService.create(teacherId, { ...req.body, attachmentUrl });
       sendSuccess(res, homework, 'Homework created', 201);
     } catch (err) { next(err); }
   }
@@ -26,7 +31,10 @@ export class HomeworkController {
       const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
       if (teacherByUserId) teacherId = teacherByUserId;
 
-      const homework = await HomeworkService.update(teacherId, req.params.id as string, req.body);
+      const attachmentUrl = req.file
+        ? (await uploadFileToCloudinary(req.file.buffer, 'homework/resources')).secure_url
+        : undefined;
+      const homework = await HomeworkService.update(teacherId, req.params.id as string, { ...req.body, ...(attachmentUrl && { attachmentUrl }) });
       sendSuccess(res, homework, 'Homework updated');
     } catch (err) { next(err); }
   }
@@ -138,6 +146,34 @@ export class HomeworkController {
     } catch (err) { next(err); }
   }
 
+  // ── STUDENT: submit homework answer and optional attachment
+  async submitSolution(req: Request, res: Response, next: NextFunction) {
+    try {
+      const studentId = await StudentService.getStudentIdByUserId((req.user as any)?.id);
+      if (!studentId) return res.status(403).json({ success: false, message: 'Student profile not found for this user' });
+
+      const attachmentUrl = req.file
+        ? (await uploadFileToCloudinary(req.file.buffer, 'homework/submissions')).secure_url
+        : undefined;
+      let result = await HomeworkService.submitSolution(studentId, req.params.id as string, req.body.answerText, attachmentUrl);
+
+      if (req.file?.mimetype === 'application/pdf' && result.id) {
+        try {
+          result = await gradeHomeworkSubmission({
+            submissionId: result.id,
+            homeworkId: req.params.id as string,
+            pdfBuffer: req.file.buffer,
+            mimeType: req.file.mimetype,
+          }) as typeof result;
+        } catch (error) {
+          console.error('[HOMEWORK_AI_GRADING_FAILED]', error);
+        }
+      }
+
+      sendSuccess(res, result, 'Homework submitted');
+    } catch (err) { next(err); }
+  }
+
   // ── PARENT: a specific child's homework 
   async getChildHomework(req: Request, res: Response, next: NextFunction) {
     try {
@@ -161,7 +197,7 @@ export class HomeworkController {
 
       const { studentId, marks, feedback } = req.body;
       const result = await HomeworkService.submitMark(teacherId, req.params.id as string, studentId, marks, feedback);
-      sendSuccess(res, 'Mark submitted', result);
+      sendSuccess(res, result, 'Mark submitted');
     } catch (err) { next(err); }
   }
 
@@ -173,7 +209,22 @@ export class HomeworkController {
       if (teacherByUserId) teacherId = teacherByUserId;
 
       const result = await HomeworkService.getSubmissions(teacherId, req.params.id as string);
-      sendSuccess(res, 'Submissions fetched', result);
+      sendSuccess(res, result, 'Submissions fetched');
+    } catch (err) { next(err); }
+  }
+
+  // TEACHER: grade a student's text, image, or PDF submission with Gemini
+  async aiGradeSubmission(req: Request, res: Response, next: NextFunction) {
+    try {
+      let teacherId = String((req.user as any)?.id);
+      const teacherByUserId = await TeachersService.getTeacherIdByUserId(teacherId);
+      if (teacherByUserId) teacherId = teacherByUserId;
+
+      const studentId = String(req.body.studentId || '');
+      if (!studentId) return res.status(400).json({ success: false, message: 'studentId is required' });
+      const input = await HomeworkService.getAiGradeInput(teacherId, String(req.params.id), studentId);
+      const result = await gradeHomeworkSubmission(input);
+      sendSuccess(res, result, 'AI mark submitted');
     } catch (err) { next(err); }
   }
 }

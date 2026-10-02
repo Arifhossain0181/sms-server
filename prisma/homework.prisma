@@ -10,6 +10,7 @@ model Homework {
   subject     Subject  @relation(fields: [subjectId], references: [id])
   title       String
   description String
+  attachmentUrl String?
   dueDate     DateTime
   isReviewed  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -38,6 +39,8 @@ model HomeworkSubmission {
   student    Student  @relation(fields: [studentId], references: [id])
   marks      Float?
   feedback   String?
+  answerText String?
+  attachmentUrl String?
   submittedAt DateTime @default(now())
   gradedAt   DateTime?
   gradedBy   String?

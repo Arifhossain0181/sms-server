@@ -13,6 +13,7 @@ const HOMEWORK_SELECT = {
   id: true,
   title: true,
   description: true,
+  attachmentUrl: true,
   dueDate: true,
   isReviewed: true,
   createdAt: true,
@@ -75,6 +76,7 @@ export class HomeworkService {
         subjectId: dto.subjectId,
         title: dto.title,
         description: dto.description,
+        ...(dto.attachmentUrl !== undefined && { attachmentUrl: dto.attachmentUrl }),
         dueDate: new Date(dto.dueDate),
       },
       select: HOMEWORK_SELECT,
@@ -94,6 +96,7 @@ export class HomeworkService {
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.attachmentUrl !== undefined && { attachmentUrl: dto.attachmentUrl }),
         ...(dto.dueDate !== undefined && { dueDate: new Date(dto.dueDate) }),
       },
       select: HOMEWORK_SELECT,
@@ -226,7 +229,7 @@ export class HomeworkService {
       }),
       prisma.homeworkSubmission.findMany({
         where: { homeworkId },
-        select: { studentId: true, marks: true, feedback: true, gradedAt: true },
+        select: { studentId: true, answerText: true, attachmentUrl: true, submittedAt: true, marks: true, feedback: true, gradedAt: true },
       }),
     ]);
 
@@ -244,6 +247,9 @@ export class HomeworkService {
         viewedAt: viewedMap.get(student.id) || null,
         marks: submission?.marks ?? null,
         feedback: submission?.feedback ?? '',
+        answerText: submission?.answerText ?? null,
+        attachmentUrl: submission?.attachmentUrl ?? null,
+        submittedAt: submission?.submittedAt ?? null,
         gradedAt: submission?.gradedAt ?? null,
       };
     });
@@ -321,13 +327,22 @@ export class HomeworkService {
   // WHAT: merges the shared section-level cached list with THIS
   //       student's own "viewed" flags (one small extra query).
   private static async _getHomeworkForStudent(sectionId: string, studentId: string, query: StudentHomeworkQueryDto) {
-    const [sectionHomework, myViews] = await Promise.all([
+    const [sectionHomework, myViews, mySubmissions] = await Promise.all([
       this._getSectionHomework(sectionId),
       prisma.homeworkView.findMany({ where: { studentId }, select: { homeworkId: true } }),
+      prisma.homeworkSubmission.findMany({
+        where: { studentId },
+        select: { homeworkId: true, answerText: true, attachmentUrl: true, submittedAt: true, marks: true, feedback: true, gradedAt: true },
+      }),
     ]);
     const viewedSet = new Set(myViews.map(v => v.homeworkId));
+    const submissionMap = new Map(mySubmissions.map((submission) => [submission.homeworkId, submission]));
 
-    let list = sectionHomework.map((hw: any) => ({ ...hw, viewed: viewedSet.has(hw.id) }));
+    let list = sectionHomework.map((hw: any) => ({
+      ...hw,
+      viewed: viewedSet.has(hw.id),
+      submission: submissionMap.get(hw.id) ?? null,
+    }));
 
     if (query.status === 'UPCOMING') list = list.filter((h: any) => !h.isOverdue);
     if (query.status === 'OVERDUE') list = list.filter((h: any) => h.isOverdue);
@@ -364,6 +379,24 @@ export class HomeworkService {
       where: { homeworkId_studentId: { homeworkId, studentId } },
       update: {}, // already viewed — no-op, just confirms it's recorded
       create: { homeworkId, studentId },
+    });
+  }
+
+  static async submitSolution(studentId: string, homeworkId: string, answerText?: string, attachmentUrl?: string) {
+    const [student, homework] = await Promise.all([
+      prisma.student.findUnique({ where: { id: studentId }, select: { sectionId: true } }),
+      prisma.homework.findUnique({ where: { id: homeworkId }, select: { id: true, sectionId: true } }),
+    ]);
+    if (!student) throw new Error('Student not found');
+    if (!homework) throw new Error('Homework not found');
+    if (homework.sectionId !== student.sectionId) throw new Error('This homework is not assigned to your section');
+    if (!answerText?.trim() && !attachmentUrl) throw new Error('Write an answer or attach a file before submitting');
+
+    return prisma.homeworkSubmission.upsert({
+      where: { homeworkId_studentId: { homeworkId, studentId } },
+      update: { answerText: answerText?.trim() || null, ...(attachmentUrl ? { attachmentUrl } : {}), submittedAt: new Date(), marks: null, feedback: null, gradedAt: null, gradedBy: null },
+      create: { homeworkId, studentId, answerText: answerText?.trim() || null, attachmentUrl },
+      select: { id: true, answerText: true, attachmentUrl: true, submittedAt: true, marks: true, feedback: true, gradedAt: true },
     });
   }
 
@@ -441,5 +474,21 @@ export class HomeworkService {
     });
 
     return submissions;
+  }
+
+  static async getAiGradeInput(teacherId: string, homeworkId: string, studentId: string) {
+    const homework = await prisma.homework.findUnique({
+      where: { id: homeworkId },
+      select: { id: true, teacherId: true },
+    });
+    if (!homework) throw new Error('Homework not found');
+    if (homework.teacherId !== teacherId) throw new Error('You can only grade your own homework');
+
+    const submission = await prisma.homeworkSubmission.findUnique({
+      where: { homeworkId_studentId: { homeworkId, studentId } },
+      select: { id: true, answerText: true, attachmentUrl: true },
+    });
+    if (!submission) throw new Error('Student has not submitted this homework');
+    return { homeworkId, ...submission };
   }
 }

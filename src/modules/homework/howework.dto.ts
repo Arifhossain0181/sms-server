@@ -7,12 +7,14 @@ export interface CreateHomeworkDto {
   title: string;
   description: string;
   dueDate: string; // ISO date string
+  attachmentUrl?: string;
 }
 
 export interface UpdateHomeworkDto {
   title?: string;
   description?: string;
   dueDate?: string;
+  attachmentUrl?: string;
 }
 
 // ─── TEACHER: list/filter own homework 

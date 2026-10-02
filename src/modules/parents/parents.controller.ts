@@ -143,7 +143,7 @@ export class ParentsController {
           try {
             const [attendance, results, feeStructures] = await Promise.all([
               getAttendance(child.id),
-              getResults(child.id),
+              ParentsService.getChildResults(parentId, child.id),
               prisma.feeStructure.findMany({
                 where: { studentId: child.id },
                 select: { amount: true, Paidamount: true },
@@ -151,7 +151,7 @@ export class ParentsController {
             ]);
 
             const pendingFees = feeStructures.reduce(
-              (sum, f) => sum + Math.max((f.amount ?? 0) - (f.Paidamount ?? 0), 0),
+              (sum: number, f: { amount: number | null; Paidamount: number | null }) => sum + Math.max((f.amount ?? 0) - (f.Paidamount ?? 0), 0),
               0
             );
 

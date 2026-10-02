@@ -41,11 +41,10 @@ export class TCController {
 
   async downloadTC(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { studentId } = req.params;
+      const studentId = String(req.params.studentId);
 
       const tc = await prisma.transferCertificate.findUnique({
         where: { studentId },
-        include: { student: { include: { class: true, section: true } } },
       });
 
       if (!tc) {
@@ -53,7 +52,14 @@ export class TCController {
         return;
       }
 
-      const student = tc.student;
+      const student = await prisma.student.findUnique({
+        where: { id: tc.studentId },
+        include: { class: true, section: true },
+      });
+      if (!student) {
+        res.status(404).json({ success: false, message: 'Student not found for this TC' });
+        return;
+      }
 
       const doc = new PDFDocument({ margin: 50 });
       res.setHeader('Content-Type', 'application/pdf');

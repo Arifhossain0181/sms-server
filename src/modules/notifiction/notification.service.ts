@@ -39,9 +39,10 @@ export const broadcast = async (dto: BroadcastNotificationDto) => {
     // the ALL branch was missing `select`, so it pulled every column
     // (including password hash) for every user in the school just to
     // read `.id`. Both branches now fetch only what's used.
+    const databaseRole = dto.role === "ALL" ? undefined : dto.role as any;
     const users = dto.role === "ALL"
         ? await prisma.user.findMany({ select: { id: true } })
-        : await prisma.user.findMany({ where: { role: dto.role }, select: { id: true } })
+        : await prisma.user.findMany({ where: { role: databaseRole }, select: { id: true } })
 
     if (!users.length) throw new Error("No users found for the specified role")
 

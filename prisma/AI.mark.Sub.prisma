@@ -1,0 +1,32 @@
+enum SubmissionStatus {
+  PENDING
+  GRADED
+  FAILED
+}
+
+model Assignment {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  rubric      String       // teacher marking criteria
+  maxMarks    Int          @default(10)
+  dueDate     DateTime?
+  submissions Submission[]
+  createdAt   DateTime     @default(now())
+}
+
+model Submission {
+  id           String           @id @default(uuid())
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  filePath     String
+  mimeType     String
+  status       SubmissionStatus @default(PENDING)
+  marks        Float?
+  feedback     String?
+  createdAt    DateTime         @default(now())
+  gradedAt     DateTime?
+
+  @@unique([assignmentId, studentId])
+}
