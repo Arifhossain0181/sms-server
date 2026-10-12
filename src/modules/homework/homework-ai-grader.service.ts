@@ -2,6 +2,8 @@ import prisma from '../../config/db';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MAX_MARKS = 10;
+const GEMINI_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const GEMINI_MAX_ATTEMPTS = 3;
 
 type GradeInput = {
   submissionId: string;
@@ -15,6 +17,28 @@ type GradeInput = {
 type GeminiResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 };
+
+async function requestGemini(model: string, apiKey: string, body: object) {
+  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetch(`${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok || !GEMINI_RETRYABLE_STATUSES.has(response.status) || attempt === GEMINI_MAX_ATTEMPTS) {
+      return response;
+    }
+
+    const retryAfter = Number(response.headers.get('retry-after'));
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1000, 10_000)
+      : 500 * 2 ** (attempt - 1);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  throw new Error('Gemini grading request did not complete');
+}
 
 function extractJson(text: string) {
   const jsonText = text.replace(/```json|```/gi, '').trim();
@@ -47,11 +71,8 @@ export async function gradeHomeworkSubmission(input: GradeInput) {
   }
 
   const maxMarks = Number(process.env.HOMEWORK_MAX_MARKS) || DEFAULT_MAX_MARKS;
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const response = await fetch(`${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  const model = (process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash').replace(/^models\//, '');
+  const response = await requestGemini(model, apiKey, {
       contents: [{
         parts: [
           {
@@ -76,7 +97,6 @@ export async function gradeHomeworkSubmission(input: GradeInput) {
         ],
       }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
-    }),
   });
 
   if (!response.ok) {

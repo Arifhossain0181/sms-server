@@ -14,6 +14,12 @@ function deriveAcademicYear(year: number, month: number): string {
   return `${year - 1}-${year}`;
 }
 
+function normalizeFeeType(value: unknown): "TUITION" | "ADMISSION" | "EXAM" | null {
+  if (value === "MONTHLY") return "TUITION";
+  if (value === "TUITION" || value === "ADMISSION" || value === "EXAM") return value;
+  return null;
+}
+
 function monthRange(month: string) {
   const start = new Date(`${month}-01`);
   const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
@@ -46,46 +52,84 @@ function dedupePayments<T extends { id: string; transactionId?: string | null | 
 // actually parse — CreateFeeDto's title/description map to real
 // FeeStructure columns.
 export const createfee = async (dto: CreateFeeDto) => {
+  if (!dto.classId || !dto.title?.trim() || !dto.type) {
+    throw { status: 400, message: "classId, title, and type are required" };
+  }
+  const feeType = normalizeFeeType(dto.type);
+  if (!feeType) {
+    throw { status: 400, message: "Unsupported fee type" };
+  }
+  if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+    throw { status: 400, message: "amount must be a positive number" };
+  }
+
+  const schoolClass = await prisma.class.findUnique({
+    where: { id: dto.classId },
+    select: { id: true },
+  });
+  if (!schoolClass) throw { status: 400, message: "Class not found" };
+
   if (dto.studentId) {
     const student = await prisma.student.findUnique({
       where: { id: dto.studentId },
       select: { id: true },
     });
-    if (!student) throw new Error("Student not found");
+    if (!student) throw { status: 400, message: "Student not found" };
   }
 
   const dueDate = new Date(dto.dueDate);
-  if (Number.isNaN(dueDate.getTime())) throw new Error("Invalid dueDate");
+  if (Number.isNaN(dueDate.getTime())) throw { status: 400, message: "Invalid dueDate" };
   const { year, month } = deriveMonthYear(dueDate);
   const academicYear = deriveAcademicYear(year, month);
 
-  return prisma.feeStructure.create({
-    data: {
-      studentId: dto.studentId,
+  const existingFee = await prisma.feeStructure.findFirst({
+    where: {
       classId: dto.classId,
-      feeType: dto.type,
-      title: dto.title,
-      description: dto.description,
-      amount: dto.amount,
-      dueDate,
-      dueDay: dto.dueDay,
+      studentId: dto.studentId ?? null,
+      feeType,
       year,
       month,
-      academicYear,
-      status: "PENDING",
-      Paidamount: 0,
     },
-    select: {
-      id: true,
-      studentId: true,
-      classId: true,
-      feeType: true,
-      amount: true,
-      dueDate: true,
-      status: true,
-      student: { select: { user: { select: { name: true, email: true } } } },
-    },
+    select: { id: true },
   });
+  if (existingFee) {
+    throw { status: 409, message: "A fee of this type already exists for this student and month" };
+  }
+
+  try {
+    return await prisma.feeStructure.create({
+      data: {
+        studentId: dto.studentId,
+        classId: dto.classId,
+        feeType,
+        title: dto.title.trim(),
+        description: dto.description,
+        amount: dto.amount,
+        dueDate,
+        dueDay: dto.dueDay,
+        year,
+        month,
+        academicYear,
+        status: "PENDING",
+        Paidamount: 0,
+      },
+      select: {
+        id: true,
+        studentId: true,
+        classId: true,
+        feeType: true,
+        amount: true,
+        dueDate: true,
+        status: true,
+        student: { select: { user: { select: { name: true, email: true } } } },
+      },
+    });
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      throw { status: 409, message: "A fee of this type already exists for this student and month" };
+    }
+    throw error;
+  }
 };
 
 export const bulkcreate = async (dto: BulkCreateFeeDto) => {

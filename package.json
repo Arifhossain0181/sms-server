@@ -28,8 +28,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@google/genai": "^2.26.0",
     "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/client": "^7.10.0",
     "@types/json2csv": "^5.0.7",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",

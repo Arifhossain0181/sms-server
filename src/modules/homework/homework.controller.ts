@@ -162,7 +162,7 @@ export class HomeworkController {
           result = await gradeHomeworkSubmission({
             submissionId: result.id,
             homeworkId: req.params.id as string,
-            pdfBuffer: req.file.buffer,
+            fileBuffer: req.file.buffer,
             mimeType: req.file.mimetype,
           }) as typeof result;
         } catch (error) {

@@ -489,6 +489,6 @@ export class HomeworkService {
       select: { id: true, answerText: true, attachmentUrl: true },
     });
     if (!submission) throw new Error('Student has not submitted this homework');
-    return { homeworkId, ...submission };
+    return { homeworkId, submissionId: submission.id, answerText: submission.answerText, attachmentUrl: submission.attachmentUrl };
   }
 }
