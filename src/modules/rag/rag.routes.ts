@@ -1,10 +1,9 @@
 import { Router } from 'express'
+import { RagController } from './rag.controller'
 
 
 
 const router = Router() 
-router.get('/', (req, res) => {
-  res.send('RAG route is working!')
-})
+router.get('/stats', RagController.getStats)
 
-export const ragRouter = router
+export default router

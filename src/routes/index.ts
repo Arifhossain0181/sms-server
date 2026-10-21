@@ -65,5 +65,6 @@ router.use('/dashboard', dashboardSchoolRoutes);
 router.use('/tc', tcRoutes);
 router.use('/roles', roleRoutes);
 router.use('/reports', reportRoutes);
+router.use('/rag', require('../modules/rag/rag.routes').default);
 
 export default router;

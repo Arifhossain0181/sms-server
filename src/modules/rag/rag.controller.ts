@@ -1,10 +1,18 @@
 import { Request, Response } from 'express';
+import { RagService } from './rag.service';
+
+const ragService = new RagService();
 const getStats = async (req: Request, res: Response) => {
-  try {
-    
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }}
+  console.log("connected to getStats", req.query);
+  res.status(200).json({ messageinfo: 'Stats retrieved successfully' });
+  }
+  const ingestStudents = async (req: Request, res: Response) => {
+    const result = await ragService.ingestStudentData();
+    res.status(200).json(result);
+  }
 
 
-  export { getStats };
+  export const RagController = {
+    getStats,
+    ingestStudents
+  };
